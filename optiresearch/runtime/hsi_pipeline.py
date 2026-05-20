@@ -47,6 +47,8 @@ def run_hsi_reconstruction_flow(
     tiny_cnn_epochs: int = 5,
     tiny_cnn_hidden: int = 32,
     device: str = "cpu",
+    psf_override_uri: str | None = None,
+    psf_source: str = "mock",
 ) -> dict[str, Any]:
     store = SQLiteStore()
     store.init_db()
@@ -63,30 +65,46 @@ def run_hsi_reconstruction_flow(
         forward_mode,
         use_optical_feature_maps,
     )
-    experiment_spec = MethodBuilder().build_mock_optical_spec(objective, encoder_type=encoder_type, backend=backend)
-    optical = run_mvp_flow(
-        objective,
-        workspace_id=workspace_id,
-        experiment_spec=experiment_spec,
-        backend=backend,
-        use_llm=use_llm,
-        realization=realization,
-    )
-    psf_artifact = _find_psf_artifact(artifact_store, optical["run_id"])
-    psf_path = artifact_store.resolve_uri(psf_artifact.uri)
+    if psf_override_uri and Path(psf_override_uri).exists():
+        # Use pre-computed PSF (e.g., DeepLens-backed) — skip MVP flow
+        psf_path = Path(psf_override_uri)
+        optical = {"run_id": f"override_{run_id}", "run_memory": {"best_metrics": {"depth_planes": 5}}}
+    else:
+        experiment_spec = MethodBuilder().build_mock_optical_spec(objective, encoder_type=encoder_type, backend=backend)
+        optical = run_mvp_flow(
+            objective,
+            workspace_id=workspace_id,
+            experiment_spec=experiment_spec,
+            backend=backend,
+            use_llm=use_llm,
+            realization=realization,
+        )
+        psf_artifact = _find_psf_artifact(artifact_store, optical["run_id"])
+        psf_path = Path(artifact_store.resolve_uri(psf_artifact.uri))
     dataset_spec = build_default_synthetic_hsi_dataset_spec(spectral_pattern_type=dataset_pattern)
     if dataset != "synthetic":
         dataset_spec.dataset_family = dataset  # type: ignore[assignment]
         dataset_spec.source = "local" if dataset == "local_npz" else "public_placeholder"
         dataset_spec.dataset_path = dataset_path
     depth_planes = int(optical["run_memory"]["best_metrics"].get("depth_planes", 9))
-    forward_spec = build_default_hsi_forward_model_spec(
-        optical_artifact_id=psf_artifact.artifact_id,
-        psf_cube_uri=psf_artifact.uri,
-        depth_planes=depth_planes,
-        wavelength_bands=dataset_spec.spectral_bands,
-        forward_mode=forward_mode,
-    )
+    if psf_override_uri:
+        forward_spec = build_default_hsi_forward_model_spec(
+            optical_artifact_id="psf_override",
+            psf_cube_uri=str(psf_path),
+            depth_planes=5,
+            wavelength_bands=dataset_spec.spectral_bands,
+            forward_mode=forward_mode,
+        )
+        forward_spec.metadata["psf_source"] = psf_source
+        forward_spec.metadata["optimized_psf"] = False
+    else:
+        forward_spec = build_default_hsi_forward_model_spec(
+            optical_artifact_id=psf_artifact.artifact_id,
+            psf_cube_uri=psf_artifact.uri,
+            depth_planes=depth_planes,
+            wavelength_bands=dataset_spec.spectral_bands,
+            forward_mode=forward_mode,
+        )
     reconstruction_spec = build_default_hsi_reconstruction_spec(
         output_bands=dataset_spec.spectral_bands,
         network_type=selected_reconstructor,

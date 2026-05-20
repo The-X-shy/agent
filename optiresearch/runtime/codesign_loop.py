@@ -149,13 +149,15 @@ def run_codesign_loop(spec: OptimizationSpec) -> dict[str, Any]:
             np.savez_compressed(psf_path, psf_cube=psf_cube)
 
         # Phase 2: Run HSI pipeline with this PSF
-        hsi_metrics = _run_hsi_with_psf(
-            psf_cube=psf_cube,
+        hsi_metrics = _run_hsi_with_psf_override(
             psf_path=str(psf_path),
             encoder_type=spec.encoder_type,
             reconstructor_type=spec.reconstructor_type,
             forward_mode=spec.forward_mode,
             dataset=spec.dataset,
+            backend=spec.backend,
+            psf_source=spec.psf_source,
+            objective=spec.objective,
             output_dir=output_dir,
             iteration=iteration,
         )
@@ -306,6 +308,40 @@ def run_codesign_loop(spec: OptimizationSpec) -> dict[str, Any]:
     _export_codesign_report(result, output_dir)
 
     return result
+
+
+def _run_hsi_with_psf_override(
+    psf_path: str,
+    encoder_type: str,
+    reconstructor_type: str,
+    forward_mode: str,
+    dataset: str,
+    backend: str,
+    psf_source: str,
+    objective: str,
+    output_dir: Path,
+    iteration: int,
+) -> dict[str, Any]:
+    """Run HSI reconstruction using a pre-computed PSF via the standard pipeline."""
+    try:
+        from optiresearch.runtime.hsi_pipeline import run_hsi_reconstruction_flow
+        result = run_hsi_reconstruction_flow(
+            objective=f"{objective} [iter {iteration}]",
+            backend=backend,
+            encoder_type=encoder_type,
+            forward_mode=forward_mode,
+            reconstructor_type=reconstructor_type,
+            dataset=dataset,
+            dataset_pattern="mixed_materials",
+            psf_override_uri=psf_path,
+            psf_source=psf_source,
+        )
+        metrics = dict(result.get("metrics", {}))
+        if not metrics or not any(k in metrics for k in ["PSNR", "SAM"]):
+            metrics["error"] = "no_reconstruction_metrics"
+        return metrics
+    except Exception as exc:
+        return {"PSNR": 0.0, "SAM": 1.0, "SSIM": 0.0, "error": str(exc)[:200]}
 
 
 def _run_hsi_with_psf(

@@ -52,7 +52,7 @@ def run_remote_codesign(
             "strict_deeplens": fallback_policy == "fail" and backend == "deeplens",
         },
         timeout_seconds=3600,
-        expected_outputs=["codesign_loop_summary.json"],
+        expected_outputs=["codesign_loop_summary.json", "iteration_001_state.json"],
     )
     return execute_remote_job(worker_id, job, runner=runner, ingest=ingest)
 

@@ -143,8 +143,8 @@ class DeepLensParameterizedPSFGenerator:
         f_number = round(8.0 - curvature * 6.4, 2)  # range [1.6, 8.0]
         focal_length = round(30.0 + curvature * 40.0, 1)  # range [30, 70] mm
 
-        # Map depth_variation to depth range
-        base_depths = [0.0, 5.0, 10.0, 15.0, 20.0]
+        # Map depth_variation to depth range (DeepLens uses negative convention)
+        base_depths = [0.0, -5.0, -10.0, -15.0, -20.0]
         depth_scale = 0.5 + depth_var  # range [0.5, 1.5]
         depths_mm = [d * depth_scale for d in base_depths]
 
@@ -394,11 +394,8 @@ class DeepLensParameterizedPSFGenerator:
             device="cpu",
         )
 
-        refocus = getattr(lens, "refocus", None)
         psfs = []
         for d_idx, depth in enumerate(depths):
-            if callable(refocus):
-                refocus(float(depth))
             raw_psf = self._call_paraxial_psf(lens, depth, psf_size)
             psf_2d = self._psf_to_numpy(raw_psf, psf_size)
 
@@ -426,7 +423,14 @@ class DeepLensParameterizedPSFGenerator:
     def _call_paraxial_psf(self, lens: Any, depth: float, psf_size: int) -> Any:
         psf_fn = getattr(lens, "psf", None)
         if callable(psf_fn):
-            raw = psf_fn(points=[float(depth)], ks=psf_size)
+            import torch
+            # ParaxialLens.psf expects points [N, 3] in (x, y, z) order
+            # z is the depth axis. On-axis PSF: x=0, y=0, z=depth
+            points_tensor = torch.tensor(
+                [[0.0, 0.0, float(depth)]],
+                device=getattr(lens, "device", "cpu"),
+            )
+            raw = psf_fn(points=points_tensor, ks=psf_size)
             if isinstance(raw, (list, tuple)):
                 return raw[0] if len(raw) > 0 else raw
             return raw

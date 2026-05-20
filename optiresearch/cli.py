@@ -255,6 +255,7 @@ def main(argv: list[str] | None = None) -> None:
     remote_codesign.add_argument("--backend", default="deeplens")
     remote_codesign.add_argument("--fallback-policy", choices=["fail", "fallback_to_mock", "partial_deeplens_proxy"], default="fail")
     remote_codesign.add_argument("--max-iterations", type=int, default=2)
+    remote_codesign.add_argument("--strict-deeplens", action="store_true")
     remote_hsi = sub.add_parser("run-remote-hsi-reconstruction", help="Run HSI reconstruction on a remote worker.")
     remote_hsi.add_argument("--worker-id", required=True)
     remote_hsi.add_argument("--objective", default="Remote HSI reconstruction")
