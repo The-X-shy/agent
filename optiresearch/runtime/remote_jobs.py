@@ -194,6 +194,8 @@ def _extract_metrics(path: Path) -> dict[str, Any]:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return {}
+    if not isinstance(payload, dict):
+        return {}
     return {k: v for k, v in payload.items() if isinstance(v, (int, float, bool))}
 
 

@@ -1,4 +1,4 @@
-from optiresearch.runtime.remote_jobs import run_remote_deeplens_source_smoke
+from optiresearch.runtime.remote_jobs import _extract_metrics, run_remote_deeplens_source_smoke
 from optiresearch.schemas.remote import RemoteJobResult, RemoteWorkerSpec
 
 
@@ -48,3 +48,10 @@ def test_run_remote_smoke_builds_job_and_uses_runner(tmp_path, monkeypatch):
     assert payload["result"].status == "succeeded"
     assert runner.jobs[0][1].job_type == "deeplens_source_smoke"
     assert runner.jobs[0][1].cli_args == {}
+
+
+def test_extract_metrics_ignores_json_arrays(tmp_path):
+    path = tmp_path / "history.json"
+    path.write_text('[{"score": 1.0}]', encoding="utf-8")
+
+    assert _extract_metrics(path) == {}
