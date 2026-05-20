@@ -78,6 +78,19 @@ ALLOWED_CLI_COMMANDS: dict[str, set[str]] = {
         "--worker-id",
         "--remote-job-id",
     },
+    "inspect-deeplens-native-optimization": {
+        "--remote-job-id",
+    },
+    "run-native-optimization-probe": {
+        "--lens-class",
+        "--objective",
+        "--max-steps",
+        "--learning-rate",
+        "--device",
+        "--strict-native",
+        "--allow-adapter-proxy",
+        "--remote-job-id",
+    },
 }
 
 FLAG_OPTIONS = {"--strict-deeplens", "--use-optical-feature-maps"}

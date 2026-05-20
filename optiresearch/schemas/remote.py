@@ -14,6 +14,8 @@ RemoteJobType = Literal[
     "hsi_matrix",
     "codesign_loop",
     "deeplens_source_smoke",
+    "native_optimization_probe",
+    "native_optimization_inspection",
     "autonomous_loop",
 ]
 

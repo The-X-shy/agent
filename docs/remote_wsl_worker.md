@@ -72,6 +72,28 @@ workspace/remote_jobs/<job_id>/
 
 The local controller ingests `artifact_manifest.json` and `metrics_summary.json`, then writes ArtifactStore, RunMemory, and ClaimEvidence entries.
 
+## Phase 19: Native Optimization Probe (Remote)
+
+Run native differentiable optimization probes on the WSL worker:
+
+```bash
+# Remote inspection
+python -m optiresearch.cli inspect-deeplens-native-optimization
+
+# Remote native probe
+python -m optiresearch.cli run-remote-native-optimization-probe \
+  --worker-id windows_wsl \
+  --lens-class ParaxialLens \
+  --objective minimize_psf_width \
+  --max-steps 2 \
+  --device cpu
+
+# Export remote execution report
+python -m optiresearch.cli export-remote-execution-report --job-id <job_id>
+```
+
+See `docs/deeplens_native_optimization_probe.md` for details.
+
 ## Evidence Boundary
 
 Successful DeepLens source smoke can support a DeepLens-backed smoke claim. Successful strict co-design without fallback can support a DeepLens-backed black-box co-design claim.

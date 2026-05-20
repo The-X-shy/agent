@@ -155,6 +155,14 @@ class ClaimEvidenceManager:
             "backend_scope": claim.metadata.get("backend_scope"),
             "real_camera_evidence": claim.metadata.get("real_camera_evidence"),
             "optical_backend_evidence_level": claim.metadata.get("optical_backend_evidence_level"),
+            "differentiable": claim.metadata.get("differentiable"),
+            "native_parameter_update": claim.metadata.get("native_parameter_update"),
+            "gradient_norm": claim.metadata.get("gradient_norm"),
+            "parameters_changed": claim.metadata.get("parameters_changed"),
+            "loss_before": claim.metadata.get("loss_before"),
+            "loss_after": claim.metadata.get("loss_after"),
+            "lens_class": claim.metadata.get("lens_class"),
+            "realization_level": claim.metadata.get("realization_level"),
         }
         return explanation
 
@@ -238,6 +246,12 @@ class ClaimEvidenceManager:
         )
 
     def _evidence_level(self, scope: dict[str, Any]) -> str:
+        if scope.get("evidence_domain") == "native_optimization_probe":
+            if scope.get("realization_level") == "native" and scope.get("differentiable"):
+                return "deeplens_native_optimization"
+            if scope.get("realization_level") == "semi_native":
+                return "deeplens_semi_native"
+            return "deeplens_native_optimization"
         if scope.get("evidence_domain") == "public_hsi_matrix":
             dataset_family = scope.get("dataset_family")
             if dataset_family == "synthetic":

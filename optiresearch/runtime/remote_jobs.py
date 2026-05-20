@@ -82,6 +82,51 @@ def run_remote_hsi_reconstruction(
     return execute_remote_job(worker_id, job, runner=runner, ingest=ingest)
 
 
+def run_remote_native_optimization_probe(
+    worker_id: str,
+    lens_class: str,
+    objective: str,
+    max_steps: int = 2,
+    learning_rate: float = 1e-3,
+    device: str = "cpu",
+    strict_native: bool = True,
+    allow_adapter_proxy: bool = False,
+    runner: Any | None = None,
+    ingest: bool = True,
+) -> dict[str, Any]:
+    job = _job(
+        "native_optimization_probe",
+        objective=f"Native optimization probe: {lens_class} / {objective}",
+        cli_args={
+            "lens_class": lens_class,
+            "objective": objective,
+            "max_steps": max_steps,
+            "learning_rate": learning_rate,
+            "device": device,
+            "strict_native": strict_native,
+            "allow_adapter_proxy": allow_adapter_proxy,
+        },
+        timeout_seconds=1800,
+        expected_outputs=["probe_result.json", "psf_before.npz", "psf_after.npz", "loss_trace.json"],
+    )
+    return execute_remote_job(worker_id, job, runner=runner, ingest=ingest)
+
+
+def run_remote_native_optimization_inspection(
+    worker_id: str,
+    runner: Any | None = None,
+    ingest: bool = True,
+) -> dict[str, Any]:
+    job = _job(
+        "native_optimization_inspection",
+        objective="Inspect DeepLens native optimization capabilities on remote worker",
+        cli_args={},
+        timeout_seconds=600,
+        expected_outputs=["deeplens_native_optimization_inspection.json"],
+    )
+    return execute_remote_job(worker_id, job, runner=runner, ingest=ingest)
+
+
 def execute_remote_job(
     worker_id: str,
     job: RemoteJobSpec,

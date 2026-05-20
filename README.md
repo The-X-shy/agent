@@ -301,4 +301,38 @@ Final benchmark freeze and paper evidence package.
 - `python -m optiresearch.cli export-phase13-report` — Export Phase 13 report
 
 See `docs/final_benchmark.md`, `docs/paper_tables.md`, `docs/claim_boundary.md`, `docs/final_paper_package.md`.
+
+## Phase 18
+
+DeepLens-backed black-box HSI co-design. DeepLens PSF enters the HSI forward
+model and reconstruction chain via ParaxialLens. Black-box only:
+`differentiable=false`, `native_parameter_update=false`.
+
+## Phase 19
+
+DeepLens Native Differentiable Optimization Probe. Systematically probes whether
+DeepLens lens classes (ParaxialLens, GeoLens, DiffractiveLens, HybridLens,
+PSFNetLens) support true gradient-based optical optimization with autograd chain:
+`optical parameter → PSF → loss → backward → optimizer.step → parameter change`.
+
+Commands:
+
+```bash
+# Inspect native optimization capabilities
+python -m optiresearch.cli inspect-deeplens-native-optimization
+
+# Run minimal native probe
+python -m optiresearch.cli run-native-optimization-probe \
+  --lens-class ParaxialLens --objective minimize_psf_width --max-steps 2 --device cpu
+
+# Run remotely on WSL
+python -m optiresearch.cli run-remote-native-optimization-probe \
+  --worker-id windows_wsl --lens-class ParaxialLens \
+  --objective minimize_psf_width --max-steps 2 --device cpu
+
+# Export report
+python -m optiresearch.cli export-phase19-report
+```
+
+See `docs/deeplens_native_optimization_probe.md`, `docs/native_optimization_claims.md`.
 ```

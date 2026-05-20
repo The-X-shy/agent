@@ -60,6 +60,7 @@ from optiresearch.runtime.remote_jobs import (
     run_remote_codesign,
     run_remote_deeplens_source_smoke,
     run_remote_hsi_reconstruction,
+    run_remote_native_optimization_probe,
 )
 from optiresearch.reports.remote_execution import export_remote_execution_report
 
@@ -225,12 +226,24 @@ def main(argv: list[str] | None = None) -> None:
     compare_psf.add_argument("--right", default="deeplens_parameterized")
     compare_psf.add_argument("--objective", default="PSF source comparison")
     sub.add_parser("export-phase16-report", help="Export Phase 16 DeepLens-backed co-design report.")
+    sub.add_parser("export-phase19-report", help="Export Phase 19 native optimization probe report.")
     probe_source = sub.add_parser("probe-deeplens-source", help="Probe DeepLens source checkout capabilities.")
     probe_source.add_argument("--remote-job-id")
     inspect_source = sub.add_parser("inspect-deeplens-source", help="Inspect DeepLens source structure.")
     inspect_source.add_argument("--remote-job-id")
+    inspect_native = sub.add_parser("inspect-deeplens-native-optimization", help="Inspect DeepLens native optimization capabilities.")
+    inspect_native.add_argument("--remote-job-id")
     source_smoke = sub.add_parser("run-deeplens-source-smoke", help="Run minimal PSF smoke with source DeepLens.")
     source_smoke.add_argument("--remote-job-id")
+    native_probe = sub.add_parser("run-native-optimization-probe", help="Run native differentiable optimization probe on a DeepLens lens class.")
+    native_probe.add_argument("--lens-class", required=True, choices=["ParaxialLens", "GeoLens", "DiffractiveLens", "HybridLens", "PSFNetLens"])
+    native_probe.add_argument("--objective", required=True, choices=["minimize_psf_width", "maximize_center_intensity", "match_target_psf", "hsi_reconstruction_loss"])
+    native_probe.add_argument("--max-steps", type=int, default=2)
+    native_probe.add_argument("--learning-rate", type=float, default=1e-3)
+    native_probe.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
+    native_probe.add_argument("--strict-native", action="store_true")
+    native_probe.add_argument("--allow-adapter-proxy", action="store_true")
+    native_probe.add_argument("--remote-job-id")
     sub.add_parser("list-remote-workers", help="List registered remote workers.")
     add_worker = sub.add_parser("add-remote-worker", help="Add or update a remote worker.")
     add_worker.add_argument("--worker-id", required=True)
@@ -263,6 +276,15 @@ def main(argv: list[str] | None = None) -> None:
     remote_hsi.add_argument("--reconstructor", default="tiny_cnn")
     remote_hsi.add_argument("--dataset", default="synthetic")
     remote_hsi.add_argument("--backend", default="deeplens")
+    remote_native = sub.add_parser("run-remote-native-optimization-probe", help="Run native optimization probe on a remote worker.")
+    remote_native.add_argument("--worker-id", required=True)
+    remote_native.add_argument("--lens-class", required=True, choices=["ParaxialLens", "GeoLens", "DiffractiveLens", "HybridLens", "PSFNetLens"])
+    remote_native.add_argument("--objective", required=True, choices=["minimize_psf_width", "maximize_center_intensity", "match_target_psf", "hsi_reconstruction_loss"])
+    remote_native.add_argument("--max-steps", type=int, default=2)
+    remote_native.add_argument("--learning-rate", type=float, default=1e-3)
+    remote_native.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
+    remote_native.add_argument("--strict-native", action="store_true")
+    remote_native.add_argument("--allow-adapter-proxy", action="store_true")
     remote_report = sub.add_parser("export-remote-execution-report", help="Export a remote execution report.")
     remote_report.add_argument("--job-id", required=True)
 
@@ -417,6 +439,10 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "export-phase16-report":
         path = export_phase16_report()
         print(f"markdown: {path}")
+    elif args.command == "export-phase19-report":
+        from optiresearch.reports.phase19 import export_phase19_report
+        path = export_phase19_report()
+        print(f"markdown: {path}")
     elif args.command == "probe-deeplens-source":
         _probe_deeplens_source(args.remote_job_id)
     elif args.command == "inspect-deeplens-source":
@@ -435,6 +461,29 @@ def main(argv: list[str] | None = None) -> None:
                 [root],
                 {"job_type": "inspect_deeplens_source", "available": bool(result.get("available"))},
             )
+    elif args.command == "inspect-deeplens-native-optimization":
+        from optiresearch.adapters.deeplens_native_inspector import export_native_optimization_inspection
+        result = export_native_optimization_inspection()
+        print(f"available: {result.get('available')}")
+        lens_classes = result.get("lens_classes", {})
+        for cls_name, info in lens_classes.items():
+            print(f"  {cls_name}: available={info.get('class_available')}, "
+                  f"activate_grad={info.get('has_activate_grad')}, "
+                  f"get_optimizer={info.get('has_get_optimizer')}, "
+                  f"diffable={info.get('likely_differentiable')}")
+        root = Path(os.getenv("OPTIRESEARCH_REPORT_ROOT", "./workspace/reports"))
+        print(f"json: {root / 'deeplens_native_optimization_inspection.json'}")
+        print(f"markdown: {root / 'deeplens_native_optimization_inspection.md'}")
+        if getattr(args, "remote_job_id", None):
+            export_remote_job_outputs(
+                args.remote_job_id,
+                "native_optimization_inspection",
+                {"status": "succeeded" if result.get("available") else "failed", "available": result.get("available")},
+                [root],
+                {"job_type": "native_optimization_inspection", "available": bool(result.get("available"))},
+            )
+    elif args.command == "run-native-optimization-probe":
+        _run_native_optimization_probe(args)
     elif args.command == "run-deeplens-source-smoke":
         _run_deeplens_source_smoke(args.remote_job_id)
     elif args.command == "list-remote-workers":
@@ -464,6 +513,18 @@ def main(argv: list[str] | None = None) -> None:
             reconstructor=args.reconstructor,
             dataset=args.dataset,
             backend=args.backend,
+        )
+        _print_remote_payload(payload)
+    elif args.command == "run-remote-native-optimization-probe":
+        payload = run_remote_native_optimization_probe(
+            args.worker_id,
+            lens_class=args.lens_class,
+            objective=args.objective,
+            max_steps=args.max_steps,
+            learning_rate=args.learning_rate,
+            device=args.device,
+            strict_native=args.strict_native,
+            allow_adapter_proxy=args.allow_adapter_proxy,
         )
         _print_remote_payload(payload)
     elif args.command == "export-remote-execution-report":
@@ -1063,6 +1124,74 @@ def _run_deeplens_source_smoke(remote_job_id: str | None = None) -> None:
             },
         )
         print(f"remote_job_dir: {export_dir}")
+
+
+def _run_native_optimization_probe(args: Any) -> None:
+    from optiresearch.runtime.native_optimization_probe import run_native_optimization_probe
+    from optiresearch.schemas.native_optimization import (
+        NativeOptimizationProbeSpec,
+        make_probe_id,
+    )
+
+    spec = NativeOptimizationProbeSpec(
+        probe_id=make_probe_id(args.lens_class, args.objective),
+        lens_class=args.lens_class,
+        objective=args.objective,
+        max_steps=args.max_steps,
+        learning_rate=args.learning_rate,
+        device=args.device,
+        strict_native=args.strict_native,
+        allow_adapter_proxy=args.allow_adapter_proxy,
+        save_artifacts=True,
+    )
+    result = run_native_optimization_probe(spec)
+
+    print(_compact_json({
+        "probe_id": result.probe_id,
+        "lens_class": result.lens_class,
+        "objective": result.objective,
+        "status": result.status,
+        "realization_level": result.realization_level,
+        "differentiable": result.differentiable,
+        "native_parameter_update": result.native_parameter_update,
+        "autograd_graph_exists": result.autograd_graph_exists,
+        "gradient_norm": result.gradient_norm,
+        "parameters_changed": result.parameters_changed,
+        "loss_before": result.loss_before,
+        "loss_after": result.loss_after,
+        "error_code": result.error_code,
+        "caveats": result.caveats,
+    }))
+
+    if getattr(args, "remote_job_id", None):
+        from optiresearch.reports.remote_execution import export_remote_execution_report
+        output_dir = Path("workspace/native_optimization") / result.probe_id
+        export_remote_job_outputs(
+            args.remote_job_id,
+            "native_optimization_probe",
+            {
+                "status": result.status,
+                "objective": args.objective,
+                "lens_class": args.lens_class,
+                "backend": "deeplens",
+                "differentiable": result.differentiable,
+                "native_parameter_update": result.native_parameter_update,
+                "gradient_norm": result.gradient_norm,
+                "loss_before": result.loss_before,
+                "loss_after": result.loss_after,
+                "fallback_used": False,
+                "caveats": result.caveats,
+            },
+            [output_dir] if output_dir.exists() else [],
+            {
+                "job_type": "native_optimization_probe",
+                "lens_class": args.lens_class,
+                "objective": args.objective,
+                "status": result.status,
+                "differentiable": result.differentiable,
+                "realization_level": result.realization_level,
+            },
+        )
 
 
 def _run_codesign_loop(args: Any) -> None:
