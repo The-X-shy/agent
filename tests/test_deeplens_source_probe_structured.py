@@ -1,11 +1,13 @@
 """Test structured DeepLens source probe output."""
 import json
+import os
 from pathlib import Path
 from optiresearch.adapters.deeplens import DeepLensAdapter
 
 
 def test_probe_output_has_all_keys(monkeypatch, tmp_path):
-    monkeypatch.setenv("DEEPLENS_REPO_PATH", "/Users/lilin/Desktop/external/DeepLens")
+    repo_path = os.getenv("DEEPLENS_REPO_PATH", str(tmp_path / "missing_deeplens_repo"))
+    monkeypatch.setenv("DEEPLENS_REPO_PATH", repo_path)
     monkeypatch.setenv("OPTIRESEARCH_REPORT_ROOT", str(tmp_path / "reports"))
 
     adapter = DeepLensAdapter()
@@ -21,7 +23,8 @@ def test_probe_output_has_all_keys(monkeypatch, tmp_path):
 
 
 def test_probe_json_exportable(monkeypatch, tmp_path):
-    monkeypatch.setenv("DEEPLENS_REPO_PATH", "/Users/lilin/Desktop/external/DeepLens")
+    repo_path = os.getenv("DEEPLENS_REPO_PATH", str(tmp_path / "missing_deeplens_repo"))
+    monkeypatch.setenv("DEEPLENS_REPO_PATH", repo_path)
     monkeypatch.setenv("OPTIRESEARCH_REPORT_ROOT", str(tmp_path / "reports"))
 
     adapter = DeepLensAdapter()

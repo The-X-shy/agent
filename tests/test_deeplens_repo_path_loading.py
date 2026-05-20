@@ -3,8 +3,12 @@ import os
 from optiresearch.adapters.deeplens import DeepLensAdapter
 
 
-def test_repo_path_env_var_detected(monkeypatch):
-    monkeypatch.setenv("DEEPLENS_REPO_PATH", "/Users/lilin/Desktop/external/DeepLens")
+def _configured_repo_path(tmp_path):
+    return os.getenv("DEEPLENS_REPO_PATH", str(tmp_path / "missing_deeplens_repo"))
+
+
+def test_repo_path_env_var_detected(monkeypatch, tmp_path):
+    monkeypatch.setenv("DEEPLENS_REPO_PATH", _configured_repo_path(tmp_path))
     adapter = DeepLensAdapter()
     env = adapter.validate_environment()
 
@@ -16,8 +20,8 @@ def test_repo_path_env_var_detected(monkeypatch):
     assert "missing_modules" in env
 
 
-def test_available_modules_structure(monkeypatch):
-    monkeypatch.setenv("DEEPLENS_REPO_PATH", "/Users/lilin/Desktop/external/DeepLens")
+def test_available_modules_structure(monkeypatch, tmp_path):
+    monkeypatch.setenv("DEEPLENS_REPO_PATH", _configured_repo_path(tmp_path))
     adapter = DeepLensAdapter()
     env = adapter.validate_environment()
 
@@ -28,8 +32,8 @@ def test_available_modules_structure(monkeypatch):
         assert modules["paraxiallens"] is True
 
 
-def test_import_path_is_set_when_available(monkeypatch):
-    monkeypatch.setenv("DEEPLENS_REPO_PATH", "/Users/lilin/Desktop/external/DeepLens")
+def test_import_path_is_set_when_available(monkeypatch, tmp_path):
+    monkeypatch.setenv("DEEPLENS_REPO_PATH", _configured_repo_path(tmp_path))
     adapter = DeepLensAdapter()
     env = adapter.validate_environment()
 

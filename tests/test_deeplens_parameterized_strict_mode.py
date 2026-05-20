@@ -1,4 +1,9 @@
 """Test strict_deeplens mode in parameterized PSF generator."""
+import os
+from pathlib import Path
+
+import pytest
+
 from optiresearch.adapters.deeplens_parameterized_psf import DeepLensParameterizedPSFGenerator
 
 
@@ -58,7 +63,10 @@ def test_strict_mode_includes_metadata(tmp_path, monkeypatch):
 
 
 def test_strict_mode_with_repo_deeplens_runs(tmp_path, monkeypatch):
-    monkeypatch.setenv("DEEPLENS_REPO_PATH", "/Users/lilin/Desktop/external/DeepLens")
+    repo_path = os.getenv("DEEPLENS_REPO_PATH")
+    if not repo_path or not (Path(repo_path) / "deeplens").is_dir():
+        pytest.skip("Real DeepLens source checkout is not configured.")
+    monkeypatch.setenv("DEEPLENS_REPO_PATH", repo_path)
     output_dir = tmp_path / "with_dl"
     output_dir.mkdir()
 
