@@ -1,0 +1,28 @@
+skill_id: paper-writing
+version: "0.1.0"
+display_name: Paper Writing
+description: Draft evidence-grounded research text from run memories, claims, and artifacts.
+roles:
+  - LeadInvestigator
+  - CriticalReviewer
+intents:
+  - paper
+  - writing
+  - report
+  - 论文
+  - 报告
+inputs:
+  - run_memory
+  - claim_evidence
+outputs:
+  - report_section
+permissions:
+  filesystem: read
+  network: false
+cost_class: medium
+validators:
+  - claim_evidence_required
+artifacts_emitted: []
+evidence_policy: required
+sandbox_profile:
+  allow_shell: false

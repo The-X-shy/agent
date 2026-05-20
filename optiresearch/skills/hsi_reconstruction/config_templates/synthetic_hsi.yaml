@@ -1,0 +1,7 @@
+dataset:
+  source: synthetic
+  spectral_bands: 31
+  height: 32
+  width: 32
+reconstruction:
+  network_type: linear_baseline

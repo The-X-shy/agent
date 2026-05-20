@@ -1,0 +1,8 @@
+backend: mock_deeplens
+seed: 42
+optical_spec:
+  encoder: mock_edof_hsi
+  psf_size: 32
+sweep_spec:
+  depth_planes: 9
+  wavelength_bands: 31

@@ -1,0 +1,151 @@
+"""Allowlist for remote worker commands.
+
+Remote job commands are built as argument lists by OptiResearch. This module
+rejects shell fragments and only accepts known CLI subcommands with known
+options.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+
+class CommandValidationError(ValueError):
+    """Raised when a remote command is not approved."""
+
+
+ALLOWED_CLI_COMMANDS: dict[str, set[str]] = {
+    "check-deeplens": set(),
+    "probe-deeplens-source": {"--remote-job-id"},
+    "inspect-deeplens-source": {"--remote-job-id"},
+    "run-deeplens-source-smoke": {"--remote-job-id"},
+    "run-hsi-reconstruction": {
+        "--objective",
+        "--backend",
+        "--encoder",
+        "--workspace-id",
+        "--realization",
+        "--forward-mode",
+        "--reconstructor",
+        "--dataset",
+        "--dataset-path",
+        "--dataset-pattern",
+        "--tiny-cnn-epochs",
+        "--tiny-cnn-hidden",
+        "--device",
+        "--use-optical-feature-maps",
+        "--remote-job-id",
+    },
+    "run-hsi-matrix": {
+        "--datasets",
+        "--backends",
+        "--encoders",
+        "--reconstructors",
+        "--forward-modes",
+        "--objective",
+        "--workspace-id",
+        "--dataset-path",
+        "--tiny-cnn-epochs",
+        "--tiny-cnn-hidden",
+        "--device",
+        "--use-optical-feature-maps",
+        "--remote-job-id",
+    },
+    "run-codesign-loop": {
+        "--objective",
+        "--llm-provider",
+        "--max-iterations",
+        "--backend",
+        "--encoder",
+        "--reconstructor",
+        "--forward-mode",
+        "--dataset",
+        "--psf-source",
+        "--fallback-policy",
+        "--strict-deeplens",
+        "--remote-job-id",
+    },
+    "run-autonomous-loop": {
+        "--objective",
+        "--llm-provider",
+        "--max-iterations",
+        "--backend",
+        "--dataset",
+        "--allowed-reconstructors",
+        "--allowed-encoders",
+        "--execution-mode",
+        "--worker-id",
+        "--remote-job-id",
+    },
+}
+
+FLAG_OPTIONS = {"--strict-deeplens", "--use-optical-feature-maps"}
+DENIED_EXECUTABLES = {"sudo", "rm", "curl", "chmod"}
+SHELL_META_TOKENS = {";", "&&", "||", "|", ">", "<"}
+SHELL_META_CHARS = {";", "|", ">", "<", "`"}
+
+
+def validate_remote_command(command: list[str]) -> dict[str, Any]:
+    """Validate and describe an allowlisted remote command."""
+
+    if not isinstance(command, list) or not command or not all(isinstance(arg, str) for arg in command):
+        raise CommandValidationError("remote command must be a non-empty list[str]")
+
+    _reject_shell_fragments(command)
+    executable_name = Path(command[0]).name
+    if executable_name in DENIED_EXECUTABLES:
+        raise CommandValidationError(f"denied executable: {executable_name}")
+    if len(command) >= 2 and command[1] == "-c" and executable_name.startswith("python"):
+        raise CommandValidationError("python -c is not allowlisted")
+    if "-c" in command and executable_name.startswith("python"):
+        raise CommandValidationError("python -c is not allowlisted")
+
+    if len(command) < 4 or command[1:3] != ["-m", "optiresearch.cli"]:
+        raise CommandValidationError("remote command must run python -m optiresearch.cli <command>")
+
+    cli_command = command[3]
+    if cli_command not in ALLOWED_CLI_COMMANDS:
+        raise CommandValidationError(f"CLI command is not allowlisted: {cli_command}")
+
+    allowed_options = ALLOWED_CLI_COMMANDS[cli_command]
+    _validate_options(command[4:], allowed_options)
+    return {
+        "allowed": True,
+        "executable": command[0],
+        "cli_command": cli_command,
+        "options": command[4:],
+    }
+
+
+def _reject_shell_fragments(command: list[str]) -> None:
+    for arg in command:
+        if arg in SHELL_META_TOKENS:
+            raise CommandValidationError(f"shell metacharacter is not allowed: {arg}")
+        if "$(" in arg or ")" in arg and "$(" in " ".join(command):
+            raise CommandValidationError("command substitution is not allowed")
+        if any(char in arg for char in SHELL_META_CHARS):
+            raise CommandValidationError(f"shell metacharacter is not allowed in argument: {arg}")
+        if arg == "777":
+            previous = command[command.index(arg) - 1] if command.index(arg) > 0 else ""
+            if previous == "chmod":
+                raise CommandValidationError("chmod 777 is not allowed")
+
+
+def _validate_options(args: list[str], allowed_options: set[str]) -> None:
+    i = 0
+    while i < len(args):
+        item = args[i]
+        if not item.startswith("--"):
+            raise CommandValidationError(f"user-supplied command fragment is not allowed: {item}")
+        if item not in allowed_options:
+            raise CommandValidationError(f"option is not allowlisted: {item}")
+        if item in FLAG_OPTIONS:
+            i += 1
+            continue
+        if i + 1 >= len(args):
+            raise CommandValidationError(f"missing value for option: {item}")
+        value = args[i + 1]
+        if value.startswith("--"):
+            raise CommandValidationError(f"missing value for option: {item}")
+        i += 2

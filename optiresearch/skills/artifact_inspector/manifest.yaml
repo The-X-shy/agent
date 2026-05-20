@@ -1,0 +1,29 @@
+skill_id: artifact-inspector
+version: "0.1.0"
+display_name: Artifact Inspector
+description: Inspect registered files, plots, metrics, and artifact metadata.
+roles:
+  - SimulationExperimentalist
+  - CriticalReviewer
+intents:
+  - artifact
+  - file
+  - chart
+  - metric
+  - 文件
+  - 图表
+  - 指标
+inputs:
+  - artifact_id
+outputs:
+  - artifact_summary
+permissions:
+  filesystem: read
+  network: false
+cost_class: low
+validators:
+  - artifact_exists
+artifacts_emitted: []
+evidence_policy: optional
+sandbox_profile:
+  allow_shell: false

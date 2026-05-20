@@ -1,0 +1,27 @@
+skill_id: evidence-review
+version: "0.1.0"
+display_name: Evidence Review
+description: Review claims against registered artifacts and keep unsupported claims explicit.
+roles:
+  - CriticalReviewer
+intents:
+  - evidence
+  - claim
+  - review
+  - 证据
+  - 审查
+inputs:
+  - claim
+  - artifact_refs
+outputs:
+  - claim_evidence
+permissions:
+  filesystem: read
+  network: false
+cost_class: low
+validators:
+  - claim_has_status
+artifacts_emitted: []
+evidence_policy: required
+sandbox_profile:
+  allow_shell: false

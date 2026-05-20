@@ -1,0 +1,304 @@
+# OptiResearch Agent
+
+OptiResearch Agent 是一个面向计算光学研究的 MVP 后端骨架。当前版本使用规则化 agent、MockDeepLensAdapter、SQLite 和本地 artifact store，跑通从研究目标到仿真、记忆、证据审查的最小闭环。
+
+Phase 2 增加了标准实验规范、可解释 claim-evidence、artifact inspection、PlanTemplate / SkillMemory 编译，以及 OptiMemoryBench 初版。
+
+Phase 3 增加了 5 类 mock optical encoder baseline、DesignRule memory、contradiction 检测，以及 OptiMemoryBench 消融模式。
+
+Phase 4 冻结了 `ExperimentSpec v0.1`，新增真实 DeepLens adapter 契约、统一 adapter 返回格式、论文实验协议，以及 paper summary / evidence table 导出。
+
+Phase 5 增加真实 DeepLens 的最小接入闭环：环境探测、`ExperimentSpec v0.1` 到 `DeepLensCandidateConfig` 的转换、真实 smoke run 入口，以及 `run-mvp --backend` 后端选择。
+
+Phase 6 增加真实 DeepLens baseline 协议、mock-real alignment report、DeepLens capability model、smoke-level claim 降级，以及 Phase 6 论文材料导出。
+
+Phase 7 增加 DeepLens encoder proxy strategy 注册表、5 类 encoder 的 proxy transform、encoder manifest 与 realization level tracking。
+
+Phase 8 增加半原生 (semi-native) DeepLens 接入、LLM 集成（DeepSeek 接口），以及 Phase 8 报告。
+
+Phase 9 增加合成 HSI reconstruction pipeline：数据集、前向模型、线性重建 baseline、HSI metrics、ClaimEvidence。
+
+Phase 10 增加 optical-sensitive HSI reconstruction benchmark：混合材料数据集、optical-sensitive 前向模型、OpticalFeatureExtractor、OpticalConditionedLinearReconstructor、TinyCNN 可选后端、encoder 重建 ranking、Phase 10 报告。
+
+Phase 11 增加 public/local HSI dataset adapter、TinyCNN/UNet optional reconstructor contract、optical feature maps、HSI matrix、matrix-level ClaimEvidence、DesignRule 编译，以及 Phase 11 报告。Public datasets 只支持本地路径，不自动下载；mock optical encoder 的 synthetic/public 结果不能写成真实相机实验。
+
+Phase 12 增强 local/public HSI 数据接入、CAVE/ICVL 本地扫描、DeepLens wavelength-aware PSF contract、public HSI matrix、public dataset ClaimEvidence scope，并冻结论文实验协议 v0.1。
+
+Phase 13 冻结 paper-ready benchmark、生成 10 张论文表格、建立 claim whitelist/blacklist、统计 evidence distribution、生成 warnings audit、导出最终论文证据包和 Phase 13 报告。
+
+Phase 17 增加 remote WSL worker execution：Mac 端负责 controller、memory、evidence、report，WSL 端负责真实 DeepLens source smoke 与严格 DeepLens-backed co-design。远程命令必须经过 allowlist，失败返回结构化错误，fallback 不会写成 DeepLens-backed claim。
+
+## 安装
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
+```
+
+可选绘图：
+
+```bash
+python -m pip install -e ".[dev,plot]"
+```
+
+## 快速开始
+
+```bash
+python -m optiresearch.cli init-db
+python -m optiresearch.cli check-deeplens
+python -m optiresearch.cli deeplens-capabilities
+python -m optiresearch.cli run-mvp --backend mock_deeplens --objective "Design a mock depth-invariant and spectrally discriminative EDOF-HSI optical encoder"
+python -m optiresearch.cli run-mvp --backend deeplens --objective "Design a minimal DeepLens PSF smoke run"
+python -m optiresearch.cli query-memory --intent evidence --query "depth stability"
+python -m optiresearch.cli run-benchmark --name opti-memory
+python -m optiresearch.cli run-baselines --objective "Design depth-invariant and spectrally discriminative EDOF-HSI encoder"
+python -m optiresearch.cli compare-backends --left mock_deeplens --right deeplens
+python -m optiresearch.cli export-phase6-report
+python -m optiresearch.cli export-paper-summary
+python -m optiresearch.cli export-evidence-tables
+python -m optiresearch.cli list-hsi-datasets
+python -m optiresearch.cli prepare-hsi-dataset --dataset synthetic
+python -m optiresearch.cli run-hsi-matrix --datasets synthetic --backends mock_deeplens --reconstructors optical_conditioned_linear,tiny_cnn --forward-modes depth_spectral_coded --objective "Compare encoder ranking across reconstructors"
+python -m optiresearch.cli export-phase11-report
+python -m optiresearch.cli run-public-hsi-matrix --dataset synthetic --backend mock_deeplens
+python -m optiresearch.cli freeze-paper-protocol
+python -m optiresearch.cli export-phase12-report
+python -m optiresearch.cli add-remote-worker --worker-id windows_wsl --host wslbox --port 22 --username ysl --remote-project-dir /mnt/d/agent --remote-workspace-dir /mnt/d/agent/workspace --python-executable /mnt/d/agent/run_agent_python.sh
+python -m optiresearch.cli check-remote-worker --worker-id windows_wsl
+python -m optiresearch.cli run-remote-deeplens-source-smoke --worker-id windows_wsl
+python -m pytest
+```
+
+默认路径：
+
+- `OPTIRESEARCH_DB_PATH=./workspace/optiresearch.sqlite`
+- `OPTIRESEARCH_ARTIFACT_ROOT=./workspace/artifacts`
+
+## CLI
+
+```bash
+python -m optiresearch.cli init-db
+python -m optiresearch.cli check-deeplens
+python -m optiresearch.cli deeplens-capabilities
+python -m optiresearch.cli run-mvp --backend mock_deeplens --objective "Design a mock EDOF-HSI optical encoder"
+python -m optiresearch.cli run-mvp --backend deeplens --objective "Design a minimal DeepLens PSF smoke run"
+python -m optiresearch.cli query-memory --intent evidence --query "spectral separability"
+python -m optiresearch.cli list-artifacts
+python -m optiresearch.cli inspect-artifacts --run-id <run_id>
+python -m optiresearch.cli explain-claim --claim-id <claim_id>
+python -m optiresearch.cli list-plans
+python -m optiresearch.cli match-plan --intent "evaluate edof hsi"
+python -m optiresearch.cli list-skills-memory
+python -m optiresearch.cli recommend-skills --intent "simulate psf"
+python -m optiresearch.cli run-benchmark --name opti-memory
+python -m optiresearch.cli run-benchmark --name opti-memory --mode full_rmos
+python -m optiresearch.cli run-baselines --objective "Design depth-invariant and spectrally discriminative EDOF-HSI encoder"
+python -m optiresearch.cli run-baselines --backend deeplens --objective "Design depth-invariant and spectrally discriminative EDOF-HSI encoder"
+python -m optiresearch.cli compare-backends --left mock_deeplens --right deeplens
+python -m optiresearch.cli export-phase6-report
+python -m optiresearch.cli run-deeplens-smoke --objective "Design a minimal DeepLens PSF smoke run"
+python -m optiresearch.cli explain-rule --rule-id <rule_id>
+python -m optiresearch.cli export-paper-summary
+python -m optiresearch.cli export-evidence-tables
+python -m optiresearch.cli list-traces
+python -m optiresearch.cli list-hsi-datasets
+python -m optiresearch.cli prepare-hsi-dataset --dataset synthetic
+python -m optiresearch.cli run-hsi-reconstruction --dataset synthetic --backend mock_deeplens --encoder controlled_chromatic_edof --forward-mode depth_spectral_coded --reconstructor optical_conditioned_linear --objective "Evaluate synthetic HSI reconstruction"
+python -m optiresearch.cli run-hsi-matrix --datasets synthetic --backends mock_deeplens --reconstructors optical_conditioned_linear,tiny_cnn --forward-modes depth_spectral_coded --objective "Compare encoder ranking across reconstructors"
+python -m optiresearch.cli export-phase11-report
+python -m optiresearch.cli run-public-hsi-matrix --dataset synthetic --backend mock_deeplens
+python -m optiresearch.cli freeze-paper-protocol
+python -m optiresearch.cli export-phase12-report
+python -m optiresearch.cli list-remote-workers
+python -m optiresearch.cli check-remote-worker --worker-id windows_wsl
+python -m optiresearch.cli run-remote-deeplens-source-smoke --worker-id windows_wsl
+python -m optiresearch.cli run-remote-codesign --worker-id windows_wsl --objective "Run strict DeepLens-backed co-design on WSL D drive worker" --psf-source deeplens_parameterized --backend deeplens --fallback-policy fail --max-iterations 2
+python -m optiresearch.cli export-remote-execution-report --job-id <job_id>
+```
+
+## API
+
+```bash
+uvicorn optiresearch.api.app:app --reload
+```
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/runs/mvp \
+  -H "Content-Type: application/json" \
+  -d '{"objective":"Design a mock EDOF-HSI optical encoder","workspace_id":"opti_lab"}'
+```
+
+## MVP Flow
+
+1. `LeadInvestigator` 生成第一轮研究计划。
+2. `MethodBuilder` 生成 mock optical spec 和 sweep spec。
+3. `SimulationExperimentalist` 通过 allowlist 执行 `deeplens-adapter/run_mock_psf`。
+4. `FileArtifactStore` 注册 PSF、MTF、metrics 和 manifest。
+5. `MetaTraceWriter` 记录不可变事件。
+6. `MemoryCompiler` 生成 `RunMemory`。
+7. `CriticalReviewer` 生成并审查 simulation-only claim。
+8. `MemoryRouter` 返回 evidence context pack。
+
+## Phase 2
+
+- `ExperimentSpec` 标准化 optical spec、sweep spec、metric spec 和 backend。
+- `EvidenceEdge` 记录 artifact、metric、trace、score 和 rationale。
+- `ArtifactInspector` 可读取 metrics JSON、NPZ、CSV 和图像文件摘要。
+- `PlanTemplateManager` 从成功 run 编译可复用流程。
+- `SkillMemoryManager` 从 trace 编译技能成功率、产物类型和适用偏好。
+- `OptiMemoryBench` 运行 3 类 toy task，并输出 JSON / Markdown 报告。
+
+## Phase 3
+
+- `MockDeepLensAdapter` 支持 `conventional`、`achromatic`、`edof`、`chromatic_coded`、`controlled_chromatic_edof` 五类 encoder。
+- `run-baselines` 自动运行 5 类 encoder 并输出 baseline comparison。
+- `DesignRuleManager` 能从 claim / artifact metric 编译设计规则、检测反证、解释规则。
+- `OptiMemoryBench` 支持 `no_memory`、`trace_only`、`plan_only`、`skill_only`、`full_rmos` 消融模式。
+
+## Phase 4
+
+- `ExperimentSpec`、`OpticalSpec`、`SweepSpec`、`MetricSpec` 固定 `schema_version="0.1"`。
+- `validate_experiment_spec_version()` 检查 spec 版本漂移。
+- `AdapterRunResult`、`AdapterArtifact`、`AdapterMetricBundle` 统一 mock 和真实 DeepLens 后端输出。
+- `DeepLensAdapter` 在未安装真实 DeepLens 时返回结构化错误，不破坏本地测试和报告生成。
+- `export-paper-summary` 输出 `workspace/reports/phase3_experiment_summary.md`。
+- `export-evidence-tables` 输出 claim / rule evidence Markdown 表。
+
+## Phase 5
+
+- `check-deeplens` 输出真实 DeepLens 环境探测结果，包括 Python 版本、DeepLens 版本、import path 和 capabilities。
+- `translate_experiment_spec()` 生成 `DeepLensCandidateConfig`，未支持字段保存在 `unsupported_fields`。
+- `run-deeplens-smoke` 走真实 adapter；DeepLens 不可用时返回 `DEEPLENS_NOT_INSTALLED`。
+- `run-mvp --backend deeplens` 在当前无真实 DeepLens 环境下会写 failed trace 和 failed RunMemory，claim 不会被标为 supported。
+- `run-mvp --backend mock_deeplens` 保持原有 mock 闭环。
+
+真实 DeepLens 来源：
+
+- `https://github.com/vccimaging/DeepLens`
+- Python 要求：DeepLens 当前项目元数据要求 `>=3.12`
+- 安装示例：`python -m pip install "deeplens-core @ git+https://github.com/vccimaging/DeepLens.git"`
+
+当前 adapter 已支持 `vccimaging/DeepLens` 的 `ParaxialLens.psf(points, ks=...)` 最小 PSF smoke 路径。
+
+## Phase 6
+
+- `.venv` 继续用于默认测试和 mock 后端。
+- `.venv-deeplens` 用于真实 DeepLens 后端，当前安装 `deeplens-core==1.5.2` 和 Python `3.12.7`。
+- `deeplens-capabilities` 输出 capability table，包括 import、ParaxialLens、PSF smoke、MTF export、encoder-specific design、optimization、HSI pipeline。
+- `run-baselines --backend mock_deeplens` 输出 `workspace/baselines/mock_deeplens/`。
+- `run-baselines --backend deeplens` 输出 `workspace/baselines/deeplens/`。
+- `compare-backends` 输出 mock-real alignment JSON / Markdown。
+- `export-phase6-report` 输出 `workspace/reports/phase6_real_deeplens_report.md`。
+- 当前真实 DeepLens 后端是 smoke-level：验证 adapter、artifact、memory、evidence flow，不证明 encoder-specific optical behavior。
+
+## Phase 7
+
+- DeepLens 后端新增 encoder strategy registry，覆盖 `conventional`、`achromatic`、`edof`、`chromatic_coded`、`controlled_chromatic_edof`。
+- 当前 Phase 7 是 real DeepLens base PSF generation + adapter-level encoder proxy transformation。
+- 这不是 native physical encoder optimization，不能作为最终 optical performance claim。
+- `run-baselines --backend deeplens` 现在会生成 encoder-specific PSF、MTF 和 metrics，并写入 `proxy_transform_manifest.json`。
+- `compare-backends` 新增 proxy realization、native/proxy 区分、rank agreement 和 claims allowed / not allowed。
+- `export-phase7-report` 输出 `workspace/reports/phase7_deeplens_encoder_proxy_report.md`。
+
+Phase 7 常用命令：
+
+```bash
+MPLCONFIGDIR=workspace/mplconfig .venv-deeplens/bin/python -m optiresearch.cli deeplens-capabilities
+MPLCONFIGDIR=workspace/mplconfig .venv-deeplens/bin/python -m optiresearch.cli run-baselines --backend deeplens --objective "Design depth-invariant and spectrally discriminative EDOF-HSI encoder"
+python -m optiresearch.cli compare-backends --left mock_deeplens --right deeplens
+python -m optiresearch.cli export-phase7-report
+```
+
+## Phase 8
+
+- LLM provider layer is optional. Without API keys, agents keep rule-based fallback.
+- `mock` provider is deterministic and used by tests.
+- `deepseek` provider uses `https://api.deepseek.com/chat/completions` with `DEEPSEEK_API_KEY`.
+- LLM output is schema-validated and cannot override artifact evidence.
+- DeepLens now supports `semi_native` realization for the conventional ParaxialLens baseline when available.
+- Other encoder families remain adapter-proxy unless experimental semi-native support is explicitly enabled and suitable API classes are detected.
+- `OptimizationSpec` is draft-only; DeepLens optimization returns `OPTIMIZATION_NOT_AVAILABLE`.
+
+Phase 8 commands:
+
+```bash
+python -m optiresearch.cli llm-providers
+python -m optiresearch.cli check-llm
+python -m optiresearch.cli test-llm --provider mock --prompt "Summarize OptiResearch Agent."
+python -m optiresearch.cli run-mvp --use-llm --llm-provider mock --objective "Design a mock EDOF-HSI encoder"
+python -m optiresearch.cli probe-deeplens-api
+python -m optiresearch.cli export-phase8-report
+```
+
+## Phase 9
+
+- Adds synthetic HSI dataset generation.
+- Adds PSF-cube forward model for single-shot measurements.
+- Adds numpy linear reconstruction baseline.
+- Adds HSI metrics: PSNR, SSIM, SAM, ERGAS, per-band RMSE, worst-depth SAM.
+- Adds reconstruction-level ClaimEvidence.
+- Current results prove end-to-end evaluability, not final optical performance.
+
+Commands:
+
+```bash
+python -m optiresearch.cli run-hsi-reconstruction --backend mock_deeplens --encoder controlled_chromatic_edof --objective "Evaluate synthetic HSI reconstruction with controlled chromatic EDOF encoder"
+python -m optiresearch.cli run-hsi-baselines --backend mock_deeplens
+python -m optiresearch.cli export-phase9-report
+```
+
+## Phase 11
+
+- Adds `synthetic`, `local_npz`, `cave`, and `icvl` HSI dataset adapters.
+- Public datasets are local-path only; no automatic download is performed.
+- Adds optional Torch-based `tiny_cnn` and `unet_tiny` reconstructors. Default pytest does not require Torch.
+- Adds `run-hsi-matrix` for dataset/backend/encoder/reconstructor/forward-mode comparison.
+- Matrix ClaimEvidence distinguishes dataset, backend, reconstructor, and realization level.
+- Synthetic/public dataset results with `mock_deeplens` are not real camera validation.
+- DeepLens `adapter_proxy` is not native physical validation.
+
+Commands:
+
+```bash
+python -m optiresearch.cli list-hsi-datasets
+python -m optiresearch.cli prepare-hsi-dataset --dataset synthetic
+python -m optiresearch.cli run-hsi-reconstruction --dataset synthetic --backend mock_deeplens --encoder controlled_chromatic_edof --forward-mode depth_spectral_coded --reconstructor optical_conditioned_linear --objective "Evaluate synthetic HSI reconstruction"
+python -m optiresearch.cli run-hsi-matrix --datasets synthetic --backends mock_deeplens --reconstructors optical_conditioned_linear,tiny_cnn --forward-modes depth_spectral_coded --objective "Compare encoder ranking across reconstructors"
+python -m optiresearch.cli export-phase11-report
+```
+
+## Phase 12
+
+- `local_npz` now supports split NPZ files, `dataset.npz`, and single cube files.
+- CAVE / ICVL adapters scan local `.npz`, `.npy`, and `.mat` files; no download is performed.
+- DeepLens outputs now include wavelength-aware PSF contract metadata.
+- Public HSI matrix writes structured skips when datasets or DeepLens are unavailable.
+- ClaimEvidence distinguishes `public_hsi_mock`, `public_hsi_deeplens_proxy`, `public_hsi_deeplens_semi_native`, and `public_hsi_deeplens_native`.
+- Paper experiment protocol v0.1 is frozen for reporting.
+
+Commands:
+
+```bash
+python -m optiresearch.cli prepare-hsi-dataset --dataset local_npz --path /path/to/data --crop-size 32 --patch-stride 32 --normalization per_band
+python -m optiresearch.cli run-public-hsi-matrix --dataset local_npz --path /path/to/data --backend mock_deeplens
+python -m optiresearch.cli freeze-paper-protocol
+python -m optiresearch.cli export-phase12-report
+```
+
+## Phase 13
+
+Final benchmark freeze and paper evidence package.
+
+- `python -m optiresearch.cli list-final-benchmarks` — List all 21 benchmark items
+- `python -m optiresearch.cli collect-final-benchmark` — Export benchmark summary
+- `python -m optiresearch.cli export-paper-tables` — Export 10 paper-ready tables (MD/CSV/JSON)
+- `python -m optiresearch.cli export-claim-boundary` — Export claim whitelist/blacklist
+- `python -m optiresearch.cli export-evidence-distribution` — Export evidence distribution
+- `python -m optiresearch.cli export-warnings-audit` — Export warnings audit
+- `python -m optiresearch.cli export-final-paper-package` — Export reproducibility package
+- `python -m optiresearch.cli export-phase13-report` — Export Phase 13 report
+
+See `docs/final_benchmark.md`, `docs/paper_tables.md`, `docs/claim_boundary.md`, `docs/final_paper_package.md`.
+```

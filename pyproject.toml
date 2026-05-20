@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "optiresearch-agent"
+version = "0.1.0"
+description = "OptiResearch Agent MVP: skill-augmented and memory-grounded optical research agent."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "pydantic>=2",
+  "fastapi",
+  "uvicorn",
+  "pyyaml",
+  "numpy",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+plot = ["matplotlib"]
+
+[project.scripts]
+optiresearch = "optiresearch.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["optiresearch*"]
+
+[tool.setuptools.package-data]
+optiresearch = [
+  "skills/*/SKILL.md",
+  "skills/*/manifest.yaml",
+  "skills/*/*.json",
+  "skills/*/config_templates/*.yaml",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

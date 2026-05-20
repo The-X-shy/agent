@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ClaimEvidence",
+  "type": "object",
+  "required": ["claim_id", "text", "status", "support_score", "support_edges", "contradict_edges"],
+  "properties": {
+    "claim_id": {"type": "string"},
+    "text": {"type": "string"},
+    "status": {
+      "type": "string",
+      "enum": ["supported", "partially_supported", "unsupported", "contradicted", "needs_followup", "simulation_only", "prototype_validated"]
+    },
+    "support_score": {"type": "number", "minimum": 0, "maximum": 1},
+    "support_edges": {"type": "array", "items": {"type": "object"}},
+    "contradict_edges": {"type": "array", "items": {"type": "object"}},
+    "required_caveats": {"type": "array", "items": {"type": "string"}}
+  }
+}

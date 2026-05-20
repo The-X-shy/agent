@@ -1,0 +1,38 @@
+skill_id: deeplens-adapter
+version: "0.1.0"
+display_name: DeepLens Adapter
+description: Run mock or future real DeepLens optical simulations, including PSF cubes, MTF curves, and optical metrics.
+roles:
+  - MethodBuilder
+  - SimulationExperimentalist
+intents:
+  - deeplens
+  - optical simulation
+  - PSF
+  - MTF
+  - differentiable optics
+  - 光学仿真
+inputs:
+  - optical_spec
+  - sweep_spec
+outputs:
+  - psf_cube.npz
+  - mtf_curves.csv
+  - optical_metrics.json
+  - run_manifest.json
+permissions:
+  filesystem: workspace
+  network: false
+cost_class: low
+validators:
+  - artifacts_exist
+  - metrics_present
+artifacts_emitted:
+  - psf_cube
+  - mtf_curves
+  - optical_metrics
+  - run_manifest
+evidence_policy: simulation_only
+sandbox_profile:
+  allow_shell: false
+  deterministic_seed: 42

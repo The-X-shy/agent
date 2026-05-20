@@ -1,0 +1,29 @@
+skill_id: hsi-reconstruction
+version: 0.1.0
+display_name: HSI Reconstruction
+description: Synthetic HSI forward model and reconstruction baseline.
+roles:
+  - SimulationExperimentalist
+  - MethodBuilder
+intents:
+  - HSI reconstruction
+  - hyperspectral reconstruction
+  - SAM ERGAS PSNR
+inputs:
+  - ExperimentSpec
+  - PSF cube artifact
+outputs:
+  - reconstruction_metrics
+  - reconstructed_hsi
+permissions:
+  filesystem: write_workspace
+cost_class: low
+validators:
+  - validate_artifacts
+artifacts_emitted:
+  - measurements
+  - reconstruction_metrics
+  - reconstructed_test
+evidence_policy: reconstruction_metrics_required
+sandbox_profile:
+  network: false
