@@ -7,6 +7,11 @@ from optiresearch.schemas.experiment import (
     SweepSpec,
     build_default_mock_edof_hsi_experiment,
 )
+from optiresearch.schemas.native_hsi_codesign import (
+    NativeOpticalHSICoDesignResult,
+    NativeOpticalHSICoDesignSpec,
+    make_hsi_codesign_id,
+)
 from optiresearch.schemas.native_optimization import (
     NativeOptimizationProbeResult,
     NativeOptimizationProbeSpec,
@@ -17,11 +22,14 @@ from optiresearch.schemas.native_optimization import (
 __all__ = [
     "ExperimentSpec",
     "MetricSpec",
+    "NativeOpticalHSICoDesignResult",
+    "NativeOpticalHSICoDesignSpec",
     "NativeOptimizationProbeResult",
     "NativeOptimizationProbeSpec",
     "OpticalSpec",
     "SweepSpec",
     "build_default_mock_edof_hsi_experiment",
     "build_default_paraxial_psf_width_probe",
+    "make_hsi_codesign_id",
     "make_probe_id",
 ]
