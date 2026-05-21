@@ -1,23 +1,38 @@
 # Native Optimization Claims
 
-## Claim 1: DeepLens Native Differentiable Optimization Is Supported
+## Claim 1: DeepLens Native Differentiable Component Optimization Is Supported
 
-**Evidence level:** `deeplens_native_optimization`
+**Evidence level:** `deeplens_native_component_optimization`
 
 **Required conditions:**
-- `differentiable = True`
-- `native_parameter_update = True`
+- surface-level probe succeeded
+- `requires_grad_true = True`
 - `gradient_norm > 0`
 - `parameters_changed = True`
-- `fallback_used = False`
-- `realization_level = "native"`
+- `optimizer_step_executed = True`
 
-**Status:** Depends on probe outcome for each lens class.
+**Status:** Supported only for the specific surface/component that passed.
 
 **Caveats:**
-- Only validated for the specific lens class and objective tested
+- Only validated for the specific surface and objective tested
+- Does NOT imply lens-file PSF optimization
 - Does NOT imply end-to-end optical-HSI differentiable optimization
 - Requires torch autograd infrastructure
+
+---
+
+## Claim 1B: DeepLens Native Differentiable Lens Optimization Is Supported
+
+**Evidence level:** `deeplens_native_lens_optimization`
+
+**Required conditions:**
+- lens file loaded
+- lens-level PSF/image loss backward succeeds
+- `gradient_norm > 0`
+- `parameters_changed = True`
+- `optimizer_step_executed = True`
+
+**Status:** Depends on lens-file probe outcome.
 
 ---
 
@@ -36,17 +51,17 @@
 
 ---
 
-## Claim 3: DeepLens Native Optimization Improves HSI Reconstruction
+## Claim 3: DeepLens Native Optical-HSI Co-Design Is Supported
 
-**Evidence level:** `deeplens_native_optimization` + `hsi_reconstruction`
+**Evidence level:** `deeplens_native_optical_hsi_codesign`
 
 **Required conditions:**
-- Native optimization probe result exists
-- HSI reconstruction metrics before AND after native optimization exist
-- `final_score > initial_score`
-- `native_parameter_update = True`
+- Native differentiable lens optimization success
+- DeepLens PSF/image feeds HSI loss
+- HSI loss backward reaches an optical parameter
+- `optimizer.step()` improves an HSI metric
 
-**Status:** Needs followup — requires integration of native optimization with HSI pipeline (future Phase 20+)
+**Status:** Needs followup.
 
 ---
 

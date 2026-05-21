@@ -16,6 +16,8 @@ RemoteJobType = Literal[
     "deeplens_source_smoke",
     "native_optimization_probe",
     "native_optimization_inspection",
+    "deeplens_surface_optimization_probe",
+    "deeplens_lensfile_optimization_probe",
     "autonomous_loop",
 ]
 

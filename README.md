@@ -335,4 +335,36 @@ python -m optiresearch.cli export-phase19-report
 ```
 
 See `docs/deeplens_native_optimization_probe.md`, `docs/native_optimization_claims.md`.
+
+## Phase 19B
+
+Correct DeepLens native optimization path discovery. Phase 19B no longer treats
+`ParaxialLens` as the only native optimization evidence. It scans DeepLens
+source paths and probes diffractive/phase surfaces first, then tries lens-file
+classes separately.
+
+Commands:
+
+```bash
+python -m optiresearch.cli scan-deeplens-optimization-paths
+
+python -m optiresearch.cli run-deeplens-surface-optimization-probe \
+  --surface Fresnel --objective minimize_phase_variance --max-steps 3
+
+python -m optiresearch.cli run-deeplens-surface-optimization-probe \
+  --surface Binary2Phase --objective match_target_phase --max-steps 3
+
+python -m optiresearch.cli run-deeplens-lensfile-optimization-probe \
+  --lens-class GeoLens --max-files 5 --max-steps 2
+
+python -m optiresearch.cli run-remote-deeplens-surface-optimization-probe \
+  --worker-id windows_wsl --surface Fresnel \
+  --objective minimize_phase_variance --max-steps 3
+
+python -m optiresearch.cli export-phase19b-report
 ```
+
+Claim boundary:
+- Surface probe success supports component-level native differentiable optimization.
+- Lens-level native optimization requires lens-file load + PSF/image loss backward + parameter change.
+- Native optical-HSI co-design still requires HSI loss to reach an optical parameter.

@@ -91,9 +91,25 @@ ALLOWED_CLI_COMMANDS: dict[str, set[str]] = {
         "--allow-adapter-proxy",
         "--remote-job-id",
     },
+    "run-deeplens-surface-optimization-probe": {
+        "--surface",
+        "--objective",
+        "--max-steps",
+        "--learning-rate",
+        "--device",
+        "--remote-job-id",
+    },
+    "run-deeplens-lensfile-optimization-probe": {
+        "--lens-class",
+        "--max-files",
+        "--max-steps",
+        "--learning-rate",
+        "--device",
+        "--remote-job-id",
+    },
 }
 
-FLAG_OPTIONS = {"--strict-deeplens", "--use-optical-feature-maps"}
+FLAG_OPTIONS = {"--strict-deeplens", "--use-optical-feature-maps", "--strict-native", "--allow-adapter-proxy"}
 DENIED_EXECUTABLES = {"sudo", "rm", "curl", "chmod"}
 SHELL_META_TOKENS = {";", "&&", "||", "|", ">", "<"}
 SHELL_META_CHARS = {";", "|", ">", "<", "`"}

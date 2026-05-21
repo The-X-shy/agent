@@ -109,6 +109,7 @@ class ClaimEvidenceManager:
             claim.status = "partially_supported"
         self._downgrade_deeplens_smoke_claim(claim)
         self._apply_public_hsi_rules(claim)
+        self._apply_native_optimization_level_rules(claim)
         claim.review_status = "reviewed"
         claim.required_caveats = self._caveats(claim.scope)
         claim.metadata = {**self._metadata(claim.scope), **claim.metadata}
@@ -163,6 +164,10 @@ class ClaimEvidenceManager:
             "loss_after": claim.metadata.get("loss_after"),
             "lens_class": claim.metadata.get("lens_class"),
             "realization_level": claim.metadata.get("realization_level"),
+            "native_optimization_level": claim.metadata.get("native_optimization_level"),
+            "surface_class": claim.metadata.get("surface_class"),
+            "lens_file_loaded": claim.metadata.get("lens_file_loaded"),
+            "optimizer_step_executed": claim.metadata.get("optimizer_step_executed"),
         }
         return explanation
 
@@ -242,10 +247,23 @@ class ClaimEvidenceManager:
                 "backend_scope": scope.get("backend"),
                 "real_camera_evidence": bool(scope.get("real_camera_evidence")),
                 "optical_backend_evidence_level": self._evidence_level(scope),
+                "native_optimization_level": scope.get("native_optimization_level"),
+                "surface_class": scope.get("surface_class"),
+                "lens_file_loaded": scope.get("lens_file_loaded"),
+                "optimizer_step_executed": scope.get("optimizer_step_executed"),
             },
         )
 
     def _evidence_level(self, scope: dict[str, Any]) -> str:
+        if scope.get("evidence_domain") == "deeplens_native_optimization":
+            level = scope.get("native_optimization_level")
+            if level == "component":
+                return "deeplens_native_component_optimization"
+            if level == "lens":
+                return "deeplens_native_lens_optimization"
+            if level == "optical_hsi_codesign":
+                return "deeplens_native_optical_hsi_codesign"
+            return "deeplens_native_optimization_unqualified"
         if scope.get("evidence_domain") == "native_optimization_probe":
             if scope.get("realization_level") == "native" and scope.get("differentiable"):
                 return "deeplens_native_optimization"
@@ -397,6 +415,66 @@ class ClaimEvidenceManager:
                 return artifact
         return None
 
+    def _apply_native_optimization_level_rules(self, claim: ClaimEvidence) -> None:
+        if claim.scope.get("evidence_domain") != "deeplens_native_optimization":
+            return
+
+        lower = claim.text.lower()
+        scope = claim.scope
+        level = scope.get("native_optimization_level")
+        has_component_chain = all(
+            [
+                scope.get("surface_probe_succeeded") is True,
+                scope.get("requires_grad_true") is True,
+                _positive(scope.get("gradient_norm")),
+                scope.get("parameters_changed") is True,
+                scope.get("optimizer_step_executed") is True,
+            ]
+        )
+        has_lens_chain = all(
+            [
+                scope.get("lens_file_loaded") is True,
+                scope.get("lens_psf_backward_success") is True,
+                _positive(scope.get("gradient_norm")),
+                scope.get("parameters_changed") is True,
+                scope.get("optimizer_step_executed") is True,
+            ]
+        )
+        has_hsi_chain = all(
+            [
+                has_lens_chain,
+                scope.get("deeplens_psf_feeds_hsi_loss") is True,
+                scope.get("hsi_loss_backward_reaches_optical_parameter") is True,
+                scope.get("hsi_metric_improved") is True,
+            ]
+        )
+
+        claim.metadata["native_optimization_level"] = level
+        claim.metadata["surface_class"] = scope.get("surface_class")
+        claim.metadata["lens_file_loaded"] = scope.get("lens_file_loaded")
+        claim.metadata["optimizer_step_executed"] = scope.get("optimizer_step_executed")
+        claim.metadata["evidence_level"] = self._evidence_level(scope)
+
+        if "optical-hsi" in lower or "optical hsi" in lower or "co-design" in lower or "hsi reconstruction" in lower:
+            if level != "optical_hsi_codesign" or not has_hsi_chain:
+                claim.status = "needs_followup"
+                claim.warnings.append("native_optical_hsi_codesign_requires_hsi_loss")
+            return
+
+        if "lens optimization" in lower or "differentiable lens" in lower:
+            if level != "lens" or not has_lens_chain:
+                claim.status = "needs_followup"
+                claim.warnings.append("native_lens_optimization_requires_lensfile_psf_backward")
+            return
+
+        if "component optimization" in lower:
+            if has_component_chain and claim.support_edges:
+                claim.status = "supported"
+                claim.support_score = max(claim.support_score, 0.85)
+            else:
+                claim.status = "unsupported"
+                claim.warnings.append("native_component_optimization_probe_incomplete")
+
     def _apply_public_hsi_rules(self, claim: ClaimEvidence) -> None:
         if claim.scope.get("evidence_domain") != "public_hsi_matrix":
             return
@@ -536,3 +614,7 @@ class ClaimEvidenceManager:
                 except Exception:
                     pass
         return None
+
+
+def _positive(value: Any) -> bool:
+    return isinstance(value, (int, float)) and float(value) > 0.0

@@ -10,10 +10,12 @@ introspection — importing classes and checking their actual behavior.
 
 from __future__ import annotations
 
+import ast
 import importlib
 import inspect
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -36,6 +38,227 @@ MODULE_MAP = {
     "HybridLens": "deeplens.hybridlens",
     "PSFNetLens": "deeplens.psfnetlens",
 }
+
+OPTIMIZATION_PATTERNS = [
+    "get_optimizer_params",
+    "get_optimizer",
+    "requires_grad",
+    "torch.optim",
+    "loss.backward",
+    "optimizer.step",
+    "activate_grad",
+    "read_lens_json",
+    "init_from_dict",
+]
+
+SOURCE_SCAN_TARGETS = [
+    Path("deeplens/diffractive_surface"),
+    Path("deeplens/phase_surface"),
+    Path("deeplens/geometric_surface"),
+    Path("deeplens/geolens.py"),
+    Path("deeplens/hybridlens.py"),
+    Path("deeplens/diffraclens.py"),
+    Path("deeplens/geolens_pkg/optim.py"),
+    Path("examples"),
+    Path("test"),
+    Path("tests"),
+]
+
+LENS_FILE_CLASSES = {"GeoLens", "HybridLens", "DiffractiveLens"}
+
+NO_FILE_SURFACE_CLASSES = {
+    "Fresnel",
+    "Binary2",
+    "Zernike",
+    "Grating",
+    "Pixel2D",
+    "ThinLens",
+    "Binary2Phase",
+    "CubicPhase",
+    "ZernikePhase",
+    "PolyPhase",
+    "GratingPhase",
+    "FresnelPhase",
+    "NURBSPhase",
+    "QPhase",
+    "VortexPhase",
+}
+
+
+class DeepLensOptimizationPathScanner:
+    """Source scanner for DeepLens differentiable optimization entry points."""
+
+    def __init__(self, repo_path: str | Path | None = None) -> None:
+        self.repo_path = self._resolve_repo_path(repo_path)
+
+    @property
+    def available(self) -> bool:
+        return self.repo_path is not None and self.repo_path.exists()
+
+    def scan(self) -> dict[str, Any]:
+        if not self.available or self.repo_path is None:
+            return {
+                "available": False,
+                "repo_path": None,
+                "entries": [],
+                "summary": {"entry_count": 0, "surface_candidates": 0, "lens_file_candidates": 0},
+                "error": "DeepLens source checkout not found",
+            }
+
+        entries: list[dict[str, Any]] = []
+        for path in self._iter_scan_files():
+            entries.extend(self._scan_file(path))
+
+        summary = {
+            "entry_count": len(entries),
+            "surface_candidates": sum(1 for item in entries if item.get("likely_probe_type") == "surface_phase"),
+            "lens_file_candidates": sum(1 for item in entries if item.get("likely_probe_type") == "lens_file"),
+            "files_scanned": len({item["file"] for item in entries}),
+        }
+        return {
+            "available": True,
+            "repo_path": str(self.repo_path),
+            "scan_targets": [target.as_posix() for target in SOURCE_SCAN_TARGETS],
+            "patterns": OPTIMIZATION_PATTERNS,
+            "entries": entries,
+            "summary": summary,
+        }
+
+    def _iter_scan_files(self) -> list[Path]:
+        assert self.repo_path is not None
+        files: list[Path] = []
+        for target in SOURCE_SCAN_TARGETS:
+            root = self.repo_path / target
+            if root.is_file() and root.suffix == ".py":
+                files.append(root)
+            elif root.is_dir():
+                files.extend(sorted(root.rglob("*.py")))
+        return sorted(dict.fromkeys(files))
+
+    def _scan_file(self, path: Path) -> list[dict[str, Any]]:
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        if not any(pattern in text for pattern in OPTIMIZATION_PATTERNS):
+            return []
+
+        rel = self._relative(path)
+        classes = self._classes_in_file(text)
+        if not classes:
+            return [self._entry(rel, None, text)]
+        return [self._entry(rel, cls_name, source) for cls_name, source in classes]
+
+    def _entry(self, rel_file: str, cls_name: str | None, source: str) -> dict[str, Any]:
+        methods = [pattern for pattern in OPTIMIZATION_PATTERNS if pattern in source]
+        trainable = self._extract_trainable_parameters(source)
+        requires_file = self._requires_lens_file(rel_file, cls_name)
+        can_no_file = self._can_instantiate_no_file(rel_file, cls_name, requires_file)
+        probe_type = self._probe_type(rel_file, cls_name, requires_file)
+        return {
+            "file": rel_file,
+            "class": cls_name,
+            "optimization_method": methods,
+            "trainable_parameters": trainable,
+            "requires_lens_file": requires_file,
+            "can_instantiate_no_file": can_no_file,
+            "likely_probe_type": probe_type,
+            "recommended_probe": self._recommended_probe(cls_name, probe_type),
+        }
+
+    def _relative(self, path: Path) -> str:
+        assert self.repo_path is not None
+        try:
+            return path.relative_to(self.repo_path).as_posix()
+        except ValueError:
+            return path.as_posix()
+
+    @staticmethod
+    def _classes_in_file(text: str) -> list[tuple[str, str]]:
+        try:
+            tree = ast.parse(text)
+        except SyntaxError:
+            return []
+        lines = text.splitlines()
+        result: list[tuple[str, str]] = []
+        for node in tree.body:
+            if not isinstance(node, ast.ClassDef):
+                continue
+            end = getattr(node, "end_lineno", node.lineno)
+            source = "\n".join(lines[node.lineno - 1 : end])
+            if any(pattern in source for pattern in OPTIMIZATION_PATTERNS):
+                result.append((node.name, source))
+        return result
+
+    @staticmethod
+    def _extract_trainable_parameters(source: str) -> list[str]:
+        names: list[str] = []
+        for match in re.finditer(r"self\.([A-Za-z_]\w*)\.requires_grad_?\s*(?:=|\()", source):
+            names.append(match.group(1))
+        for match in re.finditer(r'"params"\s*:\s*\[?self\.([A-Za-z_]\w*)', source):
+            names.append(match.group(1))
+        return _unique(names)
+
+    @staticmethod
+    def _requires_lens_file(rel_file: str, cls_name: str | None) -> bool:
+        if cls_name in LENS_FILE_CLASSES:
+            return True
+        return rel_file in {"deeplens/geolens.py", "deeplens/hybridlens.py", "deeplens/diffraclens.py"}
+
+    @staticmethod
+    def _can_instantiate_no_file(rel_file: str, cls_name: str | None, requires_file: bool) -> bool:
+        if requires_file:
+            return False
+        if cls_name in NO_FILE_SURFACE_CLASSES:
+            return True
+        return "surface" in rel_file and cls_name is not None
+
+    @staticmethod
+    def _probe_type(rel_file: str, cls_name: str | None, requires_file: bool) -> str:
+        if requires_file:
+            return "lens_file"
+        if "diffractive_surface" in rel_file or "phase_surface" in rel_file:
+            return "surface_phase"
+        if "geometric_surface" in rel_file:
+            return "geometric_surface"
+        if cls_name is None:
+            return "example_or_test"
+        return "source_pattern"
+
+    @staticmethod
+    def _recommended_probe(cls_name: str | None, probe_type: str) -> str | None:
+        if cls_name is None:
+            return None
+        if probe_type == "surface_phase":
+            objective = "match_target_phase" if cls_name == "Binary2Phase" else "minimize_phase_variance"
+            return (
+                "python -m optiresearch.cli run-deeplens-surface-optimization-probe "
+                f"--surface {cls_name} --objective {objective} --max-steps 3"
+            )
+        if probe_type == "lens_file":
+            return (
+                "python -m optiresearch.cli run-deeplens-lensfile-optimization-probe "
+                f"--lens-class {cls_name} --max-files 5 --max-steps 2"
+            )
+        return None
+
+    @staticmethod
+    def _resolve_repo_path(repo_path: str | Path | None) -> Path | None:
+        if repo_path is not None:
+            candidate = Path(repo_path)
+            return candidate if candidate.exists() else None
+
+        env_path = os.getenv("DEEPLENS_REPO_PATH")
+        if env_path and Path(env_path).exists():
+            return Path(env_path)
+
+        try:
+            spec = importlib.util.find_spec("deeplens")
+        except Exception:
+            spec = None
+        if spec is not None and spec.origin:
+            package_dir = Path(spec.origin).parent
+            repo = package_dir.parent
+            if (repo / "deeplens").is_dir():
+                return repo
+        return None
 
 
 class DeepLensNativeOptimizationInspector:
@@ -454,6 +677,69 @@ def _build_markdown(result: dict[str, Any]) -> list[str]:
         ])
 
     return lines
+
+
+def export_optimization_path_scan(
+    output_dir: Path | None = None,
+    repo_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Export Phase 19B DeepLens optimization path scan artifacts."""
+    scanner = DeepLensOptimizationPathScanner(repo_path=repo_path)
+    result = scanner.scan()
+
+    root = output_dir or Path(os.getenv("OPTIRESEARCH_REPORT_ROOT", "./workspace/reports"))
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "deeplens_optimization_path_scan.json").write_text(
+        json.dumps(result, indent=2, ensure_ascii=False, default=str), encoding="utf-8"
+    )
+    (root / "deeplens_optimization_path_scan.md").write_text(
+        "\n".join(_build_optimization_path_markdown(result)), encoding="utf-8"
+    )
+    return result
+
+
+def _build_optimization_path_markdown(result: dict[str, Any]) -> list[str]:
+    lines = [
+        "# DeepLens Optimization Path Scan",
+        "",
+        f"**Available:** {result.get('available', False)}",
+        f"**Repo path:** `{result.get('repo_path')}`",
+        "",
+        "## Summary",
+        "",
+        f"- Entry count: {result.get('summary', {}).get('entry_count', 0)}",
+        f"- Surface candidates: {result.get('summary', {}).get('surface_candidates', 0)}",
+        f"- Lens-file candidates: {result.get('summary', {}).get('lens_file_candidates', 0)}",
+        "",
+        "## Optimization Paths",
+        "",
+        "| file | class | optimization_method | trainable_parameters | requires_lens_file | can_instantiate_no_file | likely_probe_type | recommended_probe |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    for entry in result.get("entries", []):
+        lines.append(
+            "| {file} | {class_name} | {methods} | {params} | {requires_file} | {can_no_file} | {probe_type} | {recommended} |".format(
+                file=entry.get("file", "-"),
+                class_name=entry.get("class") or "-",
+                methods=", ".join(entry.get("optimization_method", [])) or "-",
+                params=", ".join(entry.get("trainable_parameters", [])) or "-",
+                requires_file=_yn(entry.get("requires_lens_file")),
+                can_no_file=_yn(entry.get("can_instantiate_no_file")),
+                probe_type=entry.get("likely_probe_type") or "-",
+                recommended=entry.get("recommended_probe") or "-",
+            )
+        )
+    return lines
+
+
+def _unique(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in items:
+        if item not in seen:
+            result.append(item)
+            seen.add(item)
+    return result
 
 
 def _yn(value: Any) -> str:

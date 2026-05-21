@@ -112,6 +112,65 @@ def run_remote_native_optimization_probe(
     return execute_remote_job(worker_id, job, runner=runner, ingest=ingest)
 
 
+def run_remote_deeplens_surface_optimization_probe(
+    worker_id: str,
+    surface: str,
+    objective: str,
+    max_steps: int = 3,
+    learning_rate: float = 1e-3,
+    device: str = "cpu",
+    runner: Any | None = None,
+    ingest: bool = True,
+) -> dict[str, Any]:
+    job = _job(
+        "deeplens_surface_optimization_probe",
+        objective=f"DeepLens surface optimization probe: {surface} / {objective}",
+        cli_args={
+            "surface": surface,
+            "objective": objective,
+            "max_steps": max_steps,
+            "learning_rate": learning_rate,
+            "device": device,
+        },
+        timeout_seconds=1800,
+        expected_outputs=[
+            "probe_result.json",
+            "loss_trace.json",
+            "parameter_before.json",
+            "parameter_after.json",
+            "phase_before.npz",
+            "phase_after.npz",
+        ],
+    )
+    return execute_remote_job(worker_id, job, runner=runner, ingest=ingest)
+
+
+def run_remote_deeplens_lensfile_optimization_probe(
+    worker_id: str,
+    lens_class: str,
+    max_files: int = 5,
+    max_steps: int = 2,
+    learning_rate: float = 1e-3,
+    device: str = "cpu",
+    runner: Any | None = None,
+    ingest: bool = True,
+) -> dict[str, Any]:
+    job = _job(
+        "deeplens_lensfile_optimization_probe",
+        objective=f"DeepLens lens-file optimization probe: {lens_class}",
+        cli_args={
+            "lens_class": lens_class,
+            "max_files": max_files,
+            "max_steps": max_steps,
+            "learning_rate": learning_rate,
+            "device": device,
+        },
+        timeout_seconds=1800,
+        expected_outputs=["probe_result.json", "loss_trace.json", "parameter_before.json", "parameter_after.json"],
+    )
+    return execute_remote_job(worker_id, job, runner=runner, ingest=ingest)
+
+
 def run_remote_native_optimization_inspection(
     worker_id: str,
     runner: Any | None = None,

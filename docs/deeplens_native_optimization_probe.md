@@ -87,6 +87,30 @@ python -m optiresearch.cli export-phase19-report
 - No claiming native optimization without actual `backward()` + `optimizer.step()` verification
 - `gradient_norm > 0` and `parameters_changed = True` are required for native classification
 - Black-box search is explicitly not differentiable optimization
+- Phase 19B separates component, lens, and optical-HSI claims. A surface-level success does not prove full native optical-HSI co-design.
+
+## Phase 19B Surface and Lens-file Probes
+
+```bash
+python -m optiresearch.cli scan-deeplens-optimization-paths
+
+python -m optiresearch.cli run-deeplens-surface-optimization-probe \
+  --surface Fresnel \
+  --objective minimize_phase_variance \
+  --max-steps 3
+
+python -m optiresearch.cli run-deeplens-surface-optimization-probe \
+  --surface Binary2Phase \
+  --objective match_target_phase \
+  --max-steps 3
+
+python -m optiresearch.cli run-deeplens-lensfile-optimization-probe \
+  --lens-class GeoLens \
+  --max-files 5 \
+  --max-steps 2
+
+python -m optiresearch.cli export-phase19b-report
+```
 
 ## Artifacts
 
@@ -100,4 +124,18 @@ workspace/native_optimization/<probe_id>/
 ├── psf_before.npz
 ├── psf_after.npz
 └── native_probe_report.md
+```
+
+Surface probes write:
+
+```
+workspace/native_optimization/surface_probe_<id>/
+├── probe_spec.json
+├── probe_result.json
+├── loss_trace.json
+├── parameter_before.json
+├── parameter_after.json
+├── phase_before.npz
+├── phase_after.npz
+└── report.md
 ```

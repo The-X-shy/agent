@@ -58,7 +58,9 @@ from optiresearch.runtime.remote_jobs import (
     check_remote_worker,
     export_remote_job_outputs,
     run_remote_codesign,
+    run_remote_deeplens_lensfile_optimization_probe,
     run_remote_deeplens_source_smoke,
+    run_remote_deeplens_surface_optimization_probe,
     run_remote_hsi_reconstruction,
     run_remote_native_optimization_probe,
 )
@@ -233,6 +235,7 @@ def main(argv: list[str] | None = None) -> None:
     inspect_source.add_argument("--remote-job-id")
     inspect_native = sub.add_parser("inspect-deeplens-native-optimization", help="Inspect DeepLens native optimization capabilities.")
     inspect_native.add_argument("--remote-job-id")
+    sub.add_parser("scan-deeplens-optimization-paths", help="Scan DeepLens source for native optimization paths.")
     source_smoke = sub.add_parser("run-deeplens-source-smoke", help="Run minimal PSF smoke with source DeepLens.")
     source_smoke.add_argument("--remote-job-id")
     native_probe = sub.add_parser("run-native-optimization-probe", help="Run native differentiable optimization probe on a DeepLens lens class.")
@@ -244,6 +247,21 @@ def main(argv: list[str] | None = None) -> None:
     native_probe.add_argument("--strict-native", action="store_true")
     native_probe.add_argument("--allow-adapter-proxy", action="store_true")
     native_probe.add_argument("--remote-job-id")
+    surface_probe = sub.add_parser("run-deeplens-surface-optimization-probe", help="Run native optimization probe on a DeepLens surface class.")
+    surface_probe.add_argument("--surface", required=True)
+    surface_probe.add_argument("--objective", required=True, choices=["minimize_phase_variance", "match_target_phase", "parameter_sanity_check"])
+    surface_probe.add_argument("--max-steps", type=int, default=3)
+    surface_probe.add_argument("--learning-rate", type=float, default=1e-3)
+    surface_probe.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
+    surface_probe.add_argument("--remote-job-id")
+    lensfile_probe = sub.add_parser("run-deeplens-lensfile-optimization-probe", help="Run native optimization probe on DeepLens example lens files.")
+    lensfile_probe.add_argument("--lens-class", required=True, choices=["GeoLens", "HybridLens", "DiffractiveLens"])
+    lensfile_probe.add_argument("--max-files", type=int, default=5)
+    lensfile_probe.add_argument("--max-steps", type=int, default=2)
+    lensfile_probe.add_argument("--learning-rate", type=float, default=1e-3)
+    lensfile_probe.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
+    lensfile_probe.add_argument("--remote-job-id")
+    sub.add_parser("export-phase19b-report", help="Export Phase 19B native optimization path report.")
     sub.add_parser("list-remote-workers", help="List registered remote workers.")
     add_worker = sub.add_parser("add-remote-worker", help="Add or update a remote worker.")
     add_worker.add_argument("--worker-id", required=True)
@@ -285,6 +303,20 @@ def main(argv: list[str] | None = None) -> None:
     remote_native.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
     remote_native.add_argument("--strict-native", action="store_true")
     remote_native.add_argument("--allow-adapter-proxy", action="store_true")
+    remote_surface = sub.add_parser("run-remote-deeplens-surface-optimization-probe", help="Run surface native optimization probe on a remote worker.")
+    remote_surface.add_argument("--worker-id", required=True)
+    remote_surface.add_argument("--surface", required=True)
+    remote_surface.add_argument("--objective", required=True, choices=["minimize_phase_variance", "match_target_phase", "parameter_sanity_check"])
+    remote_surface.add_argument("--max-steps", type=int, default=3)
+    remote_surface.add_argument("--learning-rate", type=float, default=1e-3)
+    remote_surface.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
+    remote_lensfile = sub.add_parser("run-remote-deeplens-lensfile-optimization-probe", help="Run lens-file native optimization probe on a remote worker.")
+    remote_lensfile.add_argument("--worker-id", required=True)
+    remote_lensfile.add_argument("--lens-class", required=True, choices=["GeoLens", "HybridLens", "DiffractiveLens"])
+    remote_lensfile.add_argument("--max-files", type=int, default=5)
+    remote_lensfile.add_argument("--max-steps", type=int, default=2)
+    remote_lensfile.add_argument("--learning-rate", type=float, default=1e-3)
+    remote_lensfile.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
     remote_report = sub.add_parser("export-remote-execution-report", help="Export a remote execution report.")
     remote_report.add_argument("--job-id", required=True)
 
@@ -482,8 +514,24 @@ def main(argv: list[str] | None = None) -> None:
                 [root],
                 {"job_type": "native_optimization_inspection", "available": bool(result.get("available"))},
             )
+    elif args.command == "scan-deeplens-optimization-paths":
+        from optiresearch.adapters.deeplens_native_inspector import export_optimization_path_scan
+        result = export_optimization_path_scan()
+        root = Path(os.getenv("OPTIRESEARCH_REPORT_ROOT", "./workspace/reports"))
+        print(f"available: {result.get('available')}")
+        print(f"entries: {result.get('summary', {}).get('entry_count', 0)}")
+        print(f"json: {root / 'deeplens_optimization_path_scan.json'}")
+        print(f"markdown: {root / 'deeplens_optimization_path_scan.md'}")
     elif args.command == "run-native-optimization-probe":
         _run_native_optimization_probe(args)
+    elif args.command == "run-deeplens-surface-optimization-probe":
+        _run_deeplens_surface_optimization_probe(args)
+    elif args.command == "run-deeplens-lensfile-optimization-probe":
+        _run_deeplens_lensfile_optimization_probe(args)
+    elif args.command == "export-phase19b-report":
+        from optiresearch.reports.phase19b import export_phase19b_report
+        path = export_phase19b_report()
+        print(f"markdown: {path}")
     elif args.command == "run-deeplens-source-smoke":
         _run_deeplens_source_smoke(args.remote_job_id)
     elif args.command == "list-remote-workers":
@@ -525,6 +573,26 @@ def main(argv: list[str] | None = None) -> None:
             device=args.device,
             strict_native=args.strict_native,
             allow_adapter_proxy=args.allow_adapter_proxy,
+        )
+        _print_remote_payload(payload)
+    elif args.command == "run-remote-deeplens-surface-optimization-probe":
+        payload = run_remote_deeplens_surface_optimization_probe(
+            args.worker_id,
+            surface=args.surface,
+            objective=args.objective,
+            max_steps=args.max_steps,
+            learning_rate=args.learning_rate,
+            device=args.device,
+        )
+        _print_remote_payload(payload)
+    elif args.command == "run-remote-deeplens-lensfile-optimization-probe":
+        payload = run_remote_deeplens_lensfile_optimization_probe(
+            args.worker_id,
+            lens_class=args.lens_class,
+            max_files=args.max_files,
+            max_steps=args.max_steps,
+            learning_rate=args.learning_rate,
+            device=args.device,
         )
         _print_remote_payload(payload)
     elif args.command == "export-remote-execution-report":
@@ -1192,6 +1260,64 @@ def _run_native_optimization_probe(args: Any) -> None:
                 "realization_level": result.realization_level,
             },
         )
+
+
+def _run_deeplens_surface_optimization_probe(args: Any) -> None:
+    from optiresearch.runtime.deeplens_surface_optimization_probe import run_surface_optimization_probe
+    from optiresearch.schemas.surface_optimization import SurfaceOptimizationProbeSpec, make_surface_probe_id
+
+    spec = SurfaceOptimizationProbeSpec(
+        probe_id=make_surface_probe_id(args.surface, args.objective),
+        surface_class=args.surface,
+        objective=args.objective,
+        max_steps=args.max_steps,
+        learning_rate=args.learning_rate,
+        device=args.device,
+        save_artifacts=True,
+    )
+    result = run_surface_optimization_probe(spec)
+    print(_compact_json(result.model_dump(mode="json")))
+
+    if getattr(args, "remote_job_id", None):
+        output_dir = Path("workspace/native_optimization") / f"surface_probe_{result.probe_id}"
+        export_remote_job_outputs(
+            args.remote_job_id,
+            "deeplens_surface_optimization_probe",
+            {
+                **result.model_dump(mode="json"),
+                "backend": "deeplens",
+                "fallback_used": False,
+            },
+            [output_dir] if output_dir.exists() else [],
+            {
+                "job_type": "deeplens_surface_optimization_probe",
+                "backend": "deeplens",
+                "evidence_domain": "deeplens_native_optimization",
+                "native_optimization_level": "component",
+                "surface_class": result.surface_class,
+                "status": result.status,
+                "differentiable": result.differentiable,
+                "requires_grad_true": result.metadata.get("requires_grad_true"),
+                "gradient_norm": result.gradient_norm,
+                "parameters_changed": result.parameters_changed,
+                "optimizer_step_executed": result.metadata.get("optimizer_step_executed"),
+            },
+        )
+
+
+def _run_deeplens_lensfile_optimization_probe(args: Any) -> None:
+    from optiresearch.runtime.deeplens_lensfile_optimization_probe import run_lensfile_optimization_probe
+
+    result = run_lensfile_optimization_probe(
+        lens_class=args.lens_class,
+        max_files=args.max_files,
+        max_steps=args.max_steps,
+        learning_rate=args.learning_rate,
+        device=args.device,
+        save_artifacts=True,
+        remote_job_id=getattr(args, "remote_job_id", None),
+    )
+    print(_compact_json(result))
 
 
 def _run_codesign_loop(args: Any) -> None:
