@@ -149,6 +149,47 @@ class FresnelHSIBridge:
         return float(total ** 0.5)
 
 
+def validate_autograd_chain(
+    loss: Any,
+    optical_params: list[Any],
+    recon_params: list[Any] | None = None,
+) -> dict[str, Any]:
+    """Validate autograd chain connects loss to optical and reconstructor parameters.
+
+    Must be called after loss.backward().
+    """
+    result: dict[str, Any] = {
+        "autograd_graph_exists": False,
+        "optical_gradient_norm": 0.0,
+        "recon_gradient_norm": 0.0,
+        "detached_tensors_detected": False,
+        "failed_reason": None,
+    }
+
+    if not getattr(loss, "requires_grad", False):
+        result["failed_reason"] = "loss does not require grad"
+        return result
+
+    opt_norm = 0.0
+    for p in optical_params:
+        if p.grad is not None:
+            opt_norm += float(p.grad.detach().norm().cpu().item() ** 2)
+    result["optical_gradient_norm"] = float(opt_norm ** 0.5)
+
+    recon_norm = 0.0
+    if recon_params:
+        for p in recon_params:
+            if p.grad is not None:
+                recon_norm += float(p.grad.detach().norm().cpu().item() ** 2)
+    result["recon_gradient_norm"] = float(recon_norm ** 0.5)
+
+    result["autograd_graph_exists"] = result["optical_gradient_norm"] > 0
+    if not result["autograd_graph_exists"]:
+        result["failed_reason"] = "optical gradient norm is zero"
+
+    return result
+
+
 class Binary2PhaseHSIBridge:
     """Differentiable bridge: Binary2Phase -> PSF tensor via FFT proxy.
 
@@ -270,3 +311,44 @@ class Binary2PhaseHSIBridge:
             if param.grad is not None:
                 total += float(param.grad.detach().norm().cpu().item() ** 2)
         return float(total ** 0.5)
+
+
+def validate_autograd_chain(
+    loss: Any,
+    optical_params: list[Any],
+    recon_params: list[Any] | None = None,
+) -> dict[str, Any]:
+    """Validate autograd chain connects loss to optical and reconstructor parameters.
+
+    Must be called after loss.backward().
+    """
+    result: dict[str, Any] = {
+        "autograd_graph_exists": False,
+        "optical_gradient_norm": 0.0,
+        "recon_gradient_norm": 0.0,
+        "detached_tensors_detected": False,
+        "failed_reason": None,
+    }
+
+    if not getattr(loss, "requires_grad", False):
+        result["failed_reason"] = "loss does not require grad"
+        return result
+
+    opt_norm = 0.0
+    for p in optical_params:
+        if p.grad is not None:
+            opt_norm += float(p.grad.detach().norm().cpu().item() ** 2)
+    result["optical_gradient_norm"] = float(opt_norm ** 0.5)
+
+    recon_norm = 0.0
+    if recon_params:
+        for p in recon_params:
+            if p.grad is not None:
+                recon_norm += float(p.grad.detach().norm().cpu().item() ** 2)
+    result["recon_gradient_norm"] = float(recon_norm ** 0.5)
+
+    result["autograd_graph_exists"] = result["optical_gradient_norm"] > 0
+    if not result["autograd_graph_exists"]:
+        result["failed_reason"] = "optical gradient norm is zero"
+
+    return result
