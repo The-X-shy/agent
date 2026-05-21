@@ -30,6 +30,11 @@ class _DifferentiableFakeBridge:
         return float(self.param.grad.detach().norm().cpu().item())
 
 
+class _BatchedPsfFakeBridge(_DifferentiableFakeBridge):
+    def psf_from_component_torch(self, wvln: float = 0.55, ks: int = 8):
+        return self.param.expand(1, ks, ks)
+
+
 def test_waveoptics_probe_does_not_shadow_torch(monkeypatch):
     from optiresearch.runtime import deeplens_waveoptics_probe as module
 
@@ -54,6 +59,28 @@ def test_waveoptics_probe_does_not_shadow_torch(monkeypatch):
     assert result.optical_gradient_norm and result.optical_gradient_norm > 0
     assert result.optical_parameters_changed is True
     assert result.deeplens_native_wave_path == "geolens.psf_geometric"
+    assert result.evidence_level == "native_lens_simulation"
+
+
+def test_waveoptics_probe_handles_batched_psf_shape(monkeypatch):
+    from optiresearch.runtime import deeplens_waveoptics_probe as module
+
+    monkeypatch.setattr(module, "GeoLensWaveOpticsBridge", _BatchedPsfFakeBridge)
+
+    spec = DeepLensWaveOpticsProbeSpec(
+        run_id="waveoptics_probe_batched_psf",
+        candidate="GeoLensCooke",
+        objective="minimize_psf_width",
+        psf_size=8,
+        max_steps=1,
+        learning_rate=0.1,
+        save_artifacts=False,
+    )
+    result = module.run_deeplens_waveoptics_probe(spec)
+
+    assert result.error_message is None or "out of bounds" not in result.error_message
+    assert result.status == "succeeded"
+    assert result.differentiable is True
     assert result.evidence_level == "native_lens_simulation"
 
 

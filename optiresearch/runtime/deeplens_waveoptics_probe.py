@@ -58,7 +58,7 @@ def run_deeplens_waveoptics_probe(
 
         target = torch.zeros_like(psf)
         center = spec.psf_size // 2
-        target[center, center] = 1.0
+        target[..., center, center] = 1.0
         loss = torch.nn.functional.mse_loss(psf, target)
         loss_before = float(loss.detach().cpu().item())
 
