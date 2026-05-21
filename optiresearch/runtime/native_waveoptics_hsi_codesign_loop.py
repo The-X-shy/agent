@@ -79,7 +79,7 @@ def run_native_waveoptics_hsi_codesign(
             batch=1, bands=spec.bands, height=spec.image_size, width=spec.image_size, device=spec.device,
         )
 
-        psf = bridge.psf_cube_torch(num_bands=spec.bands, ks=spec.psf_size)
+        psf = _normalize_psf_cube_for_hsi(bridge.psf_cube_torch(num_bands=spec.bands, ks=spec.psf_size))
         measurement = make_measurement_from_psf_torch(hsi_target, psf)
         recon = reconstructor(measurement, psf)
         losses = hsi_reconstruction_losses(recon, hsi_target, measurement, psf, spec.loss_weights)
@@ -96,7 +96,7 @@ def run_native_waveoptics_hsi_codesign(
             opt_optimizer.zero_grad()
             recon_optimizer.zero_grad()
 
-            psf = bridge.psf_cube_torch(num_bands=spec.bands, ks=spec.psf_size)
+            psf = _normalize_psf_cube_for_hsi(bridge.psf_cube_torch(num_bands=spec.bands, ks=spec.psf_size))
             measurement = make_measurement_from_psf_torch(hsi_target, psf)
             recon = reconstructor(measurement, psf)
             losses = hsi_reconstruction_losses(recon, hsi_target, measurement, psf, spec.loss_weights)
@@ -111,7 +111,7 @@ def run_native_waveoptics_hsi_codesign(
             recon_optimizer.step()
             metadata["optimizer_step_executed"] = True
 
-        psf_after = bridge.psf_cube_torch(num_bands=spec.bands, ks=spec.psf_size)
+        psf_after = _normalize_psf_cube_for_hsi(bridge.psf_cube_torch(num_bands=spec.bands, ks=spec.psf_size))
         measurement_after = make_measurement_from_psf_torch(hsi_target, psf_after)
         recon_after = reconstructor(measurement_after, psf_after)
         losses_after = hsi_reconstruction_losses(recon_after, hsi_target, measurement_after, psf_after, spec.loss_weights)
@@ -166,6 +166,14 @@ def _params_changed(before, after):
         elif av is not None and abs(float(av) - float(bv)) > 1e-12:
             return True
     return False
+
+
+def _normalize_psf_cube_for_hsi(psf: torch.Tensor) -> torch.Tensor:
+    if psf.ndim == 4 and psf.shape[1] == 1:
+        return psf[:, 0]
+    if psf.ndim != 3:
+        raise ValueError(f"Expected PSF cube [bands, k, k] or [bands, 1, k, k], got shape {tuple(psf.shape)}")
+    return psf
 
 
 def _unsupported(spec, code, msg, meta, cav):
