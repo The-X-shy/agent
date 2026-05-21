@@ -20,6 +20,8 @@ RemoteJobType = Literal[
     "deeplens_lensfile_optimization_probe",
     "native_hsi_codesign",
     "native_hsi_reconstruction_codesign",
+    "deeplens_waveoptics_probe",
+    "native_waveoptics_hsi_codesign",
     "autonomous_loop",
 ]
 

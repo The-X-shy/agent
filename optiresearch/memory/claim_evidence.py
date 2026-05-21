@@ -473,6 +473,23 @@ class ClaimEvidenceManager:
                 else:
                     claim.status = "needs_followup"
                     claim.warnings.append("native_hsi_proxy_requires_component_chain_and_hsi_loss_backward")
+            elif "lens simulation" in lower:
+                has_lens_sim_chain = all([
+                    has_hsi_proxy_chain,
+                    scope.get("phase_to_fft_proxy_used") is False,
+                    scope.get("full_wave_optics", True) is False,
+                    scope.get("deeplens_native_psf_path") is not None,
+                ])
+                if has_lens_sim_chain and claim.support_edges:
+                    claim.status = "supported"
+                    claim.support_score = max(claim.support_score, 0.80)
+                    claim.metadata["evidence_level"] = "native_lens_simulation"
+                else:
+                    claim.status = "needs_followup"
+                    claim.warnings.append("native_lens_simulation_requires_deeplens_geometric_psf")
+            elif "full wave-optics" in lower:
+                claim.status = "needs_followup"
+                claim.warnings.append("full_waveoptics_requires_differentiable_coherent_asm_path")
             elif "full" in lower or ("reconstruction" in lower and "real" not in lower and "proxy" not in lower):
                 has_full_recon_chain = all([
                     has_hsi_proxy_chain,

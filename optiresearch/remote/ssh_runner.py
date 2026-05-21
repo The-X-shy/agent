@@ -255,6 +255,8 @@ def build_job_command(worker: RemoteWorkerSpec, job: RemoteJobSpec) -> list[str]
         "deeplens_lensfile_optimization_probe": "run-deeplens-lensfile-optimization-probe",
         "native_hsi_codesign": "run-native-hsi-codesign",
         "native_hsi_reconstruction_codesign": "run-native-hsi-reconstruction-codesign",
+        "deeplens_waveoptics_probe": "run-deeplens-waveoptics-probe",
+        "native_waveoptics_hsi_codesign": "run-native-waveoptics-hsi-codesign",
     }[job.job_type]
     command = [worker.python_executable, "-m", "optiresearch.cli", cli_command]
     args = dict(job.cli_args)

@@ -65,6 +65,8 @@ from optiresearch.runtime.remote_jobs import (
     run_remote_native_hsi_codesign,
     run_remote_native_hsi_reconstruction_codesign,
     run_remote_native_optimization_probe,
+    run_remote_deeplens_waveoptics_probe,
+    run_remote_native_waveoptics_hsi_codesign,
 )
 from optiresearch.reports.remote_execution import export_remote_execution_report
 
@@ -276,6 +278,26 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("export-phase19b-report", help="Export Phase 19B native optimization path report.")
     sub.add_parser("export-phase20-report", help="Export Phase 20 native HSI co-design report.")
     sub.add_parser("export-phase21-report", help="Export Phase 21 native HSI reconstruction co-design report.")
+    sub.add_parser("export-phase22-report", help="Export Phase 22 full wave-optics native HSI co-design report.")
+    sub.add_parser("scan-deeplens-waveoptics-paths", help="Scan DeepLens source for wave-optics differentiable paths.")
+    waveoptics = sub.add_parser("run-deeplens-waveoptics-probe", help="Probe DeepLens native wave-optics PSF path.")
+    waveoptics.add_argument("--candidate", required=True, choices=["GeoLensCooke", "DiffractiveLens", "HybridLens", "FresnelWave", "Binary2PhaseWave", "CustomLensFile"])
+    waveoptics.add_argument("--objective", required=True, choices=["minimize_psf_width", "match_target_psf", "minimize_hsi_reconstruction_loss"])
+    waveoptics.add_argument("--psf-size", type=int, default=32)
+    waveoptics.add_argument("--max-steps", type=int, default=3)
+    waveoptics.add_argument("--learning-rate", type=float, default=1e-3)
+    waveoptics.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
+    waveoptics.add_argument("--remote-job-id")
+    wave_hsi = sub.add_parser("run-native-waveoptics-hsi-codesign", help="Run full native wave-optics HSI reconstruction co-design.")
+    wave_hsi.add_argument("--candidate", required=True, choices=["GeoLensCooke", "DiffractiveLens", "HybridLens"])
+    wave_hsi.add_argument("--reconstructor", required=True, choices=["differentiable_linear", "tiny_cnn"])
+    wave_hsi.add_argument("--max-steps", type=int, default=3)
+    wave_hsi.add_argument("--optical-lr", type=float, default=1e-3)
+    wave_hsi.add_argument("--recon-lr", type=float, default=1e-3)
+    wave_hsi.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
+    wave_hsi.add_argument("--bands", type=int, default=31)
+    wave_hsi.add_argument("--image-size", type=int, default=32)
+    wave_hsi.add_argument("--psf-size", type=int, default=32)
     recon_codesign = sub.add_parser("run-native-hsi-reconstruction-codesign", help="Run full native HSI reconstruction co-design loop.")
     recon_codesign.add_argument("--optical-component", required=True, choices=["Fresnel", "Binary2Phase", "GeoLensCooke"])
     recon_codesign.add_argument("--reconstructor", required=True, choices=["differentiable_linear", "tiny_cnn"])
@@ -373,6 +395,25 @@ def main(argv: list[str] | None = None) -> None:
     remote_recon.add_argument("--bands", type=int, default=31)
     remote_recon.add_argument("--image-size", type=int, default=32)
     remote_recon.add_argument("--psf-size", type=int, default=16)
+    remote_waveoptics = sub.add_parser("run-remote-deeplens-waveoptics-probe", help="Run DeepLens wave-optics probe on remote worker.")
+    remote_waveoptics.add_argument("--worker-id", required=True)
+    remote_waveoptics.add_argument("--candidate", required=True, choices=["GeoLensCooke", "DiffractiveLens", "HybridLens", "FresnelWave", "Binary2PhaseWave", "CustomLensFile"])
+    remote_waveoptics.add_argument("--objective", required=True, choices=["minimize_psf_width", "match_target_psf", "minimize_hsi_reconstruction_loss"])
+    remote_waveoptics.add_argument("--psf-size", type=int, default=32)
+    remote_waveoptics.add_argument("--max-steps", type=int, default=3)
+    remote_waveoptics.add_argument("--learning-rate", type=float, default=1e-3)
+    remote_waveoptics.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
+    remote_wave_hsi = sub.add_parser("run-remote-native-waveoptics-hsi-codesign", help="Run native wave-optics HSI co-design on remote worker.")
+    remote_wave_hsi.add_argument("--worker-id", required=True)
+    remote_wave_hsi.add_argument("--candidate", required=True, choices=["GeoLensCooke", "DiffractiveLens", "HybridLens"])
+    remote_wave_hsi.add_argument("--reconstructor", required=True, choices=["differentiable_linear", "tiny_cnn"])
+    remote_wave_hsi.add_argument("--max-steps", type=int, default=3)
+    remote_wave_hsi.add_argument("--optical-lr", type=float, default=1e-3)
+    remote_wave_hsi.add_argument("--recon-lr", type=float, default=1e-3)
+    remote_wave_hsi.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
+    remote_wave_hsi.add_argument("--bands", type=int, default=31)
+    remote_wave_hsi.add_argument("--image-size", type=int, default=32)
+    remote_wave_hsi.add_argument("--psf-size", type=int, default=32)
     remote_report = sub.add_parser("export-remote-execution-report", help="Export a remote execution report.")
     remote_report.add_argument("--job-id", required=True)
 
@@ -602,6 +643,18 @@ def main(argv: list[str] | None = None) -> None:
         from optiresearch.reports.phase21 import export_phase21_report
         path = export_phase21_report()
         print(f"markdown: {path}")
+    elif args.command == "export-phase22-report":
+        from optiresearch.reports.phase22 import export_phase22_report
+        path = export_phase22_report()
+        print(f"markdown: {path}")
+    elif args.command == "scan-deeplens-waveoptics-paths":
+        from optiresearch.adapters.deeplens_waveoptics_inspector import scan_deeplens_waveoptics_paths
+        summary = scan_deeplens_waveoptics_paths()
+        print(f"Scanned {summary['scanned_files']} candidates. Report: workspace/reports/")
+    elif args.command == "run-deeplens-waveoptics-probe":
+        _run_deeplens_waveoptics_probe(args)
+    elif args.command == "run-native-waveoptics-hsi-codesign":
+        _run_native_waveoptics_hsi_codesign(args)
     elif args.command == "run-deeplens-source-smoke":
         _run_deeplens_source_smoke(args.remote_job_id)
     elif args.command == "list-remote-workers":
@@ -689,6 +742,21 @@ def main(argv: list[str] | None = None) -> None:
             device=args.device,
             bands=args.bands,
             image_size=args.image_size,
+            psf_size=args.psf_size,
+        )
+        _print_remote_payload(payload)
+    elif args.command == "run-remote-deeplens-waveoptics-probe":
+        payload = run_remote_deeplens_waveoptics_probe(
+            args.worker_id, args.candidate, args.objective,
+            psf_size=args.psf_size, max_steps=args.max_steps,
+            learning_rate=args.learning_rate, device=args.device,
+        )
+        _print_remote_payload(payload)
+    elif args.command == "run-remote-native-waveoptics-hsi-codesign":
+        payload = run_remote_native_waveoptics_hsi_codesign(
+            args.worker_id, args.candidate, args.reconstructor,
+            max_steps=args.max_steps, optical_lr=args.optical_lr, recon_lr=args.recon_lr,
+            device=args.device, bands=args.bands, image_size=args.image_size,
             psf_size=args.psf_size,
         )
         _print_remote_payload(payload)
@@ -1514,6 +1582,44 @@ def _run_native_hsi_reconstruction_ablation(args: Any) -> None:
     print(json.dumps(json_summary, indent=2, ensure_ascii=False, default=str))
     for mode, r in summary["modes"].items():
         print(f"\n{mode}: loss {r['loss_before']:.6f} -> {r['loss_after']:.6f}")
+
+
+def _run_deeplens_waveoptics_probe(args: Any) -> None:
+    from optiresearch.runtime.deeplens_waveoptics_probe import run_deeplens_waveoptics_probe
+    from optiresearch.schemas.deeplens_waveoptics_probe import (
+        DeepLensWaveOpticsProbeSpec, make_waveoptics_probe_id,
+    )
+    spec = DeepLensWaveOpticsProbeSpec(
+        run_id=make_waveoptics_probe_id(args.candidate, args.objective),
+        candidate=args.candidate, objective=args.objective,
+        psf_size=args.psf_size, max_steps=args.max_steps,
+        learning_rate=args.learning_rate, device=args.device,
+    )
+    result = run_deeplens_waveoptics_probe(spec)
+    print(_compact_json(result.model_dump(mode="json")))
+    if getattr(args, "remote_job_id", None):
+        from optiresearch.runtime.remote_jobs import export_remote_job_outputs
+        from pathlib import Path
+        out_dir = Path("workspace/waveoptics_probe") / spec.run_id
+        export_remote_job_outputs(args.remote_job_id, "deeplens_waveoptics_probe",
+                                  result.model_dump(mode="json"),
+                                  [out_dir] if out_dir.exists() else [], {})
+
+
+def _run_native_waveoptics_hsi_codesign(args: Any) -> None:
+    from optiresearch.runtime.native_waveoptics_hsi_codesign_loop import run_native_waveoptics_hsi_codesign
+    from optiresearch.schemas.native_hsi_reconstruction_codesign import (
+        NativeHSIReconstructionCoDesignSpec, make_recon_codesign_id,
+    )
+    spec = NativeHSIReconstructionCoDesignSpec(
+        run_id=make_recon_codesign_id(args.candidate, args.reconstructor),
+        optical_component=args.candidate, reconstructor=args.reconstructor,
+        bands=args.bands, image_size=args.image_size, psf_size=args.psf_size,
+        max_steps=args.max_steps, optical_lr=args.optical_lr, recon_lr=args.recon_lr,
+        device=args.device,
+    )
+    result = run_native_waveoptics_hsi_codesign(spec)
+    print(_compact_json(result.model_dump(mode="json")))
 
 
 def _run_codesign_loop(args: Any) -> None:

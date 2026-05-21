@@ -241,6 +241,43 @@ def run_remote_native_hsi_reconstruction_codesign(
     return execute_remote_job(worker_id, job, runner=runner, ingest=ingest)
 
 
+def run_remote_deeplens_waveoptics_probe(
+    worker_id: str, candidate: str, objective: str,
+    psf_size: int = 32, max_steps: int = 3, learning_rate: float = 1e-3,
+    device: str = "cpu",
+    runner: Any | None = None, ingest: bool = True,
+) -> dict[str, Any]:
+    job = _job(
+        "deeplens_waveoptics_probe",
+        objective=f"DeepLens wave-optics probe: {candidate} / {objective}",
+        cli_args={"candidate": candidate, "objective": objective,
+                  "psf_size": psf_size, "max_steps": max_steps,
+                  "learning_rate": learning_rate, "device": device},
+        timeout_seconds=3600,
+        expected_outputs=["result.json", "report.md"],
+    )
+    return execute_remote_job(worker_id, job, runner=runner, ingest=ingest)
+
+
+def run_remote_native_waveoptics_hsi_codesign(
+    worker_id: str, candidate: str, reconstructor: str,
+    max_steps: int = 3, optical_lr: float = 1e-3, recon_lr: float = 1e-3,
+    device: str = "cpu", bands: int = 4, image_size: int = 16, psf_size: int = 32,
+    runner: Any | None = None, ingest: bool = True,
+) -> dict[str, Any]:
+    job = _job(
+        "native_waveoptics_hsi_codesign",
+        objective=f"Native wave-optics HSI co-design: {candidate} / {reconstructor}",
+        cli_args={"candidate": candidate, "reconstructor": reconstructor,
+                  "max_steps": max_steps, "optical_lr": optical_lr, "recon_lr": recon_lr,
+                  "device": device, "bands": bands, "image_size": image_size,
+                  "psf_size": psf_size},
+        timeout_seconds=3600,
+        expected_outputs=["result.json", "report.md"],
+    )
+    return execute_remote_job(worker_id, job, runner=runner, ingest=ingest)
+
+
 def run_remote_native_optimization_inspection(
     worker_id: str,
     runner: Any | None = None,
@@ -351,6 +388,10 @@ def _remote_backend_capability_level(job_type: str) -> str:
         return "native_component"
     if job_type == "native_hsi_reconstruction_codesign":
         return "native_component"
+    if job_type == "deeplens_waveoptics_probe":
+        return "native_lens"
+    if job_type == "native_waveoptics_hsi_codesign":
+        return "native_lens"
     return "adapter_proxy"
 
 
@@ -371,6 +412,10 @@ def _remote_claim_scope(job_type: str) -> str:
         return "DeepLens native differentiable optical-HSI proxy co-design"
     if job_type == "native_hsi_reconstruction_codesign":
         return "DeepLens native differentiable optical-HSI reconstruction co-design"
+    if job_type == "deeplens_waveoptics_probe":
+        return "DeepLens native differentiable lens simulation"
+    if job_type == "native_waveoptics_hsi_codesign":
+        return "DeepLens native differentiable lens simulation HSI co-design"
     return "DeepLens-backed black-box execution, not native differentiable optimization"
 
 

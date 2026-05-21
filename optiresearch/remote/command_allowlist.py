@@ -118,6 +118,15 @@ ALLOWED_CLI_COMMANDS: dict[str, set[str]] = {
         "--psf-size",
         "--remote-job-id",
     },
+    "run-deeplens-waveoptics-probe": {
+        "--candidate", "--objective", "--psf-size", "--max-steps",
+        "--learning-rate", "--device", "--remote-job-id",
+    },
+    "run-native-waveoptics-hsi-codesign": {
+        "--candidate", "--reconstructor", "--max-steps",
+        "--optical-lr", "--recon-lr", "--device",
+        "--bands", "--image-size", "--psf-size",
+    },
     "run-native-hsi-reconstruction-codesign": {
         "--optical-component",
         "--reconstructor",
