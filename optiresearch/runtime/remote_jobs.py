@@ -242,9 +242,9 @@ def export_remote_job_outputs(
         "backend": result.get("backend", "deeplens"),
         "objective": result.get("objective"),
         "evidence_domain": "codesign" if job_type == "codesign_loop" else job_type,
-        "backend_capability_level": "source" if job_type == "deeplens_source_smoke" else "adapter_proxy",
-        "selected_realization_level": "adapter_proxy" if job_type == "codesign_loop" else None,
-        "claim_scope": "DeepLens-backed black-box execution, not native differentiable optimization",
+        "backend_capability_level": _remote_backend_capability_level(job_type),
+        "selected_realization_level": _remote_realization_level(job_type),
+        "claim_scope": _remote_claim_scope(job_type),
     }
     metrics.update(metrics_summary or {})
     (output_dir / "metrics_summary.json").write_text(
@@ -268,6 +268,32 @@ def export_remote_job_outputs(
         json.dumps(remote_job_result, indent=2, ensure_ascii=False, default=str), encoding="utf-8"
     )
     return output_dir
+
+
+def _remote_backend_capability_level(job_type: str) -> str:
+    if job_type == "deeplens_source_smoke":
+        return "source"
+    if job_type == "deeplens_surface_optimization_probe":
+        return "native_component"
+    if job_type == "deeplens_lensfile_optimization_probe":
+        return "native_lens"
+    return "adapter_proxy"
+
+
+def _remote_realization_level(job_type: str) -> str | None:
+    if job_type == "codesign_loop":
+        return "adapter_proxy"
+    if job_type in {"deeplens_surface_optimization_probe", "deeplens_lensfile_optimization_probe"}:
+        return "native"
+    return None
+
+
+def _remote_claim_scope(job_type: str) -> str:
+    if job_type == "deeplens_surface_optimization_probe":
+        return "DeepLens native differentiable component optimization"
+    if job_type == "deeplens_lensfile_optimization_probe":
+        return "DeepLens native differentiable lens optimization"
+    return "DeepLens-backed black-box execution, not native differentiable optimization"
 
 
 def _build_artifact_manifest(output_dir: Path, copied_root: Path) -> dict[str, Any]:

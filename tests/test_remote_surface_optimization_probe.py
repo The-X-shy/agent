@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from optiresearch.remote.command_allowlist import validate_remote_command
 from optiresearch.remote.ssh_runner import build_job_command
-from optiresearch.runtime.remote_jobs import run_remote_deeplens_surface_optimization_probe
+from optiresearch.runtime.remote_jobs import export_remote_job_outputs, run_remote_deeplens_surface_optimization_probe
 from optiresearch.schemas.remote import RemoteJobResult, RemoteJobSpec, RemoteWorkerSpec
 from optiresearch.remote.worker_registry import RemoteWorkerRegistry
 
@@ -123,3 +123,26 @@ def test_build_job_command_maps_native_surface_and_lensfile_jobs():
 
     assert build_job_command(worker, surface_job)[3] == "run-deeplens-surface-optimization-probe"
     assert build_job_command(worker, lensfile_job)[3] == "run-deeplens-lensfile-optimization-probe"
+
+
+def test_surface_probe_remote_export_uses_native_component_scope(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "probe_result.json").write_text('{"differentiable": true}', encoding="utf-8")
+
+    out_dir = export_remote_job_outputs(
+        "remote_surface_1",
+        "deeplens_surface_optimization_probe",
+        {"status": "succeeded", "objective": "minimize_phase_variance", "backend": "deeplens"},
+        [source],
+        {
+            "evidence_domain": "deeplens_native_optimization",
+            "native_optimization_level": "component",
+            "differentiable": True,
+        },
+    )
+
+    metrics = (out_dir / "metrics_summary.json").read_text(encoding="utf-8")
+    assert "native_component" in metrics
+    assert "DeepLens native differentiable component optimization" in metrics
