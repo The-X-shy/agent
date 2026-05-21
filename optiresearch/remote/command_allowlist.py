@@ -107,6 +107,17 @@ ALLOWED_CLI_COMMANDS: dict[str, set[str]] = {
         "--device",
         "--remote-job-id",
     },
+    "run-native-hsi-codesign": {
+        "--optical-component",
+        "--objective",
+        "--max-steps",
+        "--learning-rate",
+        "--device",
+        "--bands",
+        "--image-size",
+        "--psf-size",
+        "--remote-job-id",
+    },
 }
 
 FLAG_OPTIONS = {"--strict-deeplens", "--use-optical-feature-maps", "--strict-native", "--allow-adapter-proxy"}

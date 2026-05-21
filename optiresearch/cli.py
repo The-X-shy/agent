@@ -261,7 +261,18 @@ def main(argv: list[str] | None = None) -> None:
     lensfile_probe.add_argument("--learning-rate", type=float, default=1e-3)
     lensfile_probe.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
     lensfile_probe.add_argument("--remote-job-id")
+    hsi_codesign = sub.add_parser("run-native-hsi-codesign", help="Run native optical-HSI co-design loop.")
+    hsi_codesign.add_argument("--optical-component", required=True, choices=["Fresnel", "Binary2Phase", "GeoLensCooke"])
+    hsi_codesign.add_argument("--objective", required=True, choices=["minimize_hsi_proxy_loss", "maximize_reconstruction_score", "minimize_spectral_mse", "minimize_measurement_consistency_loss"])
+    hsi_codesign.add_argument("--max-steps", type=int, default=3)
+    hsi_codesign.add_argument("--learning-rate", type=float, default=1e-3)
+    hsi_codesign.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
+    hsi_codesign.add_argument("--bands", type=int, default=31)
+    hsi_codesign.add_argument("--image-size", type=int, default=32)
+    hsi_codesign.add_argument("--psf-size", type=int, default=16)
+    hsi_codesign.add_argument("--remote-job-id")
     sub.add_parser("export-phase19b-report", help="Export Phase 19B native optimization path report.")
+    sub.add_parser("export-phase20-report", help="Export Phase 20 native HSI co-design report.")
     sub.add_parser("list-remote-workers", help="List registered remote workers.")
     add_worker = sub.add_parser("add-remote-worker", help="Add or update a remote worker.")
     add_worker.add_argument("--worker-id", required=True)
@@ -317,6 +328,16 @@ def main(argv: list[str] | None = None) -> None:
     remote_lensfile.add_argument("--max-steps", type=int, default=2)
     remote_lensfile.add_argument("--learning-rate", type=float, default=1e-3)
     remote_lensfile.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
+    remote_hsi_codesign = sub.add_parser("run-remote-native-hsi-codesign", help="Run native optical-HSI co-design on remote worker.")
+    remote_hsi_codesign.add_argument("--worker-id", required=True)
+    remote_hsi_codesign.add_argument("--optical-component", required=True, choices=["Fresnel", "Binary2Phase", "GeoLensCooke"])
+    remote_hsi_codesign.add_argument("--objective", required=True)
+    remote_hsi_codesign.add_argument("--max-steps", type=int, default=3)
+    remote_hsi_codesign.add_argument("--learning-rate", type=float, default=1e-3)
+    remote_hsi_codesign.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
+    remote_hsi_codesign.add_argument("--bands", type=int, default=31)
+    remote_hsi_codesign.add_argument("--image-size", type=int, default=32)
+    remote_hsi_codesign.add_argument("--psf-size", type=int, default=16)
     remote_report = sub.add_parser("export-remote-execution-report", help="Export a remote execution report.")
     remote_report.add_argument("--job-id", required=True)
 
@@ -528,9 +549,15 @@ def main(argv: list[str] | None = None) -> None:
         _run_deeplens_surface_optimization_probe(args)
     elif args.command == "run-deeplens-lensfile-optimization-probe":
         _run_deeplens_lensfile_optimization_probe(args)
+    elif args.command == "run-native-hsi-codesign":
+        _run_native_hsi_codesign(args)
     elif args.command == "export-phase19b-report":
         from optiresearch.reports.phase19b import export_phase19b_report
         path = export_phase19b_report()
+        print(f"markdown: {path}")
+    elif args.command == "export-phase20-report":
+        from optiresearch.reports.phase20 import export_phase20_report
+        path = export_phase20_report()
         print(f"markdown: {path}")
     elif args.command == "run-deeplens-source-smoke":
         _run_deeplens_source_smoke(args.remote_job_id)
@@ -593,6 +620,19 @@ def main(argv: list[str] | None = None) -> None:
             max_steps=args.max_steps,
             learning_rate=args.learning_rate,
             device=args.device,
+        )
+        _print_remote_payload(payload)
+    elif args.command == "run-remote-native-hsi-codesign":
+        payload = run_remote_native_hsi_codesign(
+            args.worker_id,
+            args.optical_component,
+            args.objective,
+            max_steps=args.max_steps,
+            learning_rate=args.learning_rate,
+            device=args.device,
+            bands=args.bands,
+            image_size=args.image_size,
+            psf_size=args.psf_size,
         )
         _print_remote_payload(payload)
     elif args.command == "export-remote-execution-report":
@@ -1318,6 +1358,48 @@ def _run_deeplens_lensfile_optimization_probe(args: Any) -> None:
         remote_job_id=getattr(args, "remote_job_id", None),
     )
     print(_compact_json(result))
+
+
+def _run_native_hsi_codesign(args: Any) -> None:
+    from optiresearch.runtime.native_hsi_codesign_loop import run_native_optical_hsi_codesign
+    from optiresearch.schemas.native_hsi_codesign import NativeOpticalHSICoDesignSpec, make_hsi_codesign_id
+    from pathlib import Path
+
+    spec = NativeOpticalHSICoDesignSpec(
+        run_id=make_hsi_codesign_id(args.optical_component, args.objective),
+        optical_component=args.optical_component,
+        objective=args.objective,
+        bands=args.bands,
+        image_size=args.image_size,
+        psf_size=args.psf_size,
+        max_steps=args.max_steps,
+        learning_rate=args.learning_rate,
+        device=args.device,
+    )
+    result = run_native_optical_hsi_codesign(spec)
+    print(_compact_json(result.model_dump(mode="json")))
+
+    if getattr(args, "remote_job_id", None):
+        from optiresearch.runtime.remote_jobs import export_remote_job_outputs
+        out_dir = Path("workspace/native_hsi_codesign") / spec.run_id
+        export_remote_job_outputs(
+            args.remote_job_id,
+            "native_hsi_codesign",
+            result.model_dump(mode="json"),
+            [out_dir] if out_dir.exists() else [],
+            {
+                "job_type": "native_hsi_codesign",
+                "evidence_domain": "deeplens_native_optimization",
+                "native_optimization_level": "optical_hsi_codesign",
+                "optical_component": result.optical_component,
+                "differentiable": result.differentiable,
+                "gradient_norm": result.gradient_norm,
+                "parameters_changed": result.parameters_changed,
+                "optimizer_step_executed": result.optimizer_step_executed,
+                "hsi_loss_before": result.hsi_loss_before,
+                "hsi_loss_after": result.hsi_loss_after,
+            },
+        )
 
 
 def _run_codesign_loop(args: Any) -> None:

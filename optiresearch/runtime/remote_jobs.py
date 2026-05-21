@@ -171,6 +171,42 @@ def run_remote_deeplens_lensfile_optimization_probe(
     return execute_remote_job(worker_id, job, runner=runner, ingest=ingest)
 
 
+def run_remote_native_hsi_codesign(
+    worker_id: str,
+    optical_component: str,
+    objective: str,
+    max_steps: int = 3,
+    learning_rate: float = 1e-3,
+    device: str = "cpu",
+    bands: int = 31,
+    image_size: int = 32,
+    psf_size: int = 16,
+    runner: Any | None = None,
+    ingest: bool = True,
+) -> dict[str, Any]:
+    job = _job(
+        "native_hsi_codesign",
+        objective=f"Native optical-HSI co-design: {optical_component} / {objective}",
+        cli_args={
+            "optical_component": optical_component,
+            "objective": objective,
+            "max_steps": max_steps,
+            "learning_rate": learning_rate,
+            "device": device,
+            "bands": bands,
+            "image_size": image_size,
+            "psf_size": psf_size,
+        },
+        timeout_seconds=1800,
+        expected_outputs=[
+            "result.json", "loss_trace.json", "parameter_before.json",
+            "parameter_after.json", "psf_before.npz", "psf_after.npz",
+            "hsi_proxy_metrics.json",
+        ],
+    )
+    return execute_remote_job(worker_id, job, runner=runner, ingest=ingest)
+
+
 def run_remote_native_optimization_inspection(
     worker_id: str,
     runner: Any | None = None,
@@ -277,6 +313,8 @@ def _remote_backend_capability_level(job_type: str) -> str:
         return "native_component"
     if job_type == "deeplens_lensfile_optimization_probe":
         return "native_lens"
+    if job_type == "native_hsi_codesign":
+        return "native_component"
     return "adapter_proxy"
 
 
@@ -293,6 +331,8 @@ def _remote_claim_scope(job_type: str) -> str:
         return "DeepLens native differentiable component optimization"
     if job_type == "deeplens_lensfile_optimization_probe":
         return "DeepLens native differentiable lens optimization"
+    if job_type == "native_hsi_codesign":
+        return "DeepLens native differentiable optical-HSI proxy co-design"
     return "DeepLens-backed black-box execution, not native differentiable optimization"
 
 
