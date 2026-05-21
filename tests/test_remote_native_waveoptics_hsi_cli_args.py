@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from optiresearch.remote.command_allowlist import validate_remote_command
 from optiresearch.remote.ssh_runner import build_job_command
+from optiresearch.remote.worker_registry import RemoteWorkerRegistry
 from optiresearch.runtime.remote_jobs import run_remote_native_waveoptics_hsi_codesign
 from optiresearch.schemas.remote import RemoteJobResult, RemoteJobSpec, RemoteWorkerSpec
 
@@ -42,7 +43,9 @@ def _worker() -> RemoteWorkerSpec:
     )
 
 
-def test_remote_native_waveoptics_hsi_job_keeps_dataset_arg():
+def test_remote_native_waveoptics_hsi_job_keeps_dataset_arg(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPTIRESEARCH_REMOTE_WORKER_ROOT", str(tmp_path / "workers"))
+    RemoteWorkerRegistry().add_worker(_worker())
     runner = _MockRunner()
 
     run_remote_native_waveoptics_hsi_codesign(
