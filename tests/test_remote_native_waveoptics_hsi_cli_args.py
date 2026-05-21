@@ -142,3 +142,38 @@ def test_cli_accepts_dataset_argument(monkeypatch, capsys):
     assert calls["dataset"] == "synthetic"
     assert calls["max_steps"] == 3
     assert "remote_job_1436c05c2c4d6359" in capsys.readouterr().out
+
+
+def test_native_waveoptics_hsi_cli_accepts_internal_remote_job_id(monkeypatch):
+    from optiresearch import cli
+
+    calls = {}
+
+    def fake_run(args):
+        calls["dataset"] = args.dataset
+        calls["remote_job_id"] = args.remote_job_id
+
+    monkeypatch.setattr(cli, "_run_native_waveoptics_hsi_codesign", fake_run)
+
+    cli.main(
+        [
+            "run-native-waveoptics-hsi-codesign",
+            "--candidate",
+            "GeoLensCooke",
+            "--reconstructor",
+            "differentiable_linear",
+            "--dataset",
+            "synthetic",
+            "--max-steps",
+            "3",
+            "--device",
+            "cpu",
+            "--remote-job-id",
+            "remote_job_1436c05c2c4d6359",
+        ]
+    )
+
+    assert calls == {
+        "dataset": "synthetic",
+        "remote_job_id": "remote_job_1436c05c2c4d6359",
+    }

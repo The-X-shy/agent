@@ -299,6 +299,7 @@ def main(argv: list[str] | None = None) -> None:
     wave_hsi.add_argument("--bands", type=int, default=31)
     wave_hsi.add_argument("--image-size", type=int, default=32)
     wave_hsi.add_argument("--psf-size", type=int, default=32)
+    wave_hsi.add_argument("--remote-job-id")
     recon_codesign = sub.add_parser("run-native-hsi-reconstruction-codesign", help="Run full native HSI reconstruction co-design loop.")
     recon_codesign.add_argument("--optical-component", required=True, choices=["Fresnel", "Binary2Phase", "GeoLensCooke"])
     recon_codesign.add_argument("--reconstructor", required=True, choices=["differentiable_linear", "tiny_cnn"])
@@ -1624,6 +1625,33 @@ def _run_native_waveoptics_hsi_codesign(args: Any) -> None:
     )
     result = run_native_waveoptics_hsi_codesign(spec)
     print(_compact_json(result.model_dump(mode="json")))
+    if getattr(args, "remote_job_id", None):
+        from optiresearch.runtime.remote_jobs import export_remote_job_outputs
+        out_dir = Path("workspace/waveoptics_hsi_codesign") / spec.run_id
+        export_remote_job_outputs(
+            args.remote_job_id,
+            "native_waveoptics_hsi_codesign",
+            result.model_dump(mode="json"),
+            [out_dir] if out_dir.exists() else [],
+            {
+                "differentiable": result.differentiable,
+                "full_wave_optics": result.full_wave_optics,
+                "phase_to_fft_proxy_used": result.phase_to_fft_proxy_used,
+                "evidence_level": result.evidence_level,
+                "reconstruction_loss_before": result.reconstruction_loss_before,
+                "reconstruction_loss_after": result.reconstruction_loss_after,
+                "mse_before": result.mse_before,
+                "mse_after": result.mse_after,
+                "psnr_before": result.psnr_before,
+                "psnr_after": result.psnr_after,
+                "sam_before": result.sam_before,
+                "sam_after": result.sam_after,
+                "optical_gradient_norm": result.optical_gradient_norm,
+                "recon_gradient_norm": result.recon_gradient_norm,
+                "optical_parameters_changed": result.optical_parameters_changed,
+                "optimizer_step_executed": result.optimizer_step_executed,
+            },
+        )
 
 
 def _run_codesign_loop(args: Any) -> None:
