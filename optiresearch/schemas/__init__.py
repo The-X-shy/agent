@@ -12,6 +12,11 @@ from optiresearch.schemas.native_hsi_codesign import (
     NativeOpticalHSICoDesignSpec,
     make_hsi_codesign_id,
 )
+from optiresearch.schemas.native_hsi_reconstruction_codesign import (
+    NativeHSIReconstructionCoDesignResult,
+    NativeHSIReconstructionCoDesignSpec,
+    make_recon_codesign_id,
+)
 from optiresearch.schemas.native_optimization import (
     NativeOptimizationProbeResult,
     NativeOptimizationProbeSpec,
@@ -22,6 +27,8 @@ from optiresearch.schemas.native_optimization import (
 __all__ = [
     "ExperimentSpec",
     "MetricSpec",
+    "NativeHSIReconstructionCoDesignResult",
+    "NativeHSIReconstructionCoDesignSpec",
     "NativeOpticalHSICoDesignResult",
     "NativeOpticalHSICoDesignSpec",
     "NativeOptimizationProbeResult",
@@ -32,4 +39,5 @@ __all__ = [
     "build_default_paraxial_psf_width_probe",
     "make_hsi_codesign_id",
     "make_probe_id",
+    "make_recon_codesign_id",
 ]
