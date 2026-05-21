@@ -207,6 +207,40 @@ def run_remote_native_hsi_codesign(
     return execute_remote_job(worker_id, job, runner=runner, ingest=ingest)
 
 
+def run_remote_native_hsi_reconstruction_codesign(
+    worker_id: str,
+    optical_component: str,
+    reconstructor: str,
+    max_steps: int = 5,
+    optical_lr: float = 1e-3,
+    recon_lr: float = 1e-3,
+    device: str = "cpu",
+    bands: int = 31,
+    image_size: int = 32,
+    psf_size: int = 16,
+    runner: Any | None = None,
+    ingest: bool = True,
+) -> dict[str, Any]:
+    job = _job(
+        "native_hsi_reconstruction_codesign",
+        objective=f"Native HSI reconstruction co-design: {optical_component} / {reconstructor}",
+        cli_args={
+            "optical_component": optical_component,
+            "reconstructor": reconstructor,
+            "max_steps": max_steps,
+            "optical_lr": optical_lr,
+            "recon_lr": recon_lr,
+            "device": device,
+            "bands": bands,
+            "image_size": image_size,
+            "psf_size": psf_size,
+        },
+        timeout_seconds=1800,
+        expected_outputs=["result.json", "loss_trace.json", "metrics.json"],
+    )
+    return execute_remote_job(worker_id, job, runner=runner, ingest=ingest)
+
+
 def run_remote_native_optimization_inspection(
     worker_id: str,
     runner: Any | None = None,
@@ -315,6 +349,8 @@ def _remote_backend_capability_level(job_type: str) -> str:
         return "native_lens"
     if job_type == "native_hsi_codesign":
         return "native_component"
+    if job_type == "native_hsi_reconstruction_codesign":
+        return "native_component"
     return "adapter_proxy"
 
 
@@ -333,6 +369,8 @@ def _remote_claim_scope(job_type: str) -> str:
         return "DeepLens native differentiable lens optimization"
     if job_type == "native_hsi_codesign":
         return "DeepLens native differentiable optical-HSI proxy co-design"
+    if job_type == "native_hsi_reconstruction_codesign":
+        return "DeepLens native differentiable optical-HSI reconstruction co-design"
     return "DeepLens-backed black-box execution, not native differentiable optimization"
 
 

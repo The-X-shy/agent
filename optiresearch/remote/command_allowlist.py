@@ -118,6 +118,19 @@ ALLOWED_CLI_COMMANDS: dict[str, set[str]] = {
         "--psf-size",
         "--remote-job-id",
     },
+    "run-native-hsi-reconstruction-codesign": {
+        "--optical-component",
+        "--reconstructor",
+        "--dataset",
+        "--max-steps",
+        "--optical-lr",
+        "--recon-lr",
+        "--device",
+        "--bands",
+        "--image-size",
+        "--psf-size",
+        "--remote-job-id",
+    },
 }
 
 FLAG_OPTIONS = {"--strict-deeplens", "--use-optical-feature-maps", "--strict-native", "--allow-adapter-proxy"}

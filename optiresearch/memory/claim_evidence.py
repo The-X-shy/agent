@@ -473,10 +473,20 @@ class ClaimEvidenceManager:
                 else:
                     claim.status = "needs_followup"
                     claim.warnings.append("native_hsi_proxy_requires_component_chain_and_hsi_loss_backward")
-            elif "full" in lower or ("reconstruction" in lower and "real" not in lower):
-                if level != "optical_hsi_codesign" or not has_hsi_chain:
+            elif "full" in lower or ("reconstruction" in lower and "real" not in lower and "proxy" not in lower):
+                has_full_recon_chain = all([
+                    has_hsi_proxy_chain,
+                    scope.get("full_reconstruction_loss_used") is True,
+                    scope.get("recon_gradient_norm", 0) > 0,
+                    scope.get("phase_to_fft_proxy_used") is True,
+                ])
+                if has_full_recon_chain and claim.support_edges:
+                    claim.status = "supported"
+                    claim.support_score = max(claim.support_score, 0.85)
+                    claim.metadata["evidence_level"] = "native_full_reconstruction_proxy"
+                else:
                     claim.status = "needs_followup"
-                    claim.warnings.append("full_native_hsi_reconstruction_requires_complete_hsi_chain")
+                    claim.warnings.append("full_native_hsi_reconstruction_requires_reconstructor_gradient")
             elif "real hsi" in lower or "real camera" in lower:
                 claim.status = "unsupported"
                 claim.warnings.append("real_hsi_requires_real_camera_validation")

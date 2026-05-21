@@ -62,6 +62,8 @@ from optiresearch.runtime.remote_jobs import (
     run_remote_deeplens_source_smoke,
     run_remote_deeplens_surface_optimization_probe,
     run_remote_hsi_reconstruction,
+    run_remote_native_hsi_codesign,
+    run_remote_native_hsi_reconstruction_codesign,
     run_remote_native_optimization_probe,
 )
 from optiresearch.reports.remote_execution import export_remote_execution_report
@@ -273,7 +275,29 @@ def main(argv: list[str] | None = None) -> None:
     hsi_codesign.add_argument("--remote-job-id")
     sub.add_parser("export-phase19b-report", help="Export Phase 19B native optimization path report.")
     sub.add_parser("export-phase20-report", help="Export Phase 20 native HSI co-design report.")
-    sub.add_parser("list-remote-workers", help="List registered remote workers.")
+    sub.add_parser("export-phase21-report", help="Export Phase 21 native HSI reconstruction co-design report.")
+    recon_codesign = sub.add_parser("run-native-hsi-reconstruction-codesign", help="Run full native HSI reconstruction co-design loop.")
+    recon_codesign.add_argument("--optical-component", required=True, choices=["Fresnel", "Binary2Phase", "GeoLensCooke"])
+    recon_codesign.add_argument("--reconstructor", required=True, choices=["differentiable_linear", "tiny_cnn"])
+    recon_codesign.add_argument("--dataset", default="synthetic")
+    recon_codesign.add_argument("--max-steps", type=int, default=5)
+    recon_codesign.add_argument("--optical-lr", type=float, default=1e-3)
+    recon_codesign.add_argument("--recon-lr", type=float, default=1e-3)
+    recon_codesign.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
+    recon_codesign.add_argument("--bands", type=int, default=31)
+    recon_codesign.add_argument("--image-size", type=int, default=32)
+    recon_codesign.add_argument("--psf-size", type=int, default=16)
+    recon_codesign.add_argument("--remote-job-id")
+    ablation = sub.add_parser("run-native-hsi-reconstruction-ablation", help="Run ablation study for native HSI reconstruction co-design.")
+    ablation.add_argument("--optical-component", required=True, choices=["Fresnel", "Binary2Phase"])
+    ablation.add_argument("--reconstructor", required=True, choices=["differentiable_linear", "tiny_cnn"])
+    ablation.add_argument("--max-steps", type=int, default=5)
+    ablation.add_argument("--optical-lr", type=float, default=1e-3)
+    ablation.add_argument("--recon-lr", type=float, default=1e-3)
+    ablation.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
+    ablation.add_argument("--bands", type=int, default=31)
+    ablation.add_argument("--image-size", type=int, default=32)
+    ablation.add_argument("--psf-size", type=int, default=16)
     add_worker = sub.add_parser("add-remote-worker", help="Add or update a remote worker.")
     add_worker.add_argument("--worker-id", required=True)
     add_worker.add_argument("--host", required=True)
@@ -338,6 +362,17 @@ def main(argv: list[str] | None = None) -> None:
     remote_hsi_codesign.add_argument("--bands", type=int, default=31)
     remote_hsi_codesign.add_argument("--image-size", type=int, default=32)
     remote_hsi_codesign.add_argument("--psf-size", type=int, default=16)
+    remote_recon = sub.add_parser("run-remote-native-hsi-reconstruction-codesign", help="Run full native HSI reconstruction co-design on remote worker.")
+    remote_recon.add_argument("--worker-id", required=True)
+    remote_recon.add_argument("--optical-component", required=True, choices=["Fresnel", "Binary2Phase", "GeoLensCooke"])
+    remote_recon.add_argument("--reconstructor", required=True, choices=["differentiable_linear", "tiny_cnn"])
+    remote_recon.add_argument("--max-steps", type=int, default=5)
+    remote_recon.add_argument("--optical-lr", type=float, default=1e-3)
+    remote_recon.add_argument("--recon-lr", type=float, default=1e-3)
+    remote_recon.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
+    remote_recon.add_argument("--bands", type=int, default=31)
+    remote_recon.add_argument("--image-size", type=int, default=32)
+    remote_recon.add_argument("--psf-size", type=int, default=16)
     remote_report = sub.add_parser("export-remote-execution-report", help="Export a remote execution report.")
     remote_report.add_argument("--job-id", required=True)
 
@@ -551,6 +586,10 @@ def main(argv: list[str] | None = None) -> None:
         _run_deeplens_lensfile_optimization_probe(args)
     elif args.command == "run-native-hsi-codesign":
         _run_native_hsi_codesign(args)
+    elif args.command == "run-native-hsi-reconstruction-codesign":
+        _run_native_hsi_reconstruction_codesign(args)
+    elif args.command == "run-native-hsi-reconstruction-ablation":
+        _run_native_hsi_reconstruction_ablation(args)
     elif args.command == "export-phase19b-report":
         from optiresearch.reports.phase19b import export_phase19b_report
         path = export_phase19b_report()
@@ -558,6 +597,10 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "export-phase20-report":
         from optiresearch.reports.phase20 import export_phase20_report
         path = export_phase20_report()
+        print(f"markdown: {path}")
+    elif args.command == "export-phase21-report":
+        from optiresearch.reports.phase21 import export_phase21_report
+        path = export_phase21_report()
         print(f"markdown: {path}")
     elif args.command == "run-deeplens-source-smoke":
         _run_deeplens_source_smoke(args.remote_job_id)
@@ -629,6 +672,20 @@ def main(argv: list[str] | None = None) -> None:
             args.objective,
             max_steps=args.max_steps,
             learning_rate=args.learning_rate,
+            device=args.device,
+            bands=args.bands,
+            image_size=args.image_size,
+            psf_size=args.psf_size,
+        )
+        _print_remote_payload(payload)
+    elif args.command == "run-remote-native-hsi-reconstruction-codesign":
+        payload = run_remote_native_hsi_reconstruction_codesign(
+            args.worker_id,
+            args.optical_component,
+            args.reconstructor,
+            max_steps=args.max_steps,
+            optical_lr=args.optical_lr,
+            recon_lr=args.recon_lr,
             device=args.device,
             bands=args.bands,
             image_size=args.image_size,
@@ -1400,6 +1457,63 @@ def _run_native_hsi_codesign(args: Any) -> None:
                 "hsi_loss_after": result.hsi_loss_after,
             },
         )
+
+
+def _run_native_hsi_reconstruction_codesign(args: Any) -> None:
+    from optiresearch.runtime.native_hsi_reconstruction_codesign_loop import run_native_hsi_reconstruction_codesign
+    from optiresearch.schemas.native_hsi_reconstruction_codesign import (
+        NativeHSIReconstructionCoDesignSpec,
+        make_recon_codesign_id,
+    )
+    from pathlib import Path
+
+    spec = NativeHSIReconstructionCoDesignSpec(
+        run_id=make_recon_codesign_id(args.optical_component, args.reconstructor),
+        optical_component=args.optical_component,
+        reconstructor=args.reconstructor,
+        bands=args.bands, image_size=args.image_size, psf_size=args.psf_size,
+        max_steps=args.max_steps, optical_lr=args.optical_lr, recon_lr=args.recon_lr,
+        device=args.device,
+    )
+    result = run_native_hsi_reconstruction_codesign(spec)
+    print(_compact_json(result.model_dump(mode="json")))
+
+    if getattr(args, "remote_job_id", None):
+        from optiresearch.runtime.remote_jobs import export_remote_job_outputs
+        out_dir = Path("workspace/native_hsi_reconstruction_codesign") / spec.run_id
+        export_remote_job_outputs(
+            args.remote_job_id, "native_hsi_reconstruction_codesign",
+            result.model_dump(mode="json"),
+            [out_dir] if out_dir.exists() else [],
+            {
+                "job_type": "native_hsi_reconstruction_codesign",
+                "evidence_domain": "deeplens_native_optimization",
+                "optical_component": result.optical_component,
+                "differentiable": result.differentiable,
+                "optical_gradient_norm": result.optical_gradient_norm,
+                "optical_parameters_changed": result.optical_parameters_changed,
+                "optimizer_step_executed": result.optimizer_step_executed,
+                "reconstruction_loss_before": result.reconstruction_loss_before,
+                "reconstruction_loss_after": result.reconstruction_loss_after,
+            },
+        )
+
+
+def _run_native_hsi_reconstruction_ablation(args: Any) -> None:
+    from optiresearch.runtime.native_hsi_reconstruction_ablation import run_native_hsi_reconstruction_ablation
+    import json
+
+    summary = run_native_hsi_reconstruction_ablation(
+        optical_component=args.optical_component,
+        reconstructor_name=args.reconstructor,
+        bands=args.bands, image_size=args.image_size, psf_size=args.psf_size,
+        max_steps=args.max_steps, optical_lr=args.optical_lr, recon_lr=args.recon_lr,
+        device=args.device,
+    )
+    json_summary = {k: v for k, v in summary.items() if k != "modes"}
+    print(json.dumps(json_summary, indent=2, ensure_ascii=False, default=str))
+    for mode, r in summary["modes"].items():
+        print(f"\n{mode}: loss {r['loss_before']:.6f} -> {r['loss_after']:.6f}")
 
 
 def _run_codesign_loop(args: Any) -> None:
