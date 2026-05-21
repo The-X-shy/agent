@@ -7,6 +7,11 @@ from optiresearch.schemas.experiment import (
     SweepSpec,
     build_default_mock_edof_hsi_experiment,
 )
+from optiresearch.schemas.deeplens_waveoptics_probe import (
+    DeepLensWaveOpticsProbeResult,
+    DeepLensWaveOpticsProbeSpec,
+    make_waveoptics_probe_id,
+)
 from optiresearch.schemas.native_hsi_codesign import (
     NativeOpticalHSICoDesignResult,
     NativeOpticalHSICoDesignSpec,
