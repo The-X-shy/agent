@@ -91,6 +91,7 @@ class DeepLensWaveOpticsProbeResult(StrictModel):
     numpy_break_detected: bool = False
     optimizer_step_executed: bool = False
     deeplens_native_wave_path: Optional[str] = None
+    deeplens_native_psf_path: Optional[str] = None
     evidence_level: Optional[str] = None
     artifact_paths: list[str] = Field(default_factory=list)
     error_code: Optional[str] = None

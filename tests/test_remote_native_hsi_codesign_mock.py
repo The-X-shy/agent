@@ -14,7 +14,7 @@ def test_allowlist_accepts_native_hsi_codesign():
         "--bands", "31",
         "--image-size", "32",
         "--psf-size", "16",
-        "--remote-job-id", "test-job-123",
+        "--remote-job-id", "remote_job_1436c05c2c4d6359",
     ]
     result = validate_remote_command(cmd)
     assert result["allowed"] is True

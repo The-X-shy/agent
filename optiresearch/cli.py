@@ -291,6 +291,7 @@ def main(argv: list[str] | None = None) -> None:
     wave_hsi = sub.add_parser("run-native-waveoptics-hsi-codesign", help="Run full native wave-optics HSI reconstruction co-design.")
     wave_hsi.add_argument("--candidate", required=True, choices=["GeoLensCooke", "DiffractiveLens", "HybridLens"])
     wave_hsi.add_argument("--reconstructor", required=True, choices=["differentiable_linear", "tiny_cnn"])
+    wave_hsi.add_argument("--dataset", choices=["synthetic", "local_npz"], default="synthetic")
     wave_hsi.add_argument("--max-steps", type=int, default=3)
     wave_hsi.add_argument("--optical-lr", type=float, default=1e-3)
     wave_hsi.add_argument("--recon-lr", type=float, default=1e-3)
@@ -407,6 +408,7 @@ def main(argv: list[str] | None = None) -> None:
     remote_wave_hsi.add_argument("--worker-id", required=True)
     remote_wave_hsi.add_argument("--candidate", required=True, choices=["GeoLensCooke", "DiffractiveLens", "HybridLens"])
     remote_wave_hsi.add_argument("--reconstructor", required=True, choices=["differentiable_linear", "tiny_cnn"])
+    remote_wave_hsi.add_argument("--dataset", choices=["synthetic", "local_npz"], default="synthetic")
     remote_wave_hsi.add_argument("--max-steps", type=int, default=3)
     remote_wave_hsi.add_argument("--optical-lr", type=float, default=1e-3)
     remote_wave_hsi.add_argument("--recon-lr", type=float, default=1e-3)
@@ -755,6 +757,7 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "run-remote-native-waveoptics-hsi-codesign":
         payload = run_remote_native_waveoptics_hsi_codesign(
             args.worker_id, args.candidate, args.reconstructor,
+            dataset=args.dataset,
             max_steps=args.max_steps, optical_lr=args.optical_lr, recon_lr=args.recon_lr,
             device=args.device, bands=args.bands, image_size=args.image_size,
             psf_size=args.psf_size,
@@ -1614,6 +1617,7 @@ def _run_native_waveoptics_hsi_codesign(args: Any) -> None:
     spec = NativeHSIReconstructionCoDesignSpec(
         run_id=make_recon_codesign_id(args.candidate, args.reconstructor),
         optical_component=args.candidate, reconstructor=args.reconstructor,
+        dataset=args.dataset,
         bands=args.bands, image_size=args.image_size, psf_size=args.psf_size,
         max_steps=args.max_steps, optical_lr=args.optical_lr, recon_lr=args.recon_lr,
         device=args.device,

@@ -261,6 +261,7 @@ def run_remote_deeplens_waveoptics_probe(
 
 def run_remote_native_waveoptics_hsi_codesign(
     worker_id: str, candidate: str, reconstructor: str,
+    dataset: str = "synthetic",
     max_steps: int = 3, optical_lr: float = 1e-3, recon_lr: float = 1e-3,
     device: str = "cpu", bands: int = 4, image_size: int = 16, psf_size: int = 32,
     runner: Any | None = None, ingest: bool = True,
@@ -269,6 +270,7 @@ def run_remote_native_waveoptics_hsi_codesign(
         "native_waveoptics_hsi_codesign",
         objective=f"Native wave-optics HSI co-design: {candidate} / {reconstructor}",
         cli_args={"candidate": candidate, "reconstructor": reconstructor,
+                  "dataset": dataset,
                   "max_steps": max_steps, "optical_lr": optical_lr, "recon_lr": recon_lr,
                   "device": device, "bands": bands, "image_size": image_size,
                   "psf_size": psf_size},

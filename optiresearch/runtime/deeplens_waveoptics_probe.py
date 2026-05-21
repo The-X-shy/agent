@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import torch
 
 from optiresearch.adapters.geolens_waveoptics_bridge import GeoLensWaveOpticsBridge
 from optiresearch.schemas.deeplens_waveoptics_probe import (
@@ -84,20 +85,21 @@ def run_deeplens_waveoptics_probe(
         return _failed(spec, "PROBE_FAILED", str(exc), metadata, caveats,
                        loss_before=loss_before, gradient_norm=gradient_norm)
 
-    import torch
     param_after = bridge.parameter_snapshot()
     metadata["optical_parameter_after"] = param_after
     params_changed = _params_changed(param_before, param_after)
 
     differentiable = bool(gradient_norm and gradient_norm > 0 and params_changed and metadata["optimizer_step_executed"])
-    evidence_level = "native_full_waveoptics" if differentiable else None
+    evidence_level = "native_lens_simulation" if differentiable else None
+    deeplens_native_psf_path = getattr(bridge, "deeplens_native_psf_path", "geolens.psf_geometric")
+    metadata["deeplens_native_psf_path"] = deeplens_native_psf_path
 
     result = DeepLensWaveOpticsProbeResult(
         run_id=spec.run_id,
         status="succeeded" if differentiable else "unsupported",
         candidate=spec.candidate,
         lens_file=spec.lens_file,
-        full_wave_optics=True,
+        full_wave_optics=False,
         phase_to_fft_proxy_used=False,
         differentiable=differentiable,
         native_parameter_update=differentiable,
@@ -109,7 +111,8 @@ def run_deeplens_waveoptics_probe(
         optical_parameters_changed=params_changed,
         psf_requires_grad=psf_requires_grad,
         autograd_graph_exists=differentiable,
-        deeplens_native_wave_path="geolens.psf_pupil_prop",
+        deeplens_native_wave_path=deeplens_native_psf_path,
+        deeplens_native_psf_path=deeplens_native_psf_path,
         evidence_level=evidence_level,
         optimizer_step_executed=metadata["optimizer_step_executed"],
         caveats=caveats if differentiable else [*caveats, "Wave-optics PSF did not produce differentiable parameter update"],

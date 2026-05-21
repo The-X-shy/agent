@@ -60,7 +60,7 @@ def test_allowlist_accepts_surface_and_lensfile_probe_commands():
         "--device",
         "cpu",
         "--remote-job-id",
-        "remote_job_1",
+        "remote_job_1436c05c2c4d6359",
     ]
     lensfile_command = [
         "/mnt/d/agent/run_agent_python.sh",
@@ -78,7 +78,7 @@ def test_allowlist_accepts_surface_and_lensfile_probe_commands():
         "--device",
         "cpu",
         "--remote-job-id",
-        "remote_job_2",
+        "remote_job_abcdef0123456789",
     ]
 
     assert validate_remote_command(surface_command)["cli_command"] == "run-deeplens-surface-optimization-probe"
@@ -107,14 +107,14 @@ def test_remote_surface_probe_builds_job_without_real_wsl(tmp_path, monkeypatch)
 def test_build_job_command_maps_native_surface_and_lensfile_jobs():
     worker = _worker()
     surface_job = RemoteJobSpec(
-        job_id="job_surface",
+        job_id="remote_job_1436c05c2c4d6359",
         job_type="deeplens_surface_optimization_probe",
         objective="Surface probe",
         cli_args={"surface": "Fresnel", "objective": "minimize_phase_variance", "max_steps": 3},
         timeout_seconds=1800,
     )
     lensfile_job = RemoteJobSpec(
-        job_id="job_lensfile",
+        job_id="remote_job_abcdef0123456789",
         job_type="deeplens_lensfile_optimization_probe",
         objective="Lens file probe",
         cli_args={"lens_class": "GeoLens", "max_files": 5, "max_steps": 2},

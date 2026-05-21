@@ -3,10 +3,15 @@
 Remote job commands are built as argument lists by OptiResearch. This module
 rejects shell fragments and only accepts known CLI subcommands with known
 options.
+
+``--remote-job-id`` is an internal remote execution parameter appended by the
+remote runner. It is not a general user extension point, and values must match
+OptiResearch's generated ``remote_job_<16 hex chars>`` format.
 """
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -126,6 +131,8 @@ ALLOWED_CLI_COMMANDS: dict[str, set[str]] = {
         "--candidate", "--reconstructor", "--max-steps",
         "--optical-lr", "--recon-lr", "--device",
         "--bands", "--image-size", "--psf-size",
+        "--dataset",
+        "--remote-job-id",
     },
     "run-native-hsi-reconstruction-codesign": {
         "--optical-component",
@@ -146,6 +153,12 @@ FLAG_OPTIONS = {"--strict-deeplens", "--use-optical-feature-maps", "--strict-nat
 DENIED_EXECUTABLES = {"sudo", "rm", "curl", "chmod"}
 SHELL_META_TOKENS = {";", "&&", "||", "|", ">", "<"}
 SHELL_META_CHARS = {";", "|", ">", "<", "`"}
+REMOTE_JOB_ID_RE = re.compile(r"^remote_job_[a-f0-9]{16}$")
+REMOTE_JOB_ID_ALLOWED_COMMANDS = {
+    command
+    for command, options in ALLOWED_CLI_COMMANDS.items()
+    if "--remote-job-id" in options
+}
 
 
 def validate_remote_command(command: list[str]) -> dict[str, Any]:
@@ -171,7 +184,7 @@ def validate_remote_command(command: list[str]) -> dict[str, Any]:
         raise CommandValidationError(f"CLI command is not allowlisted: {cli_command}")
 
     allowed_options = ALLOWED_CLI_COMMANDS[cli_command]
-    _validate_options(command[4:], allowed_options)
+    _validate_options(command[4:], allowed_options, cli_command)
     return {
         "allowed": True,
         "executable": command[0],
@@ -194,7 +207,7 @@ def _reject_shell_fragments(command: list[str]) -> None:
                 raise CommandValidationError("chmod 777 is not allowed")
 
 
-def _validate_options(args: list[str], allowed_options: set[str]) -> None:
+def _validate_options(args: list[str], allowed_options: set[str], cli_command: str) -> None:
     i = 0
     while i < len(args):
         item = args[i]
@@ -210,4 +223,15 @@ def _validate_options(args: list[str], allowed_options: set[str]) -> None:
         value = args[i + 1]
         if value.startswith("--"):
             raise CommandValidationError(f"missing value for option: {item}")
+        if item == "--remote-job-id":
+            _validate_remote_job_id(cli_command, value)
         i += 2
+
+
+def _validate_remote_job_id(cli_command: str, value: str) -> None:
+    """Validate the internal remote execution id appended by the runner."""
+
+    if cli_command not in REMOTE_JOB_ID_ALLOWED_COMMANDS:
+        raise CommandValidationError(f"--remote-job-id is not allowed for command: {cli_command}")
+    if not REMOTE_JOB_ID_RE.fullmatch(value):
+        raise CommandValidationError("invalid --remote-job-id value")

@@ -10,7 +10,7 @@ def test_allowlist_accepts_deeplens_source_smoke_wrapper_command():
         "optiresearch.cli",
         "run-deeplens-source-smoke",
         "--remote-job-id",
-        "remote_job_123",
+        "remote_job_1436c05c2c4d6359",
     ]
 
     assert validate_remote_command(command)["allowed"] is True
@@ -51,7 +51,7 @@ def test_allowlist_accepts_strict_codesign_controlled_args():
         "2",
         "--strict-deeplens",
         "--remote-job-id",
-        "remote_codesign_1",
+        "remote_job_1436c05c2c4d6359",
     ]
 
     assert validate_remote_command(command)["cli_command"] == "run-codesign-loop"

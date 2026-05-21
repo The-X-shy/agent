@@ -127,14 +127,15 @@ def run_native_waveoptics_hsi_codesign(
     metadata["optical_parameter_after"] = optical_after
     optical_changed = _params_changed(optical_before, optical_after)
     differentiable = bool(optical_grad_norm and optical_grad_norm > 0 and optical_changed and metadata["optimizer_step_executed"])
-    evidence_level = "native_full_waveoptics_reconstruction" if differentiable else None
+    evidence_level = "native_lens_hsi_codesign" if differentiable else None
+    metadata["deeplens_native_psf_path"] = getattr(bridge, "deeplens_native_psf_path", "geolens.psf_geometric")
 
     result = NativeHSIReconstructionCoDesignResult(
         run_id=spec.run_id, status="succeeded" if differentiable else "unsupported",
         optical_component="GeoLensCooke", reconstructor=spec.reconstructor,
         differentiable=differentiable, full_reconstruction_loss_used=True,
         native_parameter_update=differentiable,
-        full_wave_optics=True, phase_to_fft_proxy_used=False,
+        full_wave_optics=False, phase_to_fft_proxy_used=False,
         reconstruction_loss_before=loss_before, reconstruction_loss_after=loss_after,
         mse_before=mse_before, mse_after=mse_after,
         psnr_before=psnr_before, psnr_after=psnr_after,
