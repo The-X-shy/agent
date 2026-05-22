@@ -67,6 +67,8 @@ from optiresearch.runtime.remote_jobs import (
     run_remote_native_optimization_probe,
     run_remote_deeplens_waveoptics_probe,
     run_remote_native_waveoptics_hsi_codesign,
+    run_remote_stable_native_lens_hsi_codesign,
+    run_remote_stable_native_lens_hsi_ablation,
 )
 from optiresearch.reports.remote_execution import export_remote_execution_report
 
@@ -279,6 +281,24 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("export-phase20-report", help="Export Phase 20 native HSI co-design report.")
     sub.add_parser("export-phase21-report", help="Export Phase 21 native HSI reconstruction co-design report.")
     sub.add_parser("export-phase22-report", help="Export Phase 22 full wave-optics native HSI co-design report.")
+    sub.add_parser("export-phase23-report", help="Export Phase 23 stable native lens HSI co-design report.")
+    diagnose = sub.add_parser("diagnose-native-lens-hsi-codesign", help="Diagnose Phase 22 native lens HSI co-design instability.")
+    diagnose.add_argument("--run-dir", required=True)
+    stable_hsi = sub.add_parser("run-stable-native-lens-hsi-codesign", help="Run stable native lens HSI co-design.")
+    stable_hsi.add_argument("--candidate", required=True, choices=["GeoLensCooke", "DiffractiveLens", "HybridLens"])
+    stable_hsi.add_argument("--reconstructor", required=True, choices=["differentiable_linear", "tiny_cnn"])
+    stable_hsi.add_argument("--dataset", default="synthetic")
+    stable_hsi.add_argument("--max-steps", type=int, default=10)
+    stable_hsi.add_argument("--optical-lr", type=float, default=1e-6)
+    stable_hsi.add_argument("--recon-lr", type=float, default=1e-3)
+    stable_hsi.add_argument("--optical-grad-clip", type=float, default=1.0)
+    stable_hsi.add_argument("--rollback-on-loss-increase", action="store_true", default=True)
+    stable_hsi.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
+    stable_abl = sub.add_parser("run-stable-native-lens-hsi-ablation", help="Run stable native lens HSI ablation.")
+    stable_abl.add_argument("--candidate", required=True, choices=["GeoLensCooke", "DiffractiveLens", "HybridLens"])
+    stable_abl.add_argument("--reconstructor", required=True, choices=["differentiable_linear", "tiny_cnn"])
+    stable_abl.add_argument("--dataset", default="synthetic")
+    stable_abl.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
     sub.add_parser("scan-deeplens-waveoptics-paths", help="Scan DeepLens source for wave-optics differentiable paths.")
     waveoptics = sub.add_parser("run-deeplens-waveoptics-probe", help="Probe DeepLens native wave-optics PSF path.")
     waveoptics.add_argument("--candidate", required=True, choices=["GeoLensCooke", "DiffractiveLens", "HybridLens", "FresnelWave", "Binary2PhaseWave", "CustomLensFile"])
@@ -417,6 +437,23 @@ def main(argv: list[str] | None = None) -> None:
     remote_wave_hsi.add_argument("--bands", type=int, default=31)
     remote_wave_hsi.add_argument("--image-size", type=int, default=32)
     remote_wave_hsi.add_argument("--psf-size", type=int, default=32)
+    remote_stable = sub.add_parser("run-remote-stable-native-lens-hsi-codesign", help="Run stable native lens HSI co-design on remote worker.")
+    remote_stable.add_argument("--worker-id", required=True)
+    remote_stable.add_argument("--candidate", required=True, choices=["GeoLensCooke", "DiffractiveLens", "HybridLens"])
+    remote_stable.add_argument("--reconstructor", required=True, choices=["differentiable_linear", "tiny_cnn"])
+    remote_stable.add_argument("--dataset", default="synthetic")
+    remote_stable.add_argument("--max-steps", type=int, default=10)
+    remote_stable.add_argument("--optical-lr", type=float, default=1e-6)
+    remote_stable.add_argument("--recon-lr", type=float, default=1e-3)
+    remote_stable.add_argument("--optical-grad-clip", type=float, default=1.0)
+    remote_stable.add_argument("--rollback-on-loss-increase", action="store_true", default=True)
+    remote_stable.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
+    remote_abl = sub.add_parser("run-remote-stable-native-lens-hsi-ablation", help="Run stable native lens HSI ablation on remote worker.")
+    remote_abl.add_argument("--worker-id", required=True)
+    remote_abl.add_argument("--candidate", required=True, choices=["GeoLensCooke", "DiffractiveLens", "HybridLens"])
+    remote_abl.add_argument("--reconstructor", required=True, choices=["differentiable_linear", "tiny_cnn"])
+    remote_abl.add_argument("--dataset", default="synthetic")
+    remote_abl.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
     remote_report = sub.add_parser("export-remote-execution-report", help="Export a remote execution report.")
     remote_report.add_argument("--job-id", required=True)
 
@@ -650,6 +687,19 @@ def main(argv: list[str] | None = None) -> None:
         from optiresearch.reports.phase22 import export_phase22_report
         path = export_phase22_report()
         print(f"markdown: {path}")
+    elif args.command == "export-phase23-report":
+        from optiresearch.reports.phase23 import export_phase23_report
+        path = export_phase23_report()
+        print(f"markdown: {path}")
+    elif args.command == "diagnose-native-lens-hsi-codesign":
+        from optiresearch.analysis.native_lens_hsi_diagnostics import diagnose_native_lens_hsi_codesign
+        diagnosis = diagnose_native_lens_hsi_codesign(args.run_dir)
+        import json as _json
+        print(_json.dumps(diagnosis, indent=2, ensure_ascii=False, default=str))
+    elif args.command == "run-stable-native-lens-hsi-codesign":
+        _run_stable_native_lens_hsi_codesign(args)
+    elif args.command == "run-stable-native-lens-hsi-ablation":
+        _run_stable_native_lens_hsi_ablation(args)
     elif args.command == "scan-deeplens-waveoptics-paths":
         from optiresearch.adapters.deeplens_waveoptics_inspector import scan_deeplens_waveoptics_paths
         summary = scan_deeplens_waveoptics_paths()
@@ -762,6 +812,18 @@ def main(argv: list[str] | None = None) -> None:
             max_steps=args.max_steps, optical_lr=args.optical_lr, recon_lr=args.recon_lr,
             device=args.device, bands=args.bands, image_size=args.image_size,
             psf_size=args.psf_size,
+        )
+        _print_remote_payload(payload)
+    elif args.command == "run-remote-stable-native-lens-hsi-codesign":
+        payload = run_remote_stable_native_lens_hsi_codesign(
+            args.worker_id, args.candidate, args.reconstructor,
+            max_steps=args.max_steps, optical_lr=args.optical_lr, recon_lr=args.recon_lr,
+            optical_grad_clip=args.optical_grad_clip, device=args.device,
+        )
+        _print_remote_payload(payload)
+    elif args.command == "run-remote-stable-native-lens-hsi-ablation":
+        payload = run_remote_stable_native_lens_hsi_ablation(
+            args.worker_id, args.candidate, args.reconstructor, device=args.device,
         )
         _print_remote_payload(payload)
     elif args.command == "export-remote-execution-report":
@@ -1652,6 +1714,32 @@ def _run_native_waveoptics_hsi_codesign(args: Any) -> None:
                 "optimizer_step_executed": result.optimizer_step_executed,
             },
         )
+
+
+def _run_stable_native_lens_hsi_codesign(args: Any) -> None:
+    from optiresearch.runtime.stable_native_lens_hsi_loop import run_stable_native_lens_hsi_codesign
+    from optiresearch.schemas.stable_native_lens_hsi import StableNativeLensHSISpec, make_stable_lens_id
+    spec = StableNativeLensHSISpec(
+        run_id=make_stable_lens_id(args.candidate, args.reconstructor),
+        candidate=args.candidate, reconstructor=args.reconstructor,
+        max_steps=args.max_steps, optical_lr=args.optical_lr, recon_lr=args.recon_lr,
+        optical_grad_clip=args.optical_grad_clip,
+        rollback_on_loss_increase=args.rollback_on_loss_increase,
+        device=args.device,
+    )
+    result = run_stable_native_lens_hsi_codesign(spec)
+    print(_compact_json(result.model_dump(mode="json")))
+
+
+def _run_stable_native_lens_hsi_ablation(args: Any) -> None:
+    from optiresearch.runtime.stable_native_lens_hsi_ablation import run_stable_native_lens_hsi_ablation
+    import json as _json
+    summary = run_stable_native_lens_hsi_ablation(
+        candidate=args.candidate, reconstructor=args.reconstructor, device=args.device,
+    )
+    print(_json.dumps({k: v for k, v in summary.items() if k != "strategies"}, indent=2, ensure_ascii=False))
+    for name, r in summary["strategies"].items():
+        print(f"\n{name}: loss {r['loss_before']:.4f} -> {r['loss_after']:.4f} stable={r['stable']}")
 
 
 def _run_codesign_loop(args: Any) -> None:

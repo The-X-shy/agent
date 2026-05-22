@@ -127,6 +127,15 @@ ALLOWED_CLI_COMMANDS: dict[str, set[str]] = {
         "--candidate", "--objective", "--psf-size", "--max-steps",
         "--learning-rate", "--device", "--remote-job-id",
     },
+    "run-stable-native-lens-hsi-codesign": {
+        "--candidate", "--reconstructor", "--dataset", "--max-steps",
+        "--optical-lr", "--recon-lr", "--optical-grad-clip",
+        "--rollback-on-loss-increase", "--device", "--remote-job-id",
+    },
+    "run-stable-native-lens-hsi-ablation": {
+        "--candidate", "--reconstructor", "--dataset", "--device",
+        "--remote-job-id",
+    },
     "run-native-waveoptics-hsi-codesign": {
         "--candidate", "--reconstructor", "--max-steps",
         "--optical-lr", "--recon-lr", "--device",

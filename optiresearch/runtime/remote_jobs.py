@@ -280,6 +280,38 @@ def run_remote_native_waveoptics_hsi_codesign(
     return execute_remote_job(worker_id, job, runner=runner, ingest=ingest)
 
 
+def run_remote_stable_native_lens_hsi_codesign(
+    worker_id: str, candidate: str, reconstructor: str,
+    max_steps: int = 10, optical_lr: float = 1e-6, recon_lr: float = 1e-3,
+    optical_grad_clip: float = 1.0, device: str = "cpu",
+    runner: Any | None = None, ingest: bool = True,
+) -> dict[str, Any]:
+    job = _job(
+        "stable_native_lens_hsi_codesign",
+        objective=f"Stable native lens HSI co-design: {candidate} / {reconstructor}",
+        cli_args={"candidate": candidate, "reconstructor": reconstructor,
+                  "max_steps": max_steps, "optical_lr": optical_lr, "recon_lr": recon_lr,
+                  "optical_grad_clip": optical_grad_clip, "device": device, "rollback_on_loss_increase": True},
+        timeout_seconds=3600,
+        expected_outputs=["result.json", "report.md"],
+    )
+    return execute_remote_job(worker_id, job, runner=runner, ingest=ingest)
+
+
+def run_remote_stable_native_lens_hsi_ablation(
+    worker_id: str, candidate: str, reconstructor: str, device: str = "cpu",
+    runner: Any | None = None, ingest: bool = True,
+) -> dict[str, Any]:
+    job = _job(
+        "stable_native_lens_hsi_ablation",
+        objective=f"Stable native lens HSI ablation: {candidate} / {reconstructor}",
+        cli_args={"candidate": candidate, "reconstructor": reconstructor, "device": device},
+        timeout_seconds=7200,
+        expected_outputs=["ablation_results.json", "best_config.json"],
+    )
+    return execute_remote_job(worker_id, job, runner=runner, ingest=ingest)
+
+
 def run_remote_native_optimization_inspection(
     worker_id: str,
     runner: Any | None = None,
@@ -393,6 +425,10 @@ def _remote_backend_capability_level(job_type: str) -> str:
     if job_type == "deeplens_waveoptics_probe":
         return "native_lens"
     if job_type == "native_waveoptics_hsi_codesign":
+        return "native_lens"
+    if job_type == "stable_native_lens_hsi_codesign":
+        return "native_lens"
+    if job_type == "stable_native_lens_hsi_ablation":
         return "native_lens"
     return "adapter_proxy"
 
