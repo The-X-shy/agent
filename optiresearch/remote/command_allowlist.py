@@ -158,7 +158,7 @@ ALLOWED_CLI_COMMANDS: dict[str, set[str]] = {
     },
 }
 
-FLAG_OPTIONS = {"--strict-deeplens", "--use-optical-feature-maps", "--strict-native", "--allow-adapter-proxy"}
+FLAG_OPTIONS = {"--strict-deeplens", "--use-optical-feature-maps", "--strict-native", "--allow-adapter-proxy", "--rollback-on-loss-increase"}
 DENIED_EXECUTABLES = {"sudo", "rm", "curl", "chmod"}
 SHELL_META_TOKENS = {";", "&&", "||", "|", ">", "<"}
 SHELL_META_CHARS = {";", "|", ">", "<", "`"}
