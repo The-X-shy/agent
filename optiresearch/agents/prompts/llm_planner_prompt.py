@@ -35,6 +35,20 @@ We are building an agentic differentiable optics framework with:
 8. **Use rollback protection** when proposing optical parameter updates.
 9. **Reduce optical learning rate** when previous gradients were large (>100).
 10. **Propose remote validation** only when local experiments succeeded.
+11. **In local execution mode, prefer actions that produce measurable metrics.**
+    Actions like retry_with_smaller_lr, enable_rollback, and run_ablation
+    produce reconstruction_loss, PSNR, and MSE metrics that form a trajectory.
+12. **Do NOT stop after one downgraded claim** if the execution result has valid
+    metrics. A claim downgrade is a safety wording correction, NOT an
+    experimental failure. Continue to the next iteration.
+13. **When metric trajectory is incomplete** (fewer than 2 iterations with valid
+    metrics), prefer retry_with_smaller_lr, enable_rollback, or run_ablation
+    over stop_and_report.
+14. **Do NOT propose claims above the backend ceiling.** The phase_to_fft_proxy
+    backend supports evidence up to native_full_reconstruction_proxy. The
+    deeplens_geolens_geometric backend supports up to native_lens_simulation.
+15. **Treat claim_downgraded status** in prior iteration results as a signal
+    to adjust the claim wording, NOT as a reason to stop the loop.
 
 ## Output Format
 Return a JSON object with a "proposals" array. Each proposal must have:
@@ -128,6 +142,12 @@ def build_planner_prompt(context: dict[str, Any]) -> list[dict[str, str]]:
             "safety constraints or claim ceiling violations."
         )
 
+    metric_summary = _build_metric_trajectory_summary(context.get("recent_results", []))
+    if metric_summary:
+        user_prompt_parts.append("")
+        user_prompt_parts.append("## Metric Trajectory")
+        user_prompt_parts.append(metric_summary)
+
     user_prompt_parts.append("")
     user_prompt_parts.append("Generate candidate research proposals as JSON.")
 
@@ -135,6 +155,34 @@ def build_planner_prompt(context: dict[str, Any]) -> list[dict[str, str]]:
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": "\n".join(user_prompt_parts)},
     ]
+
+
+def _build_metric_trajectory_summary(recent_results: list[dict[str, Any]]) -> str:
+    """Build a concise metric trajectory summary for the LLM."""
+    if not recent_results:
+        return ""
+    lines = ["| Iter | Loss Before | Loss After | Improvement | Status |"]
+    lines.append("|------|-------------|------------|-------------|--------|")
+    for i, r in enumerate(recent_results):
+        if not isinstance(r, dict):
+            continue
+        payload = r.get("result_payload") or {}
+        loss_before = payload.get("reconstruction_loss_before", "N/A")
+        loss_after = payload.get("reconstruction_loss_after", "N/A")
+        improvement = payload.get("improvement_detected", "N/A")
+        status = r.get("status", "N/A")
+        fb = _fmt_metric(loss_before)
+        fa = _fmt_metric(loss_after)
+        fi = _fmt_metric(improvement)
+        lines.append(f"| {i + 1} | {fb} | {fa} | {fi} | {status} |")
+    return "\n".join(lines)
+
+
+def _fmt_metric(val: Any) -> str:
+    """Format a metric value for display."""
+    if isinstance(val, float):
+        return f"{val:.6f}"
+    return str(val)
 
 
 def build_mock_proposals() -> list[dict[str, Any]]:
