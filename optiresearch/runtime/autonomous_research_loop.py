@@ -183,6 +183,13 @@ def _run_local(
             if claim_dec.get("safe_wording"):
                 execution["safe_claim_wording"] = claim_dec["safe_wording"]
                 execution["claim_downgraded"] = True
+                it_obj.metrics_snapshot["claim_downgraded"] = True
+                it_obj.metrics_snapshot["safe_wording_applied"] = True
+
+        if claim_dec.get("decision") == "qualified":
+            execution["claim_downgraded"] = True
+            execution["safe_claim_wording"] = claim_dec.get("safe_wording", "")
+            it_obj.metrics_snapshot["claim_downgraded"] = True
 
         # 7. Memory update
         if spec.memory_update:
@@ -193,7 +200,11 @@ def _run_local(
         it_obj.metrics_snapshot = execution.get("result_payload") or {}
 
         # 8. Decide — continue or stop
-        traj_eval = evaluate_trajectory(iterations + [it_obj], spec)
+        traj_eval = evaluate_trajectory(
+            iterations + [it_obj], spec,
+            min_iterations_before_stop=spec.min_iterations_before_stop,
+            no_improvement_patience=spec.no_improvement_patience,
+        )
         if traj_eval.stop_reason:
             it_obj.next_action = "stop"
             it_obj.stop_reason = traj_eval.stop_reason
@@ -509,7 +520,11 @@ def _build_loop_result(
     from optiresearch.schemas.autonomous_loop import AutonomousLoopResult
     from optiresearch.agents.trajectory_evaluator import evaluate_trajectory
 
-    traj = evaluate_trajectory(iterations, spec)
+    traj = evaluate_trajectory(
+        iterations, spec,
+        min_iterations_before_stop=spec.min_iterations_before_stop,
+        no_improvement_patience=spec.no_improvement_patience,
+    )
 
     best_result: dict[str, Any] = {}
     if traj.best_iteration > 0 and traj.best_iteration <= len(iterations):

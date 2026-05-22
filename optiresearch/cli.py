@@ -542,6 +542,13 @@ def main(argv: list[str] | None = None) -> None:
     aloop_v2.add_argument("--planner-mode", choices=["rule_based", "llm_assisted", "llm_first_with_rule_fallback"], default="rule_based")
     aloop_v2.add_argument("--llm-provider", choices=["mock", "deepseek"], default="mock")
     aloop_v2.add_argument("--prefer-executable-actions", action="store_true", default=False)
+    # Phase 29: multi-iteration trajectory controls
+    aloop_v2.add_argument("--min-iterations-before-stop", type=int, default=2)
+    aloop_v2.add_argument("--no-improvement-patience", type=int, default=2)
+    aloop_v2.add_argument("--continue-on-claim-downgrade", action="store_true", default=True)
+    aloop_v2.add_argument("--no-continue-on-claim-downgrade", dest="continue_on_claim_downgrade", action="store_false")
+    aloop_v2.add_argument("--require-metrics-for-stop", action="store_true", default=True)
+    aloop_v2.add_argument("--max-runtime-minutes-per-iter", type=int, default=10)
 
     args = parser.parse_args(argv)
     if args.command == "init-db":
@@ -2145,6 +2152,12 @@ def _run_autonomous_research_loop_v2(args: Any) -> None:
         llm_provider=getattr(args, "llm_provider", "mock"),
         # Phase 28 executable mode
         prefer_executable_actions=getattr(args, "prefer_executable_actions", False),
+        # Phase 29: multi-iteration trajectory controls
+        min_iterations_before_stop=getattr(args, "min_iterations_before_stop", 2),
+        no_improvement_patience=getattr(args, "no_improvement_patience", 2),
+        continue_on_claim_downgrade=getattr(args, "continue_on_claim_downgrade", True),
+        require_metrics_for_stop=getattr(args, "require_metrics_for_stop", True),
+        max_runtime_minutes_per_iter=getattr(args, "max_runtime_minutes_per_iter", 10),
     )
     result = run_autonomous_research_loop(spec)
     print(_compact_json({

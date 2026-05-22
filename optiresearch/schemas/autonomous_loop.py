@@ -51,6 +51,11 @@ class AutonomousLoopSpec(StrictModel):
     allow_llm_remote_plan: bool = False
     # Phase 28: executable LLM planning
     prefer_executable_actions: bool = False
+    # Phase 29: multi-iteration trajectory controls
+    min_iterations_before_stop: int = 2
+    no_improvement_patience: int = 2
+    continue_on_claim_downgrade: bool = True
+    require_metrics_for_stop: bool = True
     metadata: dict[str, Any] = {}
 
 
