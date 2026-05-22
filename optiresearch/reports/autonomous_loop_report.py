@@ -107,6 +107,21 @@ def _build_sections(result: Any) -> list[str]:
             traj_table.append(f"| {i + 1} | {val:.6f} |")
         sections.append("\n".join(traj_table))
 
+    # LLM proposal table
+    sections.append(_build_llm_proposal_table(result))
+
+    # Fallback events table
+    sections.append(_build_fallback_table(result))
+
+    # Best iteration summary
+    sections.append(_build_best_iteration(result))
+
+    # Claim evolution table
+    sections.append(_build_claim_evolution(result))
+
+    # Final recommended next step
+    sections.append(_build_final_recommendation(result))
+
     # Final claim status
     sections.append(
         f"""## Final Claim Status
@@ -144,6 +159,103 @@ def _extract_trajectory(result: Any) -> list[float]:
             except (ValueError, TypeError):
                 trajectory.append(0.0)
     return trajectory
+
+
+def _build_llm_proposal_table(result: Any) -> str:
+    lines = ["## LLM Proposals", ""]
+    rows = []
+    for it in result.iterations:
+        meta = it.strategy_recommendation.get("metadata", {})
+        planner = meta.get("planner", "rule_based")
+        if planner == "llm":
+            rows.append(
+                f"| {it.iteration_id} | {meta.get('proposal_id', '-')} | "
+                f"{it.strategy_recommendation.get('recommended_action', '-')} | "
+                f"{meta.get('hypothesis', '-')[:80]} | accepted |"
+            )
+        elif planner == "fallback":
+            rows.append(
+                f"| {it.iteration_id} | fallback | "
+                f"{it.strategy_recommendation.get('recommended_action', '-')} | "
+                f"{meta.get('fallback_reason', '-')} | fallback_used |"
+            )
+    if rows:
+        lines.append("| Iteration | Proposal ID | Action | Hypothesis | Status |")
+        lines.append("|---|---|---|---|---|")
+        lines.extend(rows)
+    else:
+        lines.append("No LLM proposals in this loop.")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _build_fallback_table(result: Any) -> str:
+    lines = ["## Fallback Events", ""]
+    rows = []
+    for it in result.iterations:
+        meta = it.strategy_recommendation.get("metadata", {})
+        if meta.get("planner") == "fallback":
+            rows.append(
+                f"| {it.iteration_id} | {meta.get('fallback_reason', '-')} | "
+                f"{it.strategy_recommendation.get('recommended_action', '-')} |"
+            )
+    if rows:
+        lines.append("| Iteration | Fallback Reason | Fallback Action |")
+        lines.append("|---|---|---|")
+        lines.extend(rows)
+    else:
+        lines.append("No fallback events in this loop.")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _build_best_iteration(result: Any) -> str:
+    lines = ["## Best Iteration", ""]
+    best = result.best_result or {}
+    if best:
+        payload = best.get("result_payload") or {}
+        lines.append(f"- **Best Iteration Backend:** {best.get('backend_id', '-')}")
+        lines.append(f"- **Best Status:** {best.get('status', '-')}")
+        for key in ("reconstruction_loss_after", "loss_after", "mse_after"):
+            val = payload.get(key)
+            if val is not None:
+                lines.append(f"- **Best Metric ({key}):** {val:.6f}")
+                break
+    else:
+        lines.append("No best iteration data.")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _build_claim_evolution(result: Any) -> str:
+    lines = ["## Claim Evolution", ""]
+    rows = []
+    for it in result.iterations:
+        cgd = it.claim_gate_decision or {}
+        rows.append(
+            f"| {it.iteration_id} | {cgd.get('decision', '-')} | "
+            f"{cgd.get('max_allowed_claim', '-')} | "
+            f"{str(cgd.get('safe_wording', '-'))[:60]} |"
+        )
+    if rows:
+        lines.append("| Iteration | Decision | Max Allowed | Safe Wording |")
+        lines.append("|---|---|---|---|")
+        lines.extend(rows)
+    else:
+        lines.append("No claim gate decisions recorded.")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _build_final_recommendation(result: Any) -> str:
+    lines = ["## Final Recommended Next Step", ""]
+    if result.iterations:
+        last = result.iterations[-1]
+        lines.append(f"- **Stop Reason:** {last.stop_reason or result.trajectory_report_path or 'N/A'}")
+        lines.append(f"- **Last Action:** {last.strategy_recommendation.get('recommended_action', '-')}")
+        lines.append(f"- **Last Status:** {last.execution_result.get('status', '-')}")
+    lines.append("")
+    return "\n".join(lines)
 
 
 def _format_list(items: list[str], fallback: str) -> str:

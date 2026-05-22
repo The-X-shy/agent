@@ -126,16 +126,34 @@ def _run_local(
 
         # 1. Strategy (Phase 26: supports LLM planner)
         previous = iterations[-1].execution_result if iterations else {}
+        recent_results = _build_recent_results(iterations)
         if spec.planner_mode in ("llm_assisted", "llm_first_with_rule_fallback"):
-            strategy_rec = _get_llm_strategy(spec, previous, backend_id)
+            strategy_rec = _get_llm_strategy(
+                spec, previous, backend_id,
+                prefer_executable_actions=spec.prefer_executable_actions,
+                recent_results=recent_results,
+            )
+            # Fallback: LLM returns stop_and_report but we want executable actions
+            if (spec.prefer_executable_actions
+                    and strategy_rec.get("recommended_action") == "stop_and_report"
+                    and iteration < spec.max_iterations):
+                strategy_rec = _get_strategy_recommendation(previous, backend_id)
+                strategy_rec["metadata"] = {
+                    **(strategy_rec.get("metadata", {})),
+                    "planner": "fallback",
+                    "fallback_reason": "prefer_executable_with_llm_stop",
+                }
         else:
             strategy_rec = _get_strategy_recommendation(previous, backend_id)
         it_obj.strategy_recommendation = strategy_rec
         _save_json(iter_dir / "01_strategy.json", strategy_rec)
 
         # 2. Plan — compile ExperimentSpecV2
-        proposed_spec = _compile_from_strategy(strategy_rec, backend_id)
-        if proposed_spec is None:
+        proposed_spec = _compile_from_strategy(
+            strategy_rec, backend_id,
+            prefer_executable=spec.prefer_executable_actions,
+        )
+        if proposed_spec is None or _is_mapping_error(proposed_spec):
             it_obj.next_action = "stop"
             it_obj.stop_reason = "strategy_could_not_map_to_experiment"
             iterations.append(it_obj)
@@ -253,6 +271,8 @@ def _get_llm_strategy(
     spec: "AutonomousLoopSpec",
     latest_result: dict[str, Any],
     backend_id: str,
+    prefer_executable_actions: bool = False,
+    recent_results: Optional[list[dict[str, Any]]] = None,
 ) -> dict[str, Any]:
     """Get strategy via LLMPlanner with rule-based fallback."""
     from optiresearch.agents.llm_planner import LLMPlanner
@@ -263,10 +283,11 @@ def _get_llm_strategy(
         provider_name=spec.llm_provider,
         allowed_backends=spec.allowed_backends,
         allowed_task_types=spec.allowed_task_types,
-        recent_results=[latest_result] if latest_result else [],
+        recent_results=recent_results or ([latest_result] if latest_result else []),
         execution_mode=spec.execution_mode,
         allow_remote=spec.allow_remote,
         max_candidate_plans=spec.max_llm_proposals,
+        prefer_executable_actions=prefer_executable_actions,
     )
 
     if result.status == "succeeded" and result.selected_proposal:
@@ -302,6 +323,7 @@ def _get_llm_strategy(
 def _compile_from_strategy(
     strategy_rec: dict[str, Any],
     backend_id: str,
+    prefer_executable: bool = False,
 ) -> Any:
     from optiresearch.agents.strategy_to_spec import compile_experiment_spec
     from optiresearch.agents.strategy_engine import StrategyRecommendation
@@ -314,7 +336,35 @@ def _compile_from_strategy(
         proposed_cli_commands=strategy_rec.get("proposed_cli_commands", []),
         metadata=strategy_rec.get("metadata", {}),
     )
-    return compile_experiment_spec(rec, backend_id)
+    return compile_experiment_spec(
+        rec, backend_id,
+        prefer_executable=prefer_executable,
+        spec_patch=strategy_rec.get("experiment_spec_patch"),
+    )
+
+
+def _is_mapping_error(obj: Any) -> bool:
+    """Check if an object is a MappingError from strategy_to_spec."""
+    try:
+        from optiresearch.agents.strategy_to_spec import is_mapping_error
+        return is_mapping_error(obj)
+    except Exception:
+        return False
+
+
+def _build_recent_results(
+    iterations: list[Any],
+) -> list[dict[str, Any]]:
+    """Build recent_results from completed iterations using feedback context."""
+    try:
+        from optiresearch.agents.loop_feedback_context import build_recent_results
+        return build_recent_results(iterations)
+    except Exception:
+        return [
+            (it.execution_result or {})
+            for it in iterations[-3:]
+            if getattr(it, "execution_result", None)
+        ]
 
 
 def _execute_local(spec: Any) -> dict[str, Any]:

@@ -77,6 +77,32 @@ python -m optiresearch.cli export-llm-provider-validation-report \
 
 Consolidated report at `workspace/reports/llm_provider_validation_report.md`.
 
+## Phase 28: Multi-Iteration Local Execution
+
+### 7. Multi-Iteration Local Loop
+
+```bash
+python -m optiresearch.cli run-autonomous-research-loop-v2 \
+  --objective "execute lightweight stable native lens HSI co-design" \
+  --max-iterations 2 \
+  --execution-mode local \
+  --planner-mode llm_first_with_rule_fallback \
+  --llm-provider deepseek \
+  --prefer-executable-actions \
+  --allowed-backends "phase_to_fft_proxy" \
+  --allowed-task-types "stable_lens_hsi_codesign,lightweight_psf_probe"
+```
+
+Multi-iteration loop with feedback context. LLM receives previous iteration metrics to inform next strategy. Lightweight experiments run via pure-PyTorch FFT without DeepLens.
+
+### 8. Real DeepSeek Multi-Iteration Test
+
+```bash
+OPTIRESEARCH_ENABLE_REAL_LLM_TESTS=1 \
+DEEPSEEK_API_KEY=$DEEPSEEK_API_KEY \
+python -m pytest tests/test_real_deepseek_local_loop_execution.py -v
+```
+
 ## Safety Constraints
 
 - No API key in any trace file

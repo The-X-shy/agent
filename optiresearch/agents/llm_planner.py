@@ -31,6 +31,7 @@ class LLMPlanner:
         execution_mode: str = "dry_run",
         allow_remote: bool = False,
         max_candidate_plans: int = 3,
+        prefer_executable_actions: bool = False,
     ) -> "LLMPlannerResult":
         """Generate and validate research proposals.
 
@@ -43,6 +44,7 @@ class LLMPlanner:
             execution_mode: dry_run, local, remote_opt_in.
             allow_remote: Whether remote execution is allowed.
             max_candidate_plans: Max proposals to generate.
+            prefer_executable_actions: Prefer executable over stop_and_report.
 
         Returns:
             LLMPlannerResult with selected proposal or fallback.
@@ -74,6 +76,7 @@ class LLMPlanner:
             recent_results=recent_results or [],
             execution_mode=execution_mode,
             max_candidate_plans=max_candidate_plans,
+            prefer_executable_actions=prefer_executable_actions,
         )
 
         # Try LLM provider
@@ -113,6 +116,26 @@ class LLMPlanner:
             # Apply claim gate to selected proposal
             selected = self._apply_claim_gate(selected)
 
+            # If prefer_executable and selected is stop_and_report,
+            # scan rejected proposals for an executable alternative
+            if (prefer_executable_actions
+                    and selected.recommended_action == "stop_and_report"
+                    and rejected):
+                executable_alt = next(
+                    (p for p in rejected
+                     if p.recommended_action != "stop_and_report"
+                     and p.recommended_action != "downgrade_claim"),
+                    None,
+                )
+                if executable_alt is not None:
+                    executable_alt = self._apply_claim_gate(executable_alt)
+                    rejected = [
+                        p for p in rejected
+                        if p.proposal_id != executable_alt.proposal_id
+                    ]
+                    rejected.append(selected)
+                    selected = executable_alt
+
             # Record trace
             trace_path = self._record_trace(
                 run_id, context, proposals_raw, validated, selected, None
@@ -144,6 +167,7 @@ class LLMPlanner:
         recent_results: list[dict[str, Any]],
         execution_mode: str = "dry_run",
         max_candidate_plans: int = 3,
+        prefer_executable_actions: bool = False,
     ) -> dict[str, Any]:
         """Build planning context from Phase 24/25 components."""
         context: dict[str, Any] = {
@@ -153,6 +177,7 @@ class LLMPlanner:
             "recent_results": recent_results,
             "execution_mode": execution_mode,
             "max_candidate_plans": max_candidate_plans,
+            "prefer_executable_actions": prefer_executable_actions,
         }
 
         # Add backend registry summary

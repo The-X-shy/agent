@@ -541,6 +541,7 @@ def main(argv: list[str] | None = None) -> None:
     # Phase 26 LLM options
     aloop_v2.add_argument("--planner-mode", choices=["rule_based", "llm_assisted", "llm_first_with_rule_fallback"], default="rule_based")
     aloop_v2.add_argument("--llm-provider", choices=["mock", "deepseek"], default="mock")
+    aloop_v2.add_argument("--prefer-executable-actions", action="store_true", default=False)
 
     args = parser.parse_args(argv)
     if args.command == "init-db":
@@ -2142,6 +2143,8 @@ def _run_autonomous_research_loop_v2(args: Any) -> None:
         # Phase 26 LLM options
         planner_mode=getattr(args, "planner_mode", "rule_based"),
         llm_provider=getattr(args, "llm_provider", "mock"),
+        # Phase 28 executable mode
+        prefer_executable_actions=getattr(args, "prefer_executable_actions", False),
     )
     result = run_autonomous_research_loop(spec)
     print(_compact_json({

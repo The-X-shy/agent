@@ -6,19 +6,35 @@ ExperimentSpecV2 that the ExperimentControllerV2 can execute.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from dataclasses import dataclass, field
+from typing import Any, Optional, Union
+
+
+@dataclass
+class MappingError:
+    """Structured error when a strategy action cannot map to an experiment."""
+    action: str
+    reason: str
+    suggestion: str = ""
+
+
+def is_mapping_error(obj: Any) -> bool:
+    """Check if an object is a MappingError."""
+    return isinstance(obj, MappingError)
 
 
 def compile_experiment_spec(
     recommendation: "StrategyRecommendation",
     backend_id: str,
     objective: Optional[str] = None,
-) -> Optional["ExperimentSpecV2"]:
+    prefer_executable: bool = False,
+    spec_patch: Optional[dict[str, Any]] = None,
+) -> Optional[Union["ExperimentSpecV2", "MappingError"]]:
     """Convert a StrategyRecommendation into an ExperimentSpecV2.
 
     Maps the recommended_action to a concrete task_type, backend_id,
-    and spec_payload. Returns None for actions that don't require
-    experiment execution (e.g., stop_and_report, downgrade_claim).
+    and spec_payload. Returns MappingError for unmappable actions when
+    prefer_executable is True, or None otherwise.
 
     All imports are lazy to avoid circular dependencies.
     """
@@ -28,9 +44,19 @@ def compile_experiment_spec(
     action = recommendation.recommended_action
     task_type = _action_to_task_type(action, backend_id)
     if task_type is None:
+        if prefer_executable:
+            return MappingError(
+                action=action,
+                reason=f"Action '{action}' cannot be mapped to an executable experiment.",
+                suggestion="Try retry_with_smaller_lr, enable_rollback, run_ablation, or probe_waveoptics_path.",
+            )
         return None
 
-    spec_payload = _build_payload(action, recommendation, backend_id)
+    spec_payload = _build_payload(
+        action, recommendation, backend_id,
+        prefer_executable=prefer_executable,
+        spec_patch=spec_patch,
+    )
     spec_id = make_deterministic_id("autospec", backend_id, action)
 
     return ExperimentSpecV2(
@@ -53,6 +79,7 @@ def _action_to_task_type(action: str, backend_id: str) -> Optional[str]:
         "run_ablation": "stable_lens_hsi_codesign",
         "enable_rollback": "stable_lens_hsi_codesign",
         "run_remote_validation": "stable_lens_hsi_codesign",
+        "probe_waveoptics_path": "lightweight_psf_probe",
         "stop_and_report": None,
         "downgrade_claim": None,
     }
@@ -63,35 +90,47 @@ def _build_payload(
     action: str,
     recommendation: "StrategyRecommendation",
     backend_id: str,
+    prefer_executable: bool = False,
+    spec_patch: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """Build experiment payload specific to the action."""
+    max_steps = 5 if prefer_executable else 20
+
     payload: dict[str, Any] = {}
 
     if action in ("retry_with_smaller_lr",):
         payload["optical_lr"] = 1e-6
         payload["recon_lr"] = 1e-3
-        payload["max_steps"] = 20
+        payload["max_steps"] = max_steps
         payload["rollback_on_loss_increase"] = True
         payload["candidate"] = "GeoLensCooke"
         payload["reconstructor"] = "tiny_cnn"
     elif action == "enable_rollback":
         payload["rollback_on_loss_increase"] = True
-        payload["max_steps"] = 10
+        payload["max_steps"] = max_steps
         payload["candidate"] = "GeoLensCooke"
         payload["reconstructor"] = "tiny_cnn"
     elif action == "switch_backend":
-        payload["max_steps"] = 10
+        payload["max_steps"] = max_steps
         payload["rollback_on_loss_increase"] = True
         payload["candidate"] = "GeoLensCooke"
         payload["reconstructor"] = "tiny_cnn"
     elif action == "run_ablation":
-        payload["max_steps"] = 10
+        payload["max_steps"] = max_steps
         payload["candidate"] = "GeoLensCooke"
         payload["reconstructor"] = "tiny_cnn"
     elif action == "run_remote_validation":
-        payload["max_steps"] = 10
+        payload["max_steps"] = 5 if prefer_executable else 10
         payload["candidate"] = "GeoLensCooke"
         payload["reconstructor"] = "tiny_cnn"
         payload["rollback_on_loss_increase"] = True
+    elif action == "probe_waveoptics_path":
+        payload["max_steps"] = 3
+        payload["candidate"] = "GeoLensCooke"
+        payload["reconstructor"] = "tiny_cnn"
+        payload["device"] = "cpu"
+
+    if spec_patch:
+        payload.update(spec_patch)
 
     return payload

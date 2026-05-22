@@ -49,6 +49,8 @@ class AutonomousLoopSpec(StrictModel):
     max_llm_proposals: int = 3
     require_claim_gate_for_llm: bool = True
     allow_llm_remote_plan: bool = False
+    # Phase 28: executable LLM planning
+    prefer_executable_actions: bool = False
     metadata: dict[str, Any] = {}
 
 

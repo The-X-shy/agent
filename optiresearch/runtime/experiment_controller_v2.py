@@ -25,6 +25,7 @@ class ExperimentSpecV2(StrictModel):
         "stable_lens_hsi_codesign",
         "psf_probe",
         "component_optimization",
+        "lightweight_psf_probe",
     ]
     backend_id: str
     execution_target: Literal["local", "remote"] = "local"
@@ -85,6 +86,7 @@ _TASK_REQUIRED_CEILING: dict[str, str] = {
     "stable_lens_hsi_codesign": "native_lens_simulation",
     "psf_probe": "deeplens_integration_smoke",
     "component_optimization": "native_component_optimization",
+    "lightweight_psf_probe": "deeplens_integration_smoke",
 }
 
 
@@ -355,6 +357,8 @@ class ExperimentControllerV2:
 
         if spec.task_type == "stable_lens_hsi_codesign":
             return self._run_stable_lens_hsi(spec, payload)
+        elif spec.task_type == "lightweight_psf_probe":
+            return self._run_lightweight_psf_probe(spec, payload)
         elif spec.task_type == "native_hsi_codesign":
             return self._run_native_hsi_codesign(spec, payload)
         elif spec.task_type == "native_hsi_reconstruction_codesign":
@@ -376,6 +380,20 @@ class ExperimentControllerV2:
                     }
                 ],
             )
+
+    def _run_lightweight_psf_probe(
+        self, spec: ExperimentSpecV2, payload: dict[str, Any]
+    ) -> ControllerResult:
+        """Run a lightweight PSF probe (no DeepLens dependency)."""
+        from optiresearch.runtime.lightweight_experiments import (
+            run_lightweight_psf_probe,
+        )
+        result = run_lightweight_psf_probe(
+            backend_id=spec.backend_id,
+            device=payload.get("device", "cpu"),
+        )
+        result.spec_id = spec.spec_id
+        return result
 
     def _run_stable_lens_hsi(
         self, spec: ExperimentSpecV2, payload: dict[str, Any]

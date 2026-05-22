@@ -116,6 +116,18 @@ def build_planner_prompt(context: dict[str, Any]) -> list[dict[str, str]]:
     user_prompt_parts.append("")
     user_prompt_parts.append(f"## Execution Mode: {context.get('execution_mode', 'dry_run')}")
     user_prompt_parts.append(f"## Max Proposals: {context.get('max_candidate_plans', 3)}")
+
+    if context.get("prefer_executable_actions"):
+        user_prompt_parts.append("")
+        user_prompt_parts.append(
+            "## EXECUTABLE ACTIONS REQUIRED\n"
+            "You are running in executable mode. Prefer executable actions "
+            "(retry_with_smaller_lr, enable_rollback, run_ablation, "
+            "probe_waveoptics_path) over stop_and_report. Only select "
+            "stop_and_report if ALL executable actions are blocked by "
+            "safety constraints or claim ceiling violations."
+        )
+
     user_prompt_parts.append("")
     user_prompt_parts.append("Generate candidate research proposals as JSON.")
 

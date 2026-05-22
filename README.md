@@ -38,6 +38,8 @@ Phase 26 增加 LLM-assisted autonomous research planner：引入 LLMPlanner 基
 
 Phase 27 增加真实 LLM 自主循环验证：使用真实 DeepSeek provider 端到端验证 LLM-assisted autonomous research loop。新增 provider 环境检查、真实 DeepSeek planner smoke test、planner 鲁棒性测试（10 种非法 LLM 输出场景）、trace 脱敏（API key / Authorization header / env value 三重脱敏）、LLM provider validation report。所有真实 LLM 测试需显式 opt-in（OPTIRESEARCH_ENABLE_REAL_LLM_TESTS=1）。
 
+Phase 28 增加 LLM 规划多轮本地实验执行：新增 executable LLM planning mode（引导 LLM 优先选择可执行策略）、pure-PyTorch FFT 轻量实验（无需 DeepLens）、多轮 feedback context（将上一轮标量指标压缩为 LLM 可读上下文）、enhanced trajectory report（6 个新 section）。支持 prefer_executable_actions 和 lightweight_psf_probe task type。真实 DeepSeek 多轮本地 loop 通过测试。
+
 ## 安装
 
 ```bash
