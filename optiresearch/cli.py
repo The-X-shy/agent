@@ -518,6 +518,14 @@ def main(argv: list[str] | None = None) -> None:
     export_plan = sub.add_parser("export-llm-planner-report", help="Export LLM planner report.")
     export_plan.add_argument("--planner-run-id", required=True)
 
+    # ===================== Phase 27 CLI =====================
+    check_prov = sub.add_parser("check-llm-provider", help="Check LLM provider availability.")
+    check_prov.add_argument("--provider", choices=["mock", "deepseek"], default="deepseek")
+
+    export_val = sub.add_parser("export-llm-provider-validation-report", help="Export LLM provider validation report.")
+    export_val.add_argument("--planner-run-id", required=True)
+    export_val.add_argument("--loop-id", required=True)
+
     # Update autonomous-loop-v2 with LLM planner options
     aloop_v2 = sub.add_parser("run-autonomous-research-loop-v2", help="Run closed-loop autonomous research loop (Phase 25+26).")
     aloop_v2.add_argument("--objective", required=True)
@@ -940,6 +948,10 @@ def main(argv: list[str] | None = None) -> None:
         _inspect_planner_trace(args.planner_run_id)
     elif args.command == "export-llm-planner-report":
         _export_llm_planner_report(args.planner_run_id)
+    elif args.command == "check-llm-provider":
+        _check_llm_provider(args)
+    elif args.command == "export-llm-provider-validation-report":
+        _export_llm_provider_validation_report(args)
 
 
 def _init_db() -> None:
@@ -2017,12 +2029,21 @@ def _plan_with_llm(args: Any) -> None:
         allowed_backends=_csv(args.allowed_backends),
         execution_mode=args.execution_mode,
     )
+    claim_gate_decision = None
+    if result.selected_proposal and result.selected_proposal.safe_wording:
+        claim_gate_decision = {
+            "original_claim": result.selected_proposal.proposed_claim,
+            "safe_wording": result.selected_proposal.safe_wording,
+            "downgraded": result.selected_proposal.proposed_claim != result.selected_proposal.safe_wording,
+        }
     print(_compact_json({
         "status": result.status,
         "provider": result.provider,
         "planner_run_id": result.planner_run_id,
         "proposals_count": len(result.proposals),
         "selected_proposal": result.selected_proposal.model_dump(mode="json") if result.selected_proposal else None,
+        "validation_errors": result.validation_errors,
+        "claim_gate_decision": claim_gate_decision,
         "fallback_used": result.status == "fallback_used",
         "fallback_strategy": result.fallback_strategy,
         "planner_trace_path": result.planner_trace_path,
@@ -2054,6 +2075,50 @@ def _export_llm_planner_report(planner_run_id: str) -> None:
     output_dir = Path("workspace/reports")
     output_dir.mkdir(parents=True, exist_ok=True)
     path = export_llm_planner_report(planner_run_id, output_dir)
+    print(f"markdown: {path}")
+
+
+# ── Phase 27 helper functions ──────────────────────────────────────
+
+
+def _check_llm_provider(args: Any) -> None:
+    from optiresearch.agents.llm_provider_check import check_llm_provider
+    result = check_llm_provider(args.provider)
+    print(_compact_json(result))
+    output_dir = Path("workspace/reports")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (output_dir / "llm_provider_check.json").write_text(
+        _compact_json(result), encoding="utf-8"
+    )
+    lines = [
+        "# LLM Provider Check",
+        "",
+        f"**Provider:** {result.get('provider', '-')}",
+        f"**Status:** {result.get('status', '-')}",
+        f"**Model:** {result.get('model', '-')}",
+        f"**Base URL:** {result.get('base_url', '-')}",
+        f"**Error Code:** {result.get('error_code', '-')}",
+        f"**Error Message:** {result.get('error_message', '-')}",
+        f"**Latency:** {result.get('latency_ms', '-')} ms",
+    ]
+    (output_dir / "llm_provider_check.md").write_text(
+        "\n".join(lines), encoding="utf-8"
+    )
+    print(f"json: {output_dir / 'llm_provider_check.json'}")
+    print(f"markdown: {output_dir / 'llm_provider_check.md'}")
+
+
+def _export_llm_provider_validation_report(args: Any) -> None:
+    from optiresearch.reports.llm_provider_validation_report import (
+        export_llm_provider_validation_report,
+    )
+    output_dir = Path("workspace/reports")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = export_llm_provider_validation_report(
+        planner_run_id=args.planner_run_id,
+        loop_id=args.loop_id,
+        output_dir=output_dir,
+    )
     print(f"markdown: {path}")
 
 

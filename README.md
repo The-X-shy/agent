@@ -36,6 +36,8 @@ Phase 25 增加闭环自主研究 Agent：将 Phase 24 组件组合为 autonomou
 
 Phase 26 增加 LLM-assisted autonomous research planner：引入 LLMPlanner 基于 ResearchMemoryV2、BackendRegistry 和 recent results 生成候选研究计划。支持 mock / deepseek provider。LLM proposal 经过 PlannerValidator (10 项安全检查)、ClaimGateV2 (8 种违规检测)、schema validation。保留 rule-based StrategyEngine 作为 fallback。支持 plan-with-llm CLI、planner trace 审计、LLM planner report。
 
+Phase 27 增加真实 LLM 自主循环验证：使用真实 DeepSeek provider 端到端验证 LLM-assisted autonomous research loop。新增 provider 环境检查、真实 DeepSeek planner smoke test、planner 鲁棒性测试（10 种非法 LLM 输出场景）、trace 脱敏（API key / Authorization header / env value 三重脱敏）、LLM provider validation report。所有真实 LLM 测试需显式 opt-in（OPTIRESEARCH_ENABLE_REAL_LLM_TESTS=1）。
+
 ## 安装
 
 ```bash
@@ -124,6 +126,22 @@ python -m optiresearch.cli check-remote-worker --worker-id windows_wsl
 python -m optiresearch.cli run-remote-deeplens-source-smoke --worker-id windows_wsl
 python -m optiresearch.cli run-remote-codesign --worker-id windows_wsl --objective "Run strict DeepLens-backed co-design on WSL D drive worker" --psf-source deeplens_parameterized --backend deeplens --fallback-policy fail --max-iterations 2
 python -m optiresearch.cli export-remote-execution-report --job-id <job_id>
+# Phase 24-27: Agentic Framework + Autonomous Loop + LLM Planner
+python -m optiresearch.cli list-optical-backends
+python -m optiresearch.cli inspect-optical-backend --backend-id deeplens_geolens_geometric
+python -m optiresearch.cli run-experiment-v2 --objective "test" --backend-id phase_to_fft_proxy --task-type stable_lens_hsi_codesign --execution-target local
+python -m optiresearch.cli recommend-next-strategy --latest-run-id <run_id> --backend-id deeplens_geolens_geometric
+python -m optiresearch.cli compile-research-memory-v2
+python -m optiresearch.cli query-research-memory-v2 --intent optimization_policy
+python -m optiresearch.cli check-claim --claim-text "improves optimization" --backend-id phase_to_fft_proxy
+python -m optiresearch.cli run-autonomous-research-loop-v2 --objective "test autonomous loop" --max-iterations 2 --execution-mode dry_run --planner-mode rule_based
+python -m optiresearch.cli plan-with-llm --objective "investigate differentiable wave-optics alternatives" --provider mock
+python -m optiresearch.cli list-planner-traces
+python -m optiresearch.cli inspect-planner-trace --planner-run-id <id>
+python -m optiresearch.cli export-llm-planner-report --planner-run-id <id>
+# Phase 27: Real LLM validation
+python -m optiresearch.cli check-llm-provider --provider deepseek
+python -m optiresearch.cli export-llm-provider-validation-report --planner-run-id <id> --loop-id <id>
 ```
 
 ## API

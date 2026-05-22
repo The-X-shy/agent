@@ -39,6 +39,14 @@ class LLMProvider:
     def available(self) -> bool:
         return False
 
+    def config_summary(self) -> dict[str, Any]:
+        return {
+            "provider": self.provider_name,
+            "available": self.available(),
+            "model": self.model,
+            "error_code": None if self.available() else "PROVIDER_NOT_AVAILABLE",
+        }
+
     def complete(self, messages: list[dict[str, str]], **kwargs: Any) -> LLMResponse:
         raise LLMProviderError("LLM_PROVIDER_NOT_IMPLEMENTED", "Provider does not implement complete().")
 

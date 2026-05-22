@@ -1,15 +1,58 @@
 """Planner trace and audit recording.
 
 Records the full lifecycle of an LLM planner run for audit,
-debugging, and reproducibility.
+debugging, and reproducibility. All outputs are sanitized to
+prevent credential leakage.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 from typing import Any
+
+from optiresearch.llm.audit import SECRET_ENV_KEYS
+
+
+def redact_api_keys(data: Any) -> Any:
+    """Recursively replace API key values with [REDACTED]."""
+    if isinstance(data, str):
+        result = data
+        for key in SECRET_ENV_KEYS:
+            value = os.getenv(key)
+            if value and value in result:
+                result = result.replace(value, "[REDACTED]")
+        return result
+    if isinstance(data, dict):
+        return {k: redact_api_keys(v) for k, v in data.items()}
+    if isinstance(data, list):
+        return [redact_api_keys(v) for v in data]
+    return data
+
+
+def redact_authorization_headers(data: dict[str, Any]) -> dict[str, Any]:
+    """Redact Authorization and API key headers from a dict."""
+    result: dict[str, Any] = {}
+    for key, value in data.items():
+        if key.lower() in ("authorization", "x-api-key", "api-key"):
+            result[key] = "[REDACTED]"
+        elif isinstance(value, dict):
+            result[key] = redact_authorization_headers(value)
+        elif isinstance(value, list):
+            result[key] = [
+                redact_authorization_headers(v) if isinstance(v, dict) else v
+                for v in value
+            ]
+        else:
+            result[key] = value
+    return result
+
+
+def redact_env_values(data: Any) -> Any:
+    """Redact known environment variable values from data."""
+    return redact_api_keys(data)
 
 
 class PlannerTrace:
@@ -40,13 +83,15 @@ def record_context(trace: PlannerTrace, context: dict[str, Any]) -> Path:
     sanitized = dict(context)
     sanitized.pop("api_key", None)
     sanitized.pop("DEEPSEEK_API_KEY", None)
+    sanitized = redact_api_keys(sanitized)
     return trace.add("context_summary.json", sanitized)
 
 
 def record_response(
     trace: PlannerTrace, raw_response: list[dict[str, Any]]
 ) -> Path:
-    return trace.add("raw_response.json", raw_response)
+    sanitized = redact_api_keys(raw_response)
+    return trace.add("raw_response.json", sanitized)
 
 
 def record_validation(
