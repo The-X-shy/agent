@@ -76,7 +76,10 @@ def _run_dry_run(
 
     for iteration in range(1, spec.max_iterations + 1):
         previous = iterations[-1].execution_result if iterations else {}
-        strategy_rec = _get_strategy_recommendation(previous, backend_id)
+        if spec.planner_mode in ("llm_assisted", "llm_first_with_rule_fallback"):
+            strategy_rec = _get_llm_strategy(spec, previous, backend_id)
+        else:
+            strategy_rec = _get_strategy_recommendation(previous, backend_id)
         proposed_spec = _compile_from_strategy(strategy_rec, backend_id)
 
         iter_result = AutonomousLoopIteration(
@@ -121,9 +124,12 @@ def _run_local(
         iter_start = time.time()
         it_obj = AutonomousLoopIteration(iteration_id=iteration)
 
-        # 1. Strategy
+        # 1. Strategy (Phase 26: supports LLM planner)
         previous = iterations[-1].execution_result if iterations else {}
-        strategy_rec = _get_strategy_recommendation(previous, backend_id)
+        if spec.planner_mode in ("llm_assisted", "llm_first_with_rule_fallback"):
+            strategy_rec = _get_llm_strategy(spec, previous, backend_id)
+        else:
+            strategy_rec = _get_strategy_recommendation(previous, backend_id)
         it_obj.strategy_recommendation = strategy_rec
         _save_json(iter_dir / "01_strategy.json", strategy_rec)
 
@@ -241,6 +247,56 @@ def _get_strategy_recommendation(
         "proposed_cli_commands": rec.proposed_cli_commands,
         "metadata": rec.metadata,
     }
+
+
+def _get_llm_strategy(
+    spec: "AutonomousLoopSpec",
+    latest_result: dict[str, Any],
+    backend_id: str,
+) -> dict[str, Any]:
+    """Get strategy via LLMPlanner with rule-based fallback."""
+    from optiresearch.agents.llm_planner import LLMPlanner
+
+    planner = LLMPlanner()
+    result = planner.plan(
+        objective=spec.objective,
+        provider_name=spec.llm_provider,
+        allowed_backends=spec.allowed_backends,
+        allowed_task_types=spec.allowed_task_types,
+        recent_results=[latest_result] if latest_result else [],
+        execution_mode=spec.execution_mode,
+        allow_remote=spec.allow_remote,
+        max_candidate_plans=spec.max_llm_proposals,
+    )
+
+    if result.status == "succeeded" and result.selected_proposal:
+        p = result.selected_proposal
+        return {
+            "recommended_action": p.recommended_action,
+            "rationale": p.rationale,
+            "expected_claim_gain": p.expected_claim_gain,
+            "risk_level": p.risk_level,
+            "required_evidence": [],
+            "proposed_cli_commands": [],
+            "metadata": {
+                "planner": "llm",
+                "provider": result.provider,
+                "planner_run_id": result.planner_run_id,
+                "proposal_id": p.proposal_id,
+                "hypothesis": p.hypothesis,
+            },
+        }
+
+    # Fallback: use StrategyEngine
+    fallback = _get_strategy_recommendation(latest_result, backend_id)
+    fallback["metadata"] = {
+        **fallback.get("metadata", {}),
+        "planner": "fallback",
+        "fallback_reason": result.status,
+        "fallback_error": result.error,
+        "planner_run_id": result.planner_run_id,
+    }
+    return fallback
 
 
 def _compile_from_strategy(

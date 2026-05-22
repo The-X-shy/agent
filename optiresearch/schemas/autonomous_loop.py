@@ -43,6 +43,12 @@ class AutonomousLoopSpec(StrictModel):
     ]
     memory_update: bool = True
     report: bool = True
+    # Phase 26: LLM planner integration
+    planner_mode: Literal["rule_based", "llm_assisted", "llm_first_with_rule_fallback"] = "rule_based"
+    llm_provider: str = "mock"
+    max_llm_proposals: int = 3
+    require_claim_gate_for_llm: bool = True
+    allow_llm_remote_plan: bool = False
     metadata: dict[str, Any] = {}
 
 

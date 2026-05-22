@@ -499,7 +499,27 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("export-agent-system-report", help="Export agent system report markdown.")
 
     # ===================== Phase 25 CLI =====================
-    aloop_v2 = sub.add_parser("run-autonomous-research-loop-v2", help="Run closed-loop autonomous research loop (Phase 25).")
+    aloop_v2_report = sub.add_parser("export-autonomous-loop-v2-report", help="Export Phase 25 autonomous loop report.")
+    aloop_v2_report.add_argument("--loop-id", required=True)
+
+    # ===================== Phase 26 CLI =====================
+    plan_llm = sub.add_parser("plan-with-llm", help="Generate research proposals using LLM planner.")
+    plan_llm.add_argument("--objective", required=True)
+    plan_llm.add_argument("--provider", choices=["mock", "deepseek"], default="mock")
+    plan_llm.add_argument("--allowed-backends", default="phase_to_fft_proxy,deeplens_geolens_geometric,local_synthetic_hsi")
+    plan_llm.add_argument("--execution-mode", choices=["dry_run", "local", "remote_opt_in"], default="dry_run")
+    plan_llm.add_argument("--remote-job-id")
+
+    sub.add_parser("list-planner-traces", help="List saved planner traces.")
+
+    inspect_trace = sub.add_parser("inspect-planner-trace", help="Inspect a planner trace.")
+    inspect_trace.add_argument("--planner-run-id", required=True)
+
+    export_plan = sub.add_parser("export-llm-planner-report", help="Export LLM planner report.")
+    export_plan.add_argument("--planner-run-id", required=True)
+
+    # Update autonomous-loop-v2 with LLM planner options
+    aloop_v2 = sub.add_parser("run-autonomous-research-loop-v2", help="Run closed-loop autonomous research loop (Phase 25+26).")
     aloop_v2.add_argument("--objective", required=True)
     aloop_v2.add_argument("--max-iterations", type=int, default=3)
     aloop_v2.add_argument("--execution-mode", choices=["dry_run", "local", "remote_opt_in"], default="dry_run")
@@ -510,9 +530,9 @@ def main(argv: list[str] | None = None) -> None:
     aloop_v2.add_argument("--strict-claim-gate", action="store_true", default=True)
     aloop_v2.add_argument("--seed-result-path")
     aloop_v2.add_argument("--remote-job-id")
-
-    aloop_v2_report = sub.add_parser("export-autonomous-loop-v2-report", help="Export Phase 25 autonomous loop report.")
-    aloop_v2_report.add_argument("--loop-id", required=True)
+    # Phase 26 LLM options
+    aloop_v2.add_argument("--planner-mode", choices=["rule_based", "llm_assisted", "llm_first_with_rule_fallback"], default="rule_based")
+    aloop_v2.add_argument("--llm-provider", choices=["mock", "deepseek"], default="mock")
 
     args = parser.parse_args(argv)
     if args.command == "init-db":
@@ -912,6 +932,14 @@ def main(argv: list[str] | None = None) -> None:
         _run_autonomous_research_loop_v2(args)
     elif args.command == "export-autonomous-loop-v2-report":
         _export_autonomous_loop_v2_report(args.loop_id)
+    elif args.command == "plan-with-llm":
+        _plan_with_llm(args)
+    elif args.command == "list-planner-traces":
+        _list_planner_traces()
+    elif args.command == "inspect-planner-trace":
+        _inspect_planner_trace(args.planner_run_id)
+    elif args.command == "export-llm-planner-report":
+        _export_llm_planner_report(args.planner_run_id)
 
 
 def _init_db() -> None:
@@ -1977,6 +2005,58 @@ def _print_remote_payload(payload: dict[str, Any]) -> None:
 
 
 
+# ── Phase 26 helper functions ──────────────────────────────────────
+
+
+def _plan_with_llm(args: Any) -> None:
+    from optiresearch.agents.llm_planner import LLMPlanner
+    planner = LLMPlanner()
+    result = planner.plan(
+        objective=args.objective,
+        provider_name=args.provider,
+        allowed_backends=_csv(args.allowed_backends),
+        execution_mode=args.execution_mode,
+    )
+    print(_compact_json({
+        "status": result.status,
+        "provider": result.provider,
+        "planner_run_id": result.planner_run_id,
+        "proposals_count": len(result.proposals),
+        "selected_proposal": result.selected_proposal.model_dump(mode="json") if result.selected_proposal else None,
+        "fallback_used": result.status == "fallback_used",
+        "fallback_strategy": result.fallback_strategy,
+        "planner_trace_path": result.planner_trace_path,
+    }))
+
+
+def _list_planner_traces() -> None:
+    from optiresearch.agents.planner_trace import list_planner_traces
+    for t in list_planner_traces():
+        print(f"{t['run_id']}\tindex={t['has_index']}\t{t['path']}")
+
+
+def _inspect_planner_trace(planner_run_id: str) -> None:
+    from optiresearch.agents.planner_trace import inspect_planner_trace
+    info = inspect_planner_trace(planner_run_id)
+    if info is None:
+        print(f"Trace not found: {planner_run_id}")
+        return
+    print(f"run_id: {info['run_id']}")
+    for name, data in info.get("files", {}).items():
+        if isinstance(data, (dict, list)):
+            print(f"  {name}: {len(data)} entries")
+        else:
+            print(f"  {name}: {str(data)[:100]}")
+
+
+def _export_llm_planner_report(planner_run_id: str) -> None:
+    from optiresearch.reports.llm_planner_report import export_llm_planner_report
+    output_dir = Path("workspace/reports")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = export_llm_planner_report(planner_run_id, output_dir)
+    print(f"markdown: {path}")
+
+
 # ── Phase 25 helper functions ──────────────────────────────────────
 
 
@@ -1994,6 +2074,9 @@ def _run_autonomous_research_loop_v2(args: Any) -> None:
         remote_worker_id=getattr(args, "remote_worker_id", None),
         strict_claim_gate=getattr(args, "strict_claim_gate", True),
         seed_result_path=getattr(args, "seed_result_path", None),
+        # Phase 26 LLM options
+        planner_mode=getattr(args, "planner_mode", "rule_based"),
+        llm_provider=getattr(args, "llm_provider", "mock"),
     )
     result = run_autonomous_research_loop(spec)
     print(_compact_json({

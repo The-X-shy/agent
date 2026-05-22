@@ -34,6 +34,8 @@ Phase 24 升级为 Agentic Differentiable Optics Framework：统一 backend regi
 
 Phase 25 增加闭环自主研究 Agent：将 Phase 24 组件组合为 autonomous research loop (strategy → plan → execute → diagnose → claim gate → memory → decide)。支持 dry_run / local / remote_opt_in 三种执行模式，默认 dry_run，remote 需显式 opt-in。新增 Strategy-to-Spec compiler、Trajectory Evaluator、Autonomous Loop Report、远程安全 guard、Claim Gate 硬强制执行。
 
+Phase 26 增加 LLM-assisted autonomous research planner：引入 LLMPlanner 基于 ResearchMemoryV2、BackendRegistry 和 recent results 生成候选研究计划。支持 mock / deepseek provider。LLM proposal 经过 PlannerValidator (10 项安全检查)、ClaimGateV2 (8 种违规检测)、schema validation。保留 rule-based StrategyEngine 作为 fallback。支持 plan-with-llm CLI、planner trace 审计、LLM planner report。
+
 ## 安装
 
 ```bash
