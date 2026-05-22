@@ -22,11 +22,15 @@ class TrajectoryEvaluation(StrictModel):
     metric_trajectory: list[float] = []
     stop_reason: str = ""
     evaluation: str = ""
+    claim_downgraded_count: int = 0
+    min_iterations_satisfied: bool = False
 
 
 def evaluate_trajectory(
     iterations: list["AutonomousLoopIteration"],
     spec: "AutonomousLoopSpec",
+    min_iterations_before_stop: int = 2,
+    no_improvement_patience: int = 2,
 ) -> TrajectoryEvaluation:
     """Evaluate trajectory across iterations to determine progress.
 
@@ -36,9 +40,17 @@ def evaluate_trajectory(
     3. claim_ceiling_reached — all iterations hit same claim ceiling
     4. best_iteration — index of best metric value
 
+    Phase 29: Uses min_iterations_before_stop to prevent premature
+    no_improvement stops, and no_improvement_patience to require
+    consecutive non-improving iterations before stopping.
+
     Args:
         iterations: List of completed AutonomousLoopIteration objects.
         spec: The AutonomousLoopSpec driving the loop.
+        min_iterations_before_stop: Minimum iterations before any stop
+            reason can be emitted (except repeated_failure, ceiling).
+        no_improvement_patience: Consecutive no-improvement iterations
+            required before emitting no_improvement stop.
 
     Returns:
         TrajectoryEvaluation with stop reason and metrics.
@@ -53,6 +65,7 @@ def evaluate_trajectory(
     consecutive_failures = 0
     max_consecutive_failures = 0
     failure_count = 0
+    claim_downgraded_count = 0
 
     for it in iterations:
         result = it.execution_result or {}
@@ -66,6 +79,9 @@ def evaluate_trajectory(
             failure_count += 1
             consecutive_failures += 1
             max_consecutive_failures = max(max_consecutive_failures, consecutive_failures)
+        elif status == "claim_downgraded":
+            claim_downgraded_count += 1
+            consecutive_failures = 0
         else:
             consecutive_failures = 0
 
@@ -83,6 +99,19 @@ def evaluate_trajectory(
             claim_ceilings.add(str(ceiling))
     ceiling_reached = len(claim_ceilings) == 1 and len(iterations) >= 2
 
+    # Count consecutive no-improvement iterations from most recent
+    no_improvement_streak = 0
+    best_so_far = float("inf")
+    for val in trajectory:
+        if val > 0.0:
+            if val >= best_so_far:
+                no_improvement_streak += 1
+            else:
+                no_improvement_streak = 0
+                best_so_far = val
+
+    min_iter_satisfied = len(iterations) >= min_iterations_before_stop
+
     stop_reason = ""
     if ceiling_reached:
         stop_reason = "claim_ceiling_reached"
@@ -90,7 +119,11 @@ def evaluate_trajectory(
         stop_reason = "repeated_failure"
     elif len(iterations) >= spec.max_iterations:
         stop_reason = "max_iterations_reached"
-    elif not improvement:
+    elif (
+        min_iter_satisfied
+        and not improvement
+        and no_improvement_streak >= no_improvement_patience
+    ):
         stop_reason = "no_improvement"
 
     return TrajectoryEvaluation(
@@ -104,6 +137,8 @@ def evaluate_trajectory(
         evaluation=_build_evaluation_text(
             improvement, repeated_failure, ceiling_reached, best_idx, failure_count
         ),
+        claim_downgraded_count=claim_downgraded_count,
+        min_iterations_satisfied=min_iter_satisfied,
     )
 
 
