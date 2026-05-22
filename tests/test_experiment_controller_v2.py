@@ -69,8 +69,6 @@ def test_controller_plan_experiment():
 
 
 def test_controller_collect_artifacts(tmp_path):
-    import os as _os
-    _os.chdir("/Users/lilin/Desktop/agent")
     ctrl = ExperimentControllerV2()
     artifacts = ctrl.collect_artifacts("nonexistent_run_id")
     assert isinstance(artifacts, list)
