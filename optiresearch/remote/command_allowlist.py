@@ -83,6 +83,18 @@ ALLOWED_CLI_COMMANDS: dict[str, set[str]] = {
         "--worker-id",
         "--remote-job-id",
     },
+    "run-autonomous-research-loop-v2": {
+        "--objective",
+        "--max-iterations",
+        "--execution-mode",
+        "--allowed-backends",
+        "--allowed-task-types",
+        "--allow-remote",
+        "--remote-worker-id",
+        "--strict-claim-gate",
+        "--seed-result-path",
+        "--remote-job-id",
+    },
     "inspect-deeplens-native-optimization": {
         "--remote-job-id",
     },

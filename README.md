@@ -32,6 +32,8 @@ Phase 18–23 增加原生可微优化路径：DeepLens surface 原生优化 pro
 
 Phase 24 升级为 Agentic Differentiable Optics Framework：统一 backend registry (8 backends)、ExperimentControllerV2 (统一实验入口)、StrategyEngine (自动策略推荐)、ResearchMemoryV2 (Phase 18-23 经验沉淀)、ClaimGateV2 (声明预检 8 种违规类型)、Optical Objective Library (可组合 loss)、Autograd Auditor (自动求导链路检测)、Agent System Report (系统报告生成)。
 
+Phase 25 增加闭环自主研究 Agent：将 Phase 24 组件组合为 autonomous research loop (strategy → plan → execute → diagnose → claim gate → memory → decide)。支持 dry_run / local / remote_opt_in 三种执行模式，默认 dry_run，remote 需显式 opt-in。新增 Strategy-to-Spec compiler、Trajectory Evaluator、Autonomous Loop Report、远程安全 guard、Claim Gate 硬强制执行。
+
 ## 安装
 
 ```bash

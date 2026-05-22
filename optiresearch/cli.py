@@ -498,6 +498,22 @@ def main(argv: list[str] | None = None) -> None:
 
     sub.add_parser("export-agent-system-report", help="Export agent system report markdown.")
 
+    # ===================== Phase 25 CLI =====================
+    aloop_v2 = sub.add_parser("run-autonomous-research-loop-v2", help="Run closed-loop autonomous research loop (Phase 25).")
+    aloop_v2.add_argument("--objective", required=True)
+    aloop_v2.add_argument("--max-iterations", type=int, default=3)
+    aloop_v2.add_argument("--execution-mode", choices=["dry_run", "local", "remote_opt_in"], default="dry_run")
+    aloop_v2.add_argument("--allowed-backends", default="phase_to_fft_proxy,deeplens_geolens_geometric,local_synthetic_hsi")
+    aloop_v2.add_argument("--allowed-task-types", default="stable_lens_hsi_codesign,native_hsi_codesign")
+    aloop_v2.add_argument("--allow-remote", action="store_true")
+    aloop_v2.add_argument("--remote-worker-id")
+    aloop_v2.add_argument("--strict-claim-gate", action="store_true", default=True)
+    aloop_v2.add_argument("--seed-result-path")
+    aloop_v2.add_argument("--remote-job-id")
+
+    aloop_v2_report = sub.add_parser("export-autonomous-loop-v2-report", help="Export Phase 25 autonomous loop report.")
+    aloop_v2_report.add_argument("--loop-id", required=True)
+
     args = parser.parse_args(argv)
     if args.command == "init-db":
         _init_db()
@@ -892,6 +908,10 @@ def main(argv: list[str] | None = None) -> None:
         _audit_autograd_graph(args)
     elif args.command == "export-agent-system-report":
         _export_agent_system_report()
+    elif args.command == "run-autonomous-research-loop-v2":
+        _run_autonomous_research_loop_v2(args)
+    elif args.command == "export-autonomous-loop-v2-report":
+        _export_autonomous_loop_v2_report(args.loop_id)
 
 
 def _init_db() -> None:
@@ -1955,6 +1975,72 @@ def _print_remote_payload(payload: dict[str, Any]) -> None:
             print(f"claim: {first_claim.get('status')} {first_claim.get('claim_id')}")
 
 
+
+
+# ── Phase 25 helper functions ──────────────────────────────────────
+
+
+def _run_autonomous_research_loop_v2(args: Any) -> None:
+    from optiresearch.schemas.autonomous_loop import AutonomousLoopSpec
+    from optiresearch.runtime.autonomous_research_loop import run_autonomous_research_loop
+
+    spec = AutonomousLoopSpec(
+        objective=args.objective,
+        max_iterations=args.max_iterations,
+        execution_mode=args.execution_mode,
+        allowed_backends=_csv(args.allowed_backends),
+        allowed_task_types=_csv(args.allowed_task_types),
+        allow_remote=getattr(args, "allow_remote", False),
+        remote_worker_id=getattr(args, "remote_worker_id", None),
+        strict_claim_gate=getattr(args, "strict_claim_gate", True),
+        seed_result_path=getattr(args, "seed_result_path", None),
+    )
+    result = run_autonomous_research_loop(spec)
+    print(_compact_json({
+        "loop_id": result.loop_id,
+        "status": result.status,
+        "objective": result.objective,
+        "total_iterations": len(result.iterations),
+        "iterations": [
+            {
+                "id": it.iteration_id,
+                "action": it.strategy_recommendation.get("recommended_action"),
+                "exec_status": it.execution_result.get("status"),
+                "next_action": it.next_action,
+                "stop_reason": it.stop_reason,
+            }
+            for it in result.iterations
+        ],
+        "final_supported_claims": result.final_supported_claims,
+        "final_unsupported_claims": result.final_unsupported_claims,
+        "trajectory_report_path": result.trajectory_report_path,
+    }))
+    if getattr(args, "remote_job_id", None):
+        from optiresearch.runtime.remote_jobs import export_remote_job_outputs
+        output_root = Path("workspace/autonomous_loops_v2") / result.loop_id
+        export_remote_job_outputs(
+            args.remote_job_id,
+            "autonomous_research_loop_v2",
+            {"loop_id": result.loop_id, "status": result.status},
+            [output_root],
+            {"job_type": "autonomous_research_loop_v2"},
+        )
+
+
+def _export_autonomous_loop_v2_report(loop_id: str) -> None:
+    from optiresearch.schemas.autonomous_loop import AutonomousLoopResult
+    from optiresearch.reports.autonomous_loop_report import export_autonomous_loop_report
+
+    result_path = Path("workspace/autonomous_loops_v2") / loop_id / "loop_result.json"
+    if not result_path.exists():
+        print(f"Loop result not found: {result_path}")
+        return
+    result = AutonomousLoopResult.model_validate_json(
+        result_path.read_text(encoding="utf-8")
+    )
+    output_dir = result_path.parent
+    path = export_autonomous_loop_report(result, output_dir)
+    print(f"markdown: {path}")
 
 
 # ── Phase 24 helper functions ──────────────────────────────────────
