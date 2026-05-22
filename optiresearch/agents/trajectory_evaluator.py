@@ -57,7 +57,7 @@ def evaluate_trajectory(
     for it in iterations:
         result = it.execution_result or {}
         status = result.get("status", "")
-        metrics = result.get("result_payload", it.metrics_snapshot)
+        metrics = result.get("result_payload") or it.metrics_snapshot or {}
 
         metric_val = _extract_primary_metric(metrics)
         trajectory.append(metric_val if metric_val is not None else 0.0)
@@ -107,12 +107,14 @@ def evaluate_trajectory(
     )
 
 
-def _extract_primary_metric(payload: dict[str, Any]) -> Optional[float]:
+def _extract_primary_metric(payload: Optional[dict[str, Any]]) -> Optional[float]:
     """Extract a primary scalar metric from a result payload.
 
     Prefers reconstruction_loss_after (lower is better), then loss_after,
     then mse_after.
     """
+    if payload is None:
+        return None
     for key in ("reconstruction_loss_after", "loss_after", "mse_after"):
         val = payload.get(key)
         if val is not None:

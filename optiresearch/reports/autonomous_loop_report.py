@@ -133,7 +133,7 @@ def _extract_trajectory(result: Any) -> list[float]:
     for it in result.iterations:
         payload = {}
         if it.execution_result:
-            payload = it.execution_result.get("result_payload", {})
+            payload = it.execution_result.get("result_payload") or {}
         val = payload.get(
             "reconstruction_loss_after",
             payload.get("loss_after", None),

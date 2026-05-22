@@ -172,7 +172,7 @@ def _run_local(
             it_obj.memory_updates = mem_updates
             _save_json(iter_dir / "06_memory.json", mem_updates)
 
-        it_obj.metrics_snapshot = execution.get("result_payload", {})
+        it_obj.metrics_snapshot = execution.get("result_payload") or {}
 
         # 8. Decide — continue or stop
         traj_eval = evaluate_trajectory(iterations + [it_obj], spec)
