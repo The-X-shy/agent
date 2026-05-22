@@ -2,6 +2,11 @@
 
 Phase 17 adds a Windows WSL worker path for real DeepLens source execution. The Mac process remains the controller, memory store, evidence gate, and report writer. The WSL process runs allowed OptiResearch CLI jobs only.
 
+Phase 24 adds `ExperimentControllerV2.run_remote()` which delegates to the remote worker
+system with backend capability validation and claim ceiling enforcement.
+
+See [experiment_controller_v2.md](experiment_controller_v2.md) for the unified experiment entry point.
+
 ## Worker Layout
 
 ```text

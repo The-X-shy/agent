@@ -459,6 +459,45 @@ def main(argv: list[str] | None = None) -> None:
     remote_report = sub.add_parser("export-remote-execution-report", help="Export a remote execution report.")
     remote_report.add_argument("--job-id", required=True)
 
+    # ===================== Phase 24 CLI =====================
+    sub.add_parser("list-optical-backends", help="List all registered optical backends.")
+    inspect_backend = sub.add_parser("inspect-optical-backend", help="Inspect a specific optical backend.")
+    inspect_backend.add_argument("--backend-id", required=True)
+
+    run_v2 = sub.add_parser("run-experiment-v2", help="Run experiment via ExperimentControllerV2.")
+    run_v2.add_argument("--backend-id", required=True)
+    run_v2.add_argument("--task-type", required=True, choices=[
+        "native_optimization_probe", "native_hsi_codesign",
+        "native_hsi_reconstruction_codesign", "native_waveoptics_codesign",
+        "stable_lens_hsi_codesign",
+    ])
+    run_v2.add_argument("--execution-target", choices=["local", "remote"], default="local")
+    run_v2.add_argument("--worker-id")
+    run_v2.add_argument("--spec-payload-json", default="{}")
+
+    recommend_strategy = sub.add_parser("recommend-next-strategy", help="Recommend next action via StrategyEngine.")
+    recommend_strategy.add_argument("--backend-id", required=True)
+    recommend_strategy.add_argument("--latest-result-json", required=True)
+    recommend_strategy.add_argument("--objective", default="improve native lens simulation HSI co-design")
+
+    sub.add_parser("compile-research-memory-v2", help="Compile ResearchMemoryV2 snapshot.")
+    query_mem_v2 = sub.add_parser("query-research-memory-v2", help="Query ResearchMemoryV2.")
+    query_mem_v2.add_argument("--memory-type")
+    query_mem_v2.add_argument("--tag")
+    query_mem_v2.add_argument("--content-contains")
+
+    check_claim = sub.add_parser("check-claim", help="Check a claim through ClaimGateV2.")
+    check_claim.add_argument("--claim-text", required=True)
+    check_claim.add_argument("--backend-id", required=True)
+
+    sub.add_parser("list-objective-profiles", help="List registered objective profiles.")
+    inspect_profile = sub.add_parser("inspect-objective-profile", help="Inspect an objective profile.")
+    inspect_profile.add_argument("--profile-id", required=True)
+
+    sub.add_parser("audit-autograd-graph", help="Audit autograd graph for gradient flow breaks.")
+
+    sub.add_parser("export-agent-system-report", help="Export agent system report markdown.")
+
     args = parser.parse_args(argv)
     if args.command == "init-db":
         _init_db()
@@ -831,6 +870,28 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "export-remote-execution-report":
         path = export_remote_execution_report(args.job_id)
         print(f"markdown: {path}")
+    elif args.command == "list-optical-backends":
+        _list_optical_backends()
+    elif args.command == "inspect-optical-backend":
+        _inspect_optical_backend(args.backend_id)
+    elif args.command == "run-experiment-v2":
+        _run_experiment_v2(args)
+    elif args.command == "recommend-next-strategy":
+        _recommend_next_strategy(args)
+    elif args.command == "compile-research-memory-v2":
+        _compile_research_memory_v2()
+    elif args.command == "query-research-memory-v2":
+        _query_research_memory_v2(args)
+    elif args.command == "check-claim":
+        _check_claim_v2(args)
+    elif args.command == "list-objective-profiles":
+        _list_objective_profiles()
+    elif args.command == "inspect-objective-profile":
+        _inspect_objective_profile(args.profile_id)
+    elif args.command == "audit-autograd-graph":
+        _audit_autograd_graph(args)
+    elif args.command == "export-agent-system-report":
+        _export_agent_system_report()
 
 
 def _init_db() -> None:
@@ -1892,6 +1953,177 @@ def _print_remote_payload(payload: dict[str, Any]) -> None:
         if ingestion.get("claims"):
             first_claim = ingestion["claims"][0]
             print(f"claim: {first_claim.get('status')} {first_claim.get('claim_id')}")
+
+
+
+
+# ── Phase 24 helper functions ──────────────────────────────────────
+
+def _list_optical_backends() -> None:
+    from optiresearch.backends.registry import list_backends, export_backend_registry_markdown, export_backend_registry_json
+    from pathlib import Path
+    import os as _os
+    for b in list_backends():
+        print(f"{b.backend_id}\t{b.backend_type}\t{b.differentiability_level}\t{', '.join(b.recommended_use_cases[:2])}")
+    root = Path(_os.getenv("OPTIRESEARCH_REPORT_ROOT", "./workspace/reports"))
+    root.mkdir(parents=True, exist_ok=True)
+    export_backend_registry_markdown(root / "backend_registry.md")
+    export_backend_registry_json(root / "backend_registry.json")
+    print(f"markdown: {root / 'backend_registry.md'}")
+    print(f"json: {root / 'backend_registry.json'}")
+
+
+def _inspect_optical_backend(backend_id: str) -> None:
+    from optiresearch.backends.registry import get_backend
+    backend = get_backend(backend_id)
+    if backend is None:
+        print(f"Unknown backend: {backend_id}")
+        return
+    print(f"backend_id: {backend.backend_id}")
+    print(f"label: {backend.label}")
+    print(f"type: {backend.backend_type}")
+    print(f"differentiability: {backend.differentiability_level}")
+    print(f"claim_ceiling: {backend.claim_ceiling}")
+    print(f"supports_native_optimization: {backend.supports_native_optimization}")
+    print(f"supports_full_waveoptics: {backend.supports_full_waveoptics}")
+    print(f"supports_remote_execution: {backend.supports_remote_execution}")
+    if backend.known_failure_modes:
+        print("known_failure_modes:")
+        for fm in backend.known_failure_modes:
+            print(f"  - {fm}")
+    if backend.recommended_use_cases:
+        print("recommended_use_cases:")
+        for uc in backend.recommended_use_cases:
+            print(f"  - {uc}")
+
+
+def _run_experiment_v2(args: Any) -> None:
+    import json as _json
+    from optiresearch.runtime.experiment_controller_v2 import ExperimentControllerV2, ExperimentSpecV2
+    from optiresearch.memory.schemas import make_deterministic_id
+
+    payload = _json.loads(args.spec_payload_json)
+    spec = ExperimentSpecV2(
+        spec_id=make_deterministic_id("v2", args.backend_id, args.task_type),
+        task_type=args.task_type,
+        backend_id=args.backend_id,
+        execution_target=args.execution_target,
+        worker_id=args.worker_id,
+        spec_payload=payload,
+    )
+    ctrl = ExperimentControllerV2()
+    if spec.execution_target == "remote":
+        result = ctrl.run_remote(spec)
+    else:
+        result = ctrl.run_local(spec)
+    print(_compact_json(result.model_dump(mode="json")))
+
+
+def _recommend_next_strategy(args: Any) -> None:
+    import json as _json
+    from optiresearch.agents.strategy_engine import StrategyEngine
+
+    latest = _json.loads(args.latest_result_json)
+    engine = StrategyEngine()
+    rec = engine.recommend(latest, args.backend_id)
+    print(_json.dumps({
+        "recommended_action": rec.recommended_action,
+        "rationale": rec.rationale,
+        "expected_claim_gain": rec.expected_claim_gain,
+        "risk_level": rec.risk_level,
+        "required_evidence": rec.required_evidence,
+        "proposed_cli_commands": rec.proposed_cli_commands,
+    }, indent=2, ensure_ascii=False))
+
+
+def _compile_research_memory_v2() -> None:
+    from optiresearch.memory.research_memory_v2 import ResearchMemoryV2
+    from pathlib import Path
+    import os as _os
+    mem = ResearchMemoryV2()
+    snapshot = mem.compile_snapshot()
+    total = sum(len(v) for v in snapshot.values())
+    root = Path(_os.getenv("OPTIRESEARCH_REPORT_ROOT", "./workspace/reports"))
+    root.mkdir(parents=True, exist_ok=True)
+    path = mem.export_markdown(root / "research_memory_v2.md")
+    print(f"Total entries: {total}")
+    for mtype, entries in sorted(snapshot.items()):
+        print(f"  {mtype}: {len(entries)} entries")
+    print(f"markdown: {path}")
+
+
+def _query_research_memory_v2(args: Any) -> None:
+    from optiresearch.memory.research_memory_v2 import ResearchMemoryV2
+    mem = ResearchMemoryV2()
+    results = mem.query(
+        memory_type=args.memory_type if args.memory_type else None,
+        tags=[args.tag] if args.tag else None,
+        content_contains=args.content_contains,
+    )
+    for entry in results:
+        print(f"[{entry.memory_type}] {entry.content[:150]} (confidence={entry.confidence:.2f})")
+    if not results:
+        print("No matching entries found.")
+
+
+def _check_claim_v2(args: Any) -> None:
+    import json as _json
+    from optiresearch.memory.claim_gate_v2 import ClaimGateV2
+    gate = ClaimGateV2()
+    decision = gate.check_claim(args.claim_text, args.backend_id)
+    print(_json.dumps({
+        "decision": decision.decision,
+        "max_allowed_claim": decision.max_allowed_claim,
+        "violation_reason": decision.violation_reason,
+        "violation_type": decision.violation_type,
+        "required_additional_evidence": decision.required_additional_evidence,
+        "safe_wording": decision.safe_wording,
+        "applicable_caveats": decision.applicable_caveats,
+    }, indent=2, ensure_ascii=False))
+
+
+def _list_objective_profiles() -> None:
+    from optiresearch.objectives.optical_objectives import list_objective_profiles
+    for p in list_objective_profiles():
+        print(f"{p.profile_id}\t{', '.join(p.losses)}\tcompatible: {', '.join(p.compatible_backends)}")
+
+
+def _inspect_objective_profile(profile_id: str) -> None:
+    import json as _json
+    from optiresearch.objectives.optical_objectives import get_objective_profile
+    p = get_objective_profile(profile_id)
+    if p:
+        print(_json.dumps(p.model_dump(mode="json"), indent=2, ensure_ascii=False))
+    else:
+        print(f"Unknown profile: {profile_id}")
+
+
+def _audit_autograd_graph(args: Any) -> None:
+    import json as _json
+    from optiresearch.diagnostics.autograd_auditor import audit_autograd_graph
+    import torch
+    x = torch.tensor([1.0], requires_grad=True)
+    y = x * 2
+    loss = (y - 3.0) ** 2
+    loss.backward()
+    report = audit_autograd_graph(loss, {"x": x})
+    print(_json.dumps({
+        "loss_requires_grad": report.loss_requires_grad,
+        "parameter_count": report.parameter_count,
+        "parameters_with_grad": report.parameters_with_grad,
+        "gradient_norms": report.gradient_norms,
+        "zero_grad_parameters": report.zero_grad_parameters,
+        "missing_grad_parameters": report.missing_grad_parameters,
+        "suspected_breaks": report.suspected_breaks,
+        "verdict": report.verdict,
+        "recommendations": report.recommendations,
+    }, indent=2, ensure_ascii=False, default=str))
+
+
+def _export_agent_system_report() -> None:
+    from optiresearch.reports.agent_system_report import export_agent_system_report
+    path = export_agent_system_report()
+    print(f"markdown: {path}")
 
 
 def _csv(value: str) -> list[str]:

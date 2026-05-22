@@ -28,6 +28,10 @@ Phase 13 冻结 paper-ready benchmark、生成 10 张论文表格、建立 claim
 
 Phase 17 增加 remote WSL worker execution：Mac 端负责 controller、memory、evidence、report，WSL 端负责真实 DeepLens source smoke 与严格 DeepLens-backed co-design。远程命令必须经过 allowlist，失败返回结构化错误，fallback 不会写成 DeepLens-backed claim。
 
+Phase 18–23 增加原生可微优化路径：DeepLens surface 原生优化 probe (Phase 19)、可微 HSI proxy co-design (Phase 20)、完整可微 HSI reconstruction co-design (Phase 21)、wave-optics native path probe (Phase 22)、stable native lens HSI co-design with rollback (Phase 23)。
+
+Phase 24 升级为 Agentic Differentiable Optics Framework：统一 backend registry (8 backends)、ExperimentControllerV2 (统一实验入口)、StrategyEngine (自动策略推荐)、ResearchMemoryV2 (Phase 18-23 经验沉淀)、ClaimGateV2 (声明预检 8 种违规类型)、Optical Objective Library (可组合 loss)、Autograd Auditor (自动求导链路检测)、Agent System Report (系统报告生成)。
+
 ## 安装
 
 ```bash
