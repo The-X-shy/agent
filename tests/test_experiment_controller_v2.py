@@ -28,9 +28,11 @@ def test_controller_downgrades_insufficient_backend():
         backend_id="deeplens_geolens_geometric",
     )
     result = ctrl.run_local(spec)
-    assert result.status == "claim_downgraded"
-    assert result.downgraded_from == "native_waveoptics"
-    assert result.downgraded_to == "native_lens_simulation"
+    # Phase 29: unsupported tasks return "unsupported" instead of
+    # "claim_downgraded" — waveoptics cannot run on geometric at all.
+    assert result.status == "unsupported"
+    assert len(result.errors) >= 1
+    assert "unsupported_task_for_backend" in result.errors[0].get("type", "")
 
 
 def test_controller_valid_backend_passes_preconditions():

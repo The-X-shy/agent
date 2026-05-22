@@ -40,6 +40,8 @@ Phase 27 增加真实 LLM 自主循环验证：使用真实 DeepSeek provider �
 
 Phase 28 增加 LLM 规划多轮本地实验执行：新增 executable LLM planning mode（引导 LLM 优先选择可执行策略）、pure-PyTorch FFT 轻量实验（无需 DeepLens）、多轮 feedback context（将上一轮标量指标压缩为 LLM 可读上下文）、enhanced trajectory report（6 个新 section）。支持 prefer_executable_actions 和 lightweight_psf_probe task type。真实 DeepSeek 多轮本地 loop 通过测试。
 
+Phase 29 修复 claim-downgrade 早停并启用多轮 metric trajectory：trajectory evaluator 新增 min_iterations_before_stop 和 no_improvement_patience 防止 premature stop；experiment controller 使用 backend task evidence cap 替代 claim ceiling 阻断；新增 lightweight stable lens HSI 路由；LLM prompt 新增 metric trajectory 约束；metrics schema 统一化；spec_patch 安全过滤；report 增强（claim downgrade events、metric trajectory data、stop diagnostics、spec patch table）。支持 multi-iteration autonomous loop with metric-first evaluation。
+
 ## 安装
 
 ```bash
