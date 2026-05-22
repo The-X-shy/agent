@@ -154,11 +154,30 @@ def _run_local(
             prefer_executable=spec.prefer_executable_actions,
         )
         if proposed_spec is None or _is_mapping_error(proposed_spec):
-            it_obj.next_action = "stop"
-            it_obj.stop_reason = "strategy_could_not_map_to_experiment"
-            iterations.append(it_obj)
-            stopped_reason = it_obj.stop_reason
-            break
+            # Phase 29: fallback to default executable action
+            if spec.prefer_executable_actions and iteration < spec.max_iterations:
+                strategy_rec = _get_strategy_recommendation(previous, backend_id)
+                strategy_rec["recommended_action"] = "enable_rollback"
+                strategy_rec["rationale"] = (
+                    "Default executable action for initial iteration — "
+                    "no prior results to guide strategy."
+                )
+                strategy_rec["metadata"] = {
+                    **(strategy_rec.get("metadata", {})),
+                    "planner": "fallback",
+                    "fallback_reason": "strategy_not_mappable_default_to_enable_rollback",
+                }
+                it_obj.strategy_recommendation = strategy_rec
+                proposed_spec = _compile_from_strategy(
+                    strategy_rec, backend_id,
+                    prefer_executable=spec.prefer_executable_actions,
+                )
+            if proposed_spec is None or _is_mapping_error(proposed_spec):
+                it_obj.next_action = "stop"
+                it_obj.stop_reason = "strategy_could_not_map_to_experiment"
+                iterations.append(it_obj)
+                stopped_reason = it_obj.stop_reason
+                break
         it_obj.experiment_spec = proposed_spec.model_dump(mode="json")
         _save_json(iter_dir / "02_spec.json", it_obj.experiment_spec)
 

@@ -122,7 +122,11 @@ class ExperimentControllerV2:
         )
 
     def validate_preconditions(self, spec: ExperimentSpecV2) -> list[str]:
-        """Check preconditions and return a list of issues (empty = OK)."""
+        """Check preconditions and return a list of issues (empty = OK).
+
+        Phase 29: Claim ceiling checks are handled by the evidence cap
+        system in run_local(), so they are NOT added as blocking issues here.
+        """
         issues: list[str] = []
 
         from optiresearch.backends.registry import get_backend
@@ -131,11 +135,6 @@ class ExperimentControllerV2:
         if backend is None:
             issues.append(f"Unknown backend: {spec.backend_id}")
             return issues
-
-        # Check claim ceiling
-        ceiling_issue = self._check_claim_ceiling(spec.backend_id, spec.task_type)
-        if ceiling_issue:
-            issues.append(ceiling_issue)
 
         # Check task-specific requirements
         if spec.task_type == "stable_lens_hsi_codesign":

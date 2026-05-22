@@ -119,6 +119,18 @@ def _build_sections(result: Any) -> list[str]:
     # Claim evolution table
     sections.append(_build_claim_evolution(result))
 
+    # Claim downgrade events
+    sections.append(_build_claim_downgrade_events(result))
+
+    # Enhanced metric trajectory data
+    sections.append(_build_metric_trajectory_data(result))
+
+    # Stop condition diagnostics
+    sections.append(_build_stop_diagnostics(result))
+
+    # Experiment spec patch table
+    sections.append(_build_spec_patch_table(result))
+
     # Final recommended next step
     sections.append(_build_final_recommendation(result))
 
@@ -254,6 +266,97 @@ def _build_final_recommendation(result: Any) -> str:
         lines.append(f"- **Stop Reason:** {last.stop_reason or result.trajectory_report_path or 'N/A'}")
         lines.append(f"- **Last Action:** {last.strategy_recommendation.get('recommended_action', '-')}")
         lines.append(f"- **Last Status:** {last.execution_result.get('status', '-')}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _build_claim_downgrade_events(result: Any) -> str:
+    lines = ["## Claim Downgrade Events", ""]
+    rows = []
+    for it in result.iterations:
+        exec_result = it.execution_result or {}
+        is_downgraded = exec_result.get("claim_downgraded", False)
+        cgd = it.claim_gate_decision or {}
+        decision = cgd.get("decision", "")
+        if is_downgraded or decision in ("qualified", "unsupported"):
+            rows.append(
+                f"| {it.iteration_id} | {decision} | "
+                f"{exec_result.get('downgraded_from', '-')} | "
+                f"{exec_result.get('downgraded_to', '-')} | "
+                f"{str(cgd.get('safe_wording', '-'))[:50]} |"
+            )
+    if rows:
+        lines.append("| Iter | Decision | From | To | Safe Wording |")
+        lines.append("|---|---|---|---|---|")
+        lines.extend(rows)
+    else:
+        lines.append("No claim downgrade events in this loop.")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _build_metric_trajectory_data(result: Any) -> str:
+    lines = ["## Metric Trajectory Data", ""]
+    rows = []
+    for it in result.iterations:
+        payload = (
+            it.execution_result.get("result_payload")
+            if it.execution_result else {}
+        ) or {}
+        loss_before = payload.get("reconstruction_loss_before", "-")
+        loss_after = payload.get("reconstruction_loss_after", "-")
+        mse_after = payload.get("mse_after", "-")
+        psnr_after = payload.get("psnr_after", "-")
+        improved = payload.get("improvement_detected", "-")
+        status = it.execution_result.get("status", "-") if it.execution_result else "-"
+        fmt = lambda v: f"{v:.6f}" if isinstance(v, float) else str(v)
+        rows.append(
+            f"| {it.iteration_id} | {fmt(loss_before)} | {fmt(loss_after)} | "
+            f"{fmt(mse_after)} | {fmt(psnr_after)} | {improved} | {status} |"
+        )
+    if rows:
+        lines.append(
+            "| Iter | Loss Before | Loss After | MSE After | PSNR After "
+            "| Improvement | Status |"
+        )
+        lines.append("|---|---|---|---|---|---|---|")
+        lines.extend(rows)
+    else:
+        lines.append("No metric data in this loop.")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _build_stop_diagnostics(result: Any) -> str:
+    lines = ["## Stop Condition Diagnostics", ""]
+    lines.append(f"- **Total Iterations:** {len(result.iterations)}")
+    last = result.iterations[-1] if result.iterations else None
+    if last:
+        lines.append(f"- **Stop Reason:** {last.stop_reason or result.trajectory_report_path or 'N/A'}")
+        lines.append(f"- **Next Action:** {last.next_action}")
+    lines.append(f"- **Trajectory Report Path:** {result.trajectory_report_path or 'N/A'}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _build_spec_patch_table(result: Any) -> str:
+    lines = ["## Experiment Spec Patches", ""]
+    rows = []
+    for it in result.iterations:
+        spec = it.experiment_spec or {}
+        payload = spec.get("spec_payload", {})
+        patch_keys = [k for k in payload if k not in ("candidate", "reconstructor")]
+        if patch_keys:
+            patch_summary = ", ".join(
+                f"{k}={payload[k]}" for k in sorted(patch_keys)[:5]
+            )
+            rows.append(f"| {it.iteration_id} | {patch_summary} |")
+    if rows:
+        lines.append("| Iter | Applied Patches |")
+        lines.append("|---|---|")
+        lines.extend(rows)
+    else:
+        lines.append("No spec patches applied in this loop.")
     lines.append("")
     return "\n".join(lines)
 
