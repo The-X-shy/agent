@@ -242,6 +242,61 @@ def export_backend_registry_markdown(path: Path) -> Path:
     return path
 
 
+# Backend -> allowed task types with evidence_level_cap.
+# If a task_type is not listed for a backend, it is not allowed on that backend.
+_BACKEND_TASK_RULES: dict[str, dict[str, Optional[str]]] = {
+    "phase_to_fft_proxy": {
+        "stable_lens_hsi_codesign": "native_full_reconstruction_proxy",
+        "native_hsi_codesign": "native_hsi_proxy",
+        "native_hsi_reconstruction_codesign": "native_full_reconstruction_proxy",
+        "lightweight_psf_probe": "deeplens_integration_smoke",
+    },
+    "deeplens_geolens_geometric": {
+        "stable_lens_hsi_codesign": "native_lens_simulation",
+        "native_hsi_codesign": "native_hsi_proxy",
+        "native_hsi_reconstruction_codesign": "native_full_reconstruction_proxy",
+        "psf_probe": "deeplens_integration_smoke",
+        "native_optimization_probe": "native_component_optimization",
+    },
+    "mock_deeplens": {
+        "stable_lens_hsi_codesign": "mock_simulation",
+        "native_hsi_codesign": "mock_simulation",
+        "lightweight_psf_probe": "mock_simulation",
+    },
+    "local_synthetic_hsi": {
+        "stable_lens_hsi_codesign": "synthetic_hsi_simulation",
+        "native_hsi_codesign": "synthetic_hsi_simulation",
+        "native_hsi_reconstruction_codesign": "synthetic_hsi_simulation",
+        "lightweight_psf_probe": "synthetic_hsi_simulation",
+    },
+    "deeplens_fresnel_component": {
+        "native_optimization_probe": "native_component_optimization",
+        "component_optimization": "native_component_optimization",
+    },
+    "deeplens_binary2phase_component": {
+        "native_optimization_probe": "native_component_optimization",
+        "component_optimization": "native_component_optimization",
+    },
+    "deeplens_coherent_asm": {
+        "psf_probe": "deeplens_integration_smoke",
+        "lightweight_psf_probe": "deeplens_integration_smoke",
+    },
+    "deeplens_blackbox_source_psf": {
+        "psf_probe": "deeplens_integration_smoke",
+        "lightweight_psf_probe": "deeplens_integration_smoke",
+    },
+}
+
+
+def get_backend_task_evidence_cap(backend_id: str, task_type: str) -> Optional[str]:
+    """Get the evidence level cap for a task on a specific backend.
+
+    Returns None if the task is not allowed on this backend.
+    """
+    rules = _BACKEND_TASK_RULES.get(backend_id, {})
+    return rules.get(task_type)
+
+
 def export_backend_registry_json(path: Path) -> Path:
     """Write backend registry as a JSON file."""
     _seed_registry()

@@ -33,6 +33,9 @@ class ExperimentSpecV2(StrictModel):
     remote_job_id: Optional[str] = None
     spec_payload: dict[str, Any] = {}
     metadata: dict[str, Any] = {}
+    expected_evidence_level: Optional[str] = None
+    max_allowed_claim: Optional[str] = None
+    task_requirement_level: Optional[str] = None
 
 
 class ControllerResult(StrictModel):
@@ -159,24 +162,31 @@ class ExperimentControllerV2:
         return issues
 
     def run_local(self, spec: ExperimentSpecV2) -> ControllerResult:
-        """Run an experiment locally, delegating to the appropriate runtime loop."""
-        # Check claim ceiling FIRST before other validations
-        ceiling_issue = self._check_claim_ceiling(spec.backend_id, spec.task_type)
-        if ceiling_issue:
-            from optiresearch.backends.registry import get_backend
+        """Run an experiment locally, delegating to the appropriate runtime loop.
 
-            backend = get_backend(spec.backend_id)
-            downgraded_to = backend.claim_ceiling if backend else "unsupported"
-            required = _TASK_REQUIRED_CEILING.get(spec.task_type, "")
+        Phase 29: Uses backend task evidence caps instead of blocking on
+        claim ceiling mismatch. Returns 'unsupported' only when the task
+        is not allowed at all on the backend.
+        """
+        from optiresearch.backends.registry import get_backend_task_evidence_cap
+
+        evidence_cap = get_backend_task_evidence_cap(spec.backend_id, spec.task_type)
+        if evidence_cap is None:
             return ControllerResult(
                 spec_id=spec.spec_id,
-                status="claim_downgraded",
+                status="unsupported",
                 execution_target="local",
                 backend_id=spec.backend_id,
-                downgraded_from=required,
-                downgraded_to=downgraded_to,
-                errors=[{"type": "claim_ceiling", "message": ceiling_issue}],
+                errors=[{
+                    "type": "unsupported_task_for_backend",
+                    "message": (
+                        f"Task '{spec.task_type}' not allowed on backend "
+                        f"'{spec.backend_id}'"
+                    ),
+                }],
             )
+
+        spec.metadata["evidence_level_cap"] = evidence_cap
 
         issues = self.validate_preconditions(spec)
         if issues:
@@ -188,9 +198,11 @@ class ExperimentControllerV2:
                 errors=[{"type": "precondition", "message": i} for i in issues],
             )
 
-        # Delegate to task-specific runner
         try:
-            return self._dispatch_local(spec)
+            result = self._dispatch_local(spec)
+            if result.evidence_level is None:
+                result.evidence_level = evidence_cap
+            return result
         except Exception as exc:
             return ControllerResult(
                 spec_id=spec.spec_id,
@@ -352,16 +364,31 @@ class ExperimentControllerV2:
         return None
 
     def _dispatch_local(self, spec: ExperimentSpecV2) -> ControllerResult:
-        """Route to the appropriate runtime loop based on task_type."""
+        """Route to the appropriate runtime loop based on task_type.
+
+        Phase 29: Lightweight routing for proxy backends. When the backend
+        is phase_to_fft_proxy or lightweight_mode is set in the payload,
+        stable_lens_hsi_codesign routes to the lightweight experiment.
+        """
         payload = spec.spec_payload
+        use_lightweight = (
+            payload.get("lightweight_mode", False)
+            or spec.backend_id == "phase_to_fft_proxy"
+        )
 
         if spec.task_type == "stable_lens_hsi_codesign":
+            if use_lightweight:
+                return self._run_lightweight_stable_lens_hsi(spec, payload)
             return self._run_stable_lens_hsi(spec, payload)
         elif spec.task_type == "lightweight_psf_probe":
             return self._run_lightweight_psf_probe(spec, payload)
         elif spec.task_type == "native_hsi_codesign":
+            if use_lightweight:
+                return self._run_lightweight_stable_lens_hsi(spec, payload)
             return self._run_native_hsi_codesign(spec, payload)
         elif spec.task_type == "native_hsi_reconstruction_codesign":
+            if use_lightweight:
+                return self._run_lightweight_stable_lens_hsi(spec, payload)
             return self._run_native_hsi_reconstruction_codesign(spec, payload)
         elif spec.task_type == "native_waveoptics_codesign":
             return self._run_native_waveoptics_codesign(spec, payload)
@@ -390,6 +417,24 @@ class ExperimentControllerV2:
         )
         result = run_lightweight_psf_probe(
             backend_id=spec.backend_id,
+            device=payload.get("device", "cpu"),
+        )
+        result.spec_id = spec.spec_id
+        return result
+
+    def _run_lightweight_stable_lens_hsi(
+        self, spec: ExperimentSpecV2, payload: dict[str, Any]
+    ) -> ControllerResult:
+        """Run lightweight stable lens HSI (no DeepLens dependency)."""
+        from optiresearch.runtime.lightweight_experiments import (
+            run_lightweight_stable_lens_hsi,
+        )
+        result = run_lightweight_stable_lens_hsi(
+            backend_id=spec.backend_id,
+            max_steps=payload.get("max_steps", 5),
+            optical_lr=payload.get("optical_lr", 1e-6),
+            recon_lr=payload.get("recon_lr", 1e-3),
+            rollback_on_loss_increase=payload.get("rollback_on_loss_increase", True),
             device=payload.get("device", "cpu"),
         )
         result.spec_id = spec.spec_id
