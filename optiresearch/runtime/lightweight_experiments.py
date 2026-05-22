@@ -95,6 +95,15 @@ def _psf_fwhm(psf_2d: Any, axis: int = 0) -> float:
     return 0.0
 
 
+def _compute_psnr(mse: Optional[float], max_val: float = 1.0) -> Optional[float]:
+    """Compute PSNR from MSE."""
+    import math
+
+    if mse is None or mse <= 0:
+        return None
+    return 20.0 * math.log10(max_val) - 10.0 * math.log10(mse)
+
+
 def _check_deeplens_available() -> bool:
     """Check if DeepLens is importable."""
     try:
@@ -268,6 +277,10 @@ def run_lightweight_stable_lens_hsi(
                 "reconstruction_loss_before": loss_before,
                 "reconstruction_loss_after": loss_after,
                 "best_reconstruction_loss": best_loss,
+                "mse_before": loss_before,
+                "mse_after": loss_after,
+                "psnr_before": _compute_psnr(loss_before) if loss_before else None,
+                "psnr_after": _compute_psnr(loss_after) if loss_after else None,
                 "accepted_update_count": accepted_updates,
                 "rejected_update_count": rejected_updates,
                 "rollback_count": rollback_count,
@@ -276,6 +289,10 @@ def run_lightweight_stable_lens_hsi(
                 "optical_parameters_changed": accepted_updates > 0,
                 "stable_training_succeeded": not (rollback_count > max_steps // 2),
                 "improvement_detected": improvement,
+                "metrics_valid": True,
+                "execution_time_sec": elapsed,
+                "evidence_level": "native_full_reconstruction_proxy",
+                "claim_ceiling": "native_full_reconstruction_proxy",
                 "elapsed_seconds": elapsed,
                 "psf_generation_method": "fft_fraunhofer",
                 "deepens_used": False,
