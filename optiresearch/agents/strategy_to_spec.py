@@ -59,12 +59,18 @@ def compile_experiment_spec(
     )
     spec_id = make_deterministic_id("autospec", backend_id, action)
 
+    from optiresearch.backends.registry import get_backend_task_evidence_cap
+    evidence_cap = get_backend_task_evidence_cap(backend_id, task_type)
+
     return ExperimentSpecV2(
         spec_id=spec_id,
         task_type=task_type,
         backend_id=backend_id,
         spec_payload=spec_payload,
         metadata={"objective": objective or "", "source": "strategy_engine"},
+        expected_evidence_level=evidence_cap,
+        max_allowed_claim=evidence_cap,
+        task_requirement_level=evidence_cap,
     )
 
 
@@ -131,6 +137,13 @@ def _build_payload(
         payload["device"] = "cpu"
 
     if spec_patch:
-        payload.update(spec_patch)
+        disallowed_keys = {
+            "backend_id", "task_type", "execution_target",
+            "claim_ceiling", "shell_command", "file_path",
+        }
+        safe_patch = {k: v for k, v in spec_patch.items() if k not in disallowed_keys}
+        if spec_patch.get("execution_target") == "remote":
+            safe_patch.pop("execution_target", None)
+        payload.update(safe_patch)
 
     return payload
