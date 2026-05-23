@@ -43,47 +43,98 @@ def _markdown(execution_id: str, r: dict[str, Any]) -> str:
     for d in r.get("candidate_designs", []):
         lines.append(f"- {d.get('design_id', '?')}: {d.get('backend_id', '?')} {d.get('task_type', '?')}")
 
-    lines.extend([
-        "",
-        "## 4. Plan Scores",
-    ])
+    lines.extend(["", "## 4. Plan Scores"])
     for s in r.get("plan_scores", []):
         lines.append(f"- {s.get('design_id', '?')}: score={s.get('total_score', '-')} → {s.get('recommendation', '-')}")
 
     lines.extend([
         "",
-        "## 5. Selected Design",
+        "## 5. Executable Selection",
+        f"- **Selected Design:** {r.get('selected_design') or '-'}",
+        f"- **Selected Rank:** {r.get('selected_design_rank') or '-'}",
+        f"- **Reason:** {r.get('executable_selection_reason') or '-'}",
+        "",
+        "### Selected Design Details",
     ])
     for d in r.get("selected_designs", []):
         lines.append(f"- {d.get('design_id', '?')}: {d.get('spec_payload', {})}")
+    if not r.get("selected_designs"):
+        lines.append("(none)")
 
     lines.extend([
         "",
-        "## 6. Execution Results",
+        "### Skipped Higher-Ranked Designs",
+        "| Rank | Design | Reason | Recommendation |",
+        "|---|---|---|---|",
     ])
-    for ex in r.get("execution_results", []):
-        lines.append(f"- {ex}")
-    if not r.get("execution_results"):
-        lines.append("(no execution — dry run)")
+    skipped = r.get("skipped_higher_ranked_designs", [])
+    if skipped:
+        for item in skipped:
+            lines.append(
+                f"| {item.get('rank', '-')} | {item.get('design_id', '-')} | "
+                f"{item.get('skipped_reason', '-')} | {item.get('recommendation', '-')} |"
+            )
+    else:
+        lines.append("| - | none | - | - |")
 
     lines.extend([
         "",
-        "## 7. ClaimGate Decisions",
+        "## 6. Attempted Designs",
+        "| Design | Status | Evidence | Errors |",
+        "|---|---|---|---|",
     ])
-    for c in r.get("claim_gate_decisions", []):
-        lines.append(f"- {c.get('decision', '?')}: {c.get('violation_type', 'none')}")
+    attempts = r.get("attempted_designs", [])
+    if attempts:
+        for attempt in attempts:
+            lines.append(
+                f"| {attempt.get('design_id', '-')} | {attempt.get('status', '-')} | "
+                f"{attempt.get('evidence_level', '-')} | {len(attempt.get('errors', []))} |"
+            )
+    else:
+        lines.append("| - | none | - | - |")
 
     lines.extend([
         "",
-        "## 8. Events",
+        "## 7. Local Execution Result",
+    ])
+    ex = r.get("execution_result") or {}
+    if ex:
+        lines.extend([
+            f"- **Status:** {ex.get('status', '-')}",
+            f"- **Design:** {ex.get('design_id', '-')}",
+            f"- **Task:** {ex.get('task_type', '-')}",
+            f"- **Backend:** {ex.get('backend_id', '-')}",
+            f"- **Evidence:** {ex.get('evidence_level', '-')}",
+            f"- **Metrics:** `{json.dumps(ex.get('metrics', {}), ensure_ascii=False, default=str)}`",
+            f"- **Artifacts:** {', '.join(ex.get('artifacts', [])) if ex.get('artifacts') else '(none)'}",
+            f"- **Errors:** `{json.dumps(ex.get('errors', []), ensure_ascii=False, default=str)}`",
+        ])
+    else:
+        lines.append("(no local execution result)")
+
+    lines.extend(["", "## 8. ClaimGate Outcome"])
+    claim = r.get("claim_gate_decision") or {}
+    if claim:
+        lines.extend([
+            f"- **Decision:** {claim.get('decision', '-')}",
+            f"- **Max Allowed Claim:** {claim.get('max_allowed_claim', '-')}",
+            f"- **Violation:** {claim.get('violation_type') or 'none'}",
+            f"- **Safe Wording:** {claim.get('safe_wording', '-')}",
+        ])
+    else:
+        lines.append("(none)")
+
+    lines.extend([
+        "",
+        "## 9. Events",
         f"- **Event count:** {r.get('event_count', 0)}",
         f"- **Event log:** {r.get('event_log_path', '-')}",
         "",
-        "## 9. StateStore",
+        "## 10. Memory / State Updates",
+        f"- **Memory Updated:** {r.get('memory_updated', False)}",
+        *([f"- **Memory Entry:** {m}" for m in r.get("memory_updates", [])] or ["- **Memory Entry:** (none)"]),
         f"- **Snapshots:** {r.get('state_snapshots_count', 0)}",
-        "",
-        "## 10. Memory Updates",
-        *([f"- {m}" for m in r.get("memory_updates", [])] or ["(none)"]),
+        *([f"- **Snapshot:** {s}" for s in r.get("state_snapshot_refs", [])] or []),
         "",
         "## 11. Final Recommendation",
         r.get("final_recommendation", "-"),

@@ -92,7 +92,7 @@ class ExperimentDesignGenerator:
             return [ExperimentDesignCandidate(
                 design_id=f"{s.strategy_id}_coherent",
                 objective="Probe full wave-optics coherent ASM path on WSL",
-                backend_id="deeplens_geolens_coherent",
+                backend_id="deeplens_coherent_asm",
                 task_type="native_waveoptics_codesign",
                 spec_payload={
                     "candidate": "GeoLensCooke",

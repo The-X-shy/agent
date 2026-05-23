@@ -16,6 +16,9 @@ class AgentState(StrictModel):
     current_backend: str = ""
     current_claim_target: str = ""
     last_experiment_result: dict[str, Any] = {}
+    last_executed_design: str = ""
+    last_execution_status: str = ""
+    last_claim_decision: dict[str, Any] = {}
     last_failure_mode: str = ""
     last_strategy: dict[str, Any] = {}
     known_supported_claims: list[str] = []
@@ -77,22 +80,87 @@ class StateStore:
                 self._state.pending_actions.append(act)
         elif event.event_type == "claim_checked":
             claim = payload.get("claim_text", "")
-            verdict = payload.get("verdict", "")
+            verdict = payload.get("verdict", payload.get("decision", ""))
             if "support" in verdict.lower() and claim not in self._state.known_supported_claims:
                 self._state.known_supported_claims.append(claim)
-            elif "reject" in verdict.lower() and claim not in self._state.known_unsupported_claims:
+            elif verdict.lower() in ("unsupported", "rejected") and claim not in self._state.known_unsupported_claims:
+                self._state.known_unsupported_claims.append(claim)
+        elif event.event_type == "claim_downgraded":
+            claim = payload.get("claim_text", "")
+            decision = payload.get("decision", "")
+            self._state.last_claim_decision = payload
+            if decision == "unsupported" and claim and claim not in self._state.known_unsupported_claims:
                 self._state.known_unsupported_claims.append(claim)
         self.save()
 
     def snapshot(self) -> AgentState:
         snap = self._state.model_copy(deep=True)
         self._snapshots.append(snap)
+        self._state.snapshot_count = len(self._snapshots)
+        snap.snapshot_count = len(self._snapshots)
         snap_path = self._snapshot_dir / f"snapshot_{len(self._snapshots):04d}.json"
         snap_path.write_text(
             json.dumps(snap.model_dump(mode="json"), indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
+        self.save()
         return snap
+
+    def record_plan_execution_outcome(
+        self,
+        execution_id: str,
+        selected_design: str | None,
+        execution_result: dict[str, Any],
+        claim_decision: Any,
+        attempted_designs: list[dict[str, Any]],
+        skipped_higher_ranked_designs: list[dict[str, Any]],
+    ) -> None:
+        decision_payload = (
+            claim_decision.model_dump(mode="json")
+            if hasattr(claim_decision, "model_dump")
+            else (
+                claim_decision.__dict__
+                if hasattr(claim_decision, "__dict__")
+                else dict(claim_decision or {})
+            )
+        )
+        executed_design = execution_result.get("design_id") or selected_design or ""
+        self._state.last_experiment_result = execution_result
+        self._state.last_executed_design = executed_design
+        self._state.last_execution_status = execution_result.get("status", "")
+        self._state.last_claim_decision = decision_payload
+        self._state.pending_actions = [
+            a.get("design_id", "")
+            for a in attempted_designs
+            if a.get("status") in ("unsupported", "needs_followup", "failed")
+        ]
+        for skipped in skipped_higher_ranked_designs:
+            did = skipped.get("design_id", "")
+            if did and did not in self._state.pending_actions:
+                self._state.pending_actions.append(did)
+        safe = decision_payload.get("safe_wording") or decision_payload.get("max_allowed_claim", "")
+        decision = decision_payload.get("decision", "")
+        if decision in ("supported", "qualified") and safe and safe not in self._state.known_supported_claims:
+            self._state.known_supported_claims.append(safe)
+        if decision == "unsupported" and safe and safe not in self._state.known_unsupported_claims:
+            self._state.known_unsupported_claims.append(safe)
+        unsupported_claims = [
+            a.get("design_id", "")
+            for a in attempted_designs
+            if a.get("status") in ("unsupported", "needs_followup")
+        ]
+        for claim in unsupported_claims:
+            if claim and claim not in self._state.known_unsupported_claims:
+                self._state.known_unsupported_claims.append(claim)
+        self._state.memory_summary["last_plan_execution_attempts"] = len(attempted_designs)
+        self._state.evidence_summary["last_plan_execution_skipped"] = len(skipped_higher_ranked_designs)
+        self._state.backend_status[execution_result.get("backend_id", "none")] = execution_result.get("status", "")
+        self._state.last_strategy = {
+            "execution_id": execution_id,
+            "selected_design": selected_design or "",
+            "final_design": executed_design,
+        }
+        self.save()
 
     def diff_snapshots(self, older: AgentState, newer: AgentState) -> dict[str, Any]:
         diffs: dict[str, Any] = {}

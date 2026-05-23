@@ -163,6 +163,44 @@ class ResearchMemoryV2:
         self._entries[entry.memory_id] = entry
         return entry.memory_id
 
+    def record_plan_execution_outcome(
+        self,
+        execution_id: str,
+        selected_design: str | None,
+        execution_result: dict[str, Any],
+        attempted_designs: list[dict[str, Any]],
+        skipped_higher_ranked_designs: list[dict[str, Any]],
+        claim_decision: dict[str, Any],
+    ) -> str:
+        status = execution_result.get("status", "unknown")
+        evidence_level = execution_result.get("evidence_level", "unknown")
+        final_design = execution_result.get("design_id", selected_design or "none")
+        entry = ResearchMemoryEntry(
+            memory_id=f"plan_outcome_{execution_id}",
+            memory_type="ExperimentOutcome",
+            content=(
+                f"Agent plan execution {execution_id}: selected={selected_design or 'none'}, "
+                f"final={final_design}, status={status}, evidence={evidence_level}"
+            ),
+            tags=[
+                "agent_plan_execution",
+                status,
+                evidence_level,
+                final_design,
+            ],
+            source_run_id=execution_result.get("run_id"),
+            confidence=0.9 if status == "completed" else 0.75,
+            metadata={
+                "execution_id": execution_id,
+                "selected_design": selected_design,
+                "execution_result": execution_result,
+                "attempted_designs": attempted_designs,
+                "skipped_higher_ranked_designs": skipped_higher_ranked_designs,
+                "claim_decision": claim_decision,
+            },
+        )
+        return self.add_entry(entry)
+
     def query(
         self,
         memory_type: Optional[MemoryType] = None,
@@ -215,6 +253,8 @@ class ResearchMemoryV2:
                 lines.append(f"- **Content:** {entry.content}")
                 if entry.source_run_id:
                     lines.append(f"- **Source:** {entry.source_run_id}")
+                if entry.metadata:
+                    lines.append(f"- **Metadata:** `{json.dumps(entry.metadata, ensure_ascii=False, default=str)}`")
                 lines.append("")
 
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -231,6 +271,7 @@ class ResearchMemoryV2:
                 "tags": e.tags,
                 "confidence": e.confidence,
                 "source_run_id": e.source_run_id,
+                "metadata": e.metadata,
             }
             for eid, e in sorted(self._entries.items())
         }

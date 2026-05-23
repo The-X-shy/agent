@@ -47,14 +47,18 @@ class SkillRuntimeV2:
         try:
             output = self._dispatch(skill_id, inputs)
             elapsed = time.time() - t0
+            status = "unsupported" if output.get("status") == "unsupported" else "succeeded"
             result = SkillResult(
-                skill_id=skill_id, status="succeeded",
+                skill_id=skill_id, status=status,
+                outcome=output.get("outcome"),
                 inputs_hash=_hash_inputs(inputs),
                 output=output, execution_time_sec=elapsed,
             )
             self._event_bus.publish(AgentEvent.create(
-                "skill_called", "skill_runtime",
-                payload={"skill_id": skill_id, "status": "succeeded", "execution_time_sec": elapsed},
+                "skill_called" if status == "succeeded" else "skill_failed",
+                "skill_runtime",
+                payload={"skill_id": skill_id, "status": status, "execution_time_sec": elapsed},
+                severity="info" if status == "succeeded" else "warning",
             ))
             return result
         except Exception as exc:
@@ -154,8 +158,24 @@ class SkillRuntimeV2:
         if report_type == "system_subunit":
             from optiresearch.reports.system_subunit_report import export_system_subunit_report
             path = export_system_subunit_report()
-            return {"report_type": report_type, "path": str(path)}
-        return {"report_type": report_type, "status": "unsupported"}
+            return {"report_type": report_type, "path": str(path), "outcome": "report_only"}
+        if report_type in ("negative_result", "agent_plan_negative_result"):
+            from pathlib import Path
+            path = Path("workspace/reports/agent_plan_negative_result.md")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                "# Agent Plan Negative Result\n\n"
+                "The selected local scientific design was unavailable or unsupported. "
+                "This report records the boundary as report-only evidence.\n",
+                encoding="utf-8",
+            )
+            return {"report_type": report_type, "path": str(path), "outcome": "report_only"}
+        return {
+            "report_type": report_type,
+            "status": "unsupported",
+            "outcome": "structured_unsupported",
+            "error": f"Unsupported report type: {report_type}",
+        }
 
     def _dispatch_evidence_export(self, inputs: dict[str, Any]) -> dict[str, Any]:
         try:

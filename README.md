@@ -50,6 +50,8 @@ Phase 32 新增后端切换后延续实验：post-probe continuation signal（po
 
 Phase 33 新增完整 DeepLens native GeoLens HSI co-design path：native_lens_simulation_codesign 在 deeplens_geolens_geometric 后端下路由到 _run_stable_lens_hsi（完整三阶段训练：warmup / joint finetune / final adaptation）；新增 execution_fidelity 字段区分 lightweight_proxy 和 deeplens_native_geometric；macOS GeoLens API IndexError 结构化处理（PSF smoke test 提前捕获，返回 GEOLENS_PSF_GEOMETRIC_FAILED_INDEXERROR）；ClaimGate 新增 proxy_as_native_geolens 违规类型（防止 proxy 实验被声明为 native GeoLens geometric PSF）；CLI 注册 run-deeplens-native-geolens-hsi-codesign 命令；remote command allowlist 新增对应条目。
 
+Phase 38 增加 Agent selected plan 本地执行闭环：local mode 会跳过需要用户数据、远程执行或不支持后端的高分方案，执行最高分本地可执行 scientific design；若本地 scientific path 不可用，会结构化记录 unsupported 并尝试 report-only fallback。执行结果写入 ClaimGate、ResearchMemoryV2、StateStore snapshot、EventBus 和 plan execution report，report-only 不会升级 optical improvement claim。
+
 ## 安装
 
 ```bash
@@ -90,6 +92,8 @@ python -m optiresearch.cli export-phase12-report
 python -m optiresearch.cli add-remote-worker --worker-id windows_wsl --host wslbox --port 22 --username ysl --remote-project-dir /mnt/d/agent --remote-workspace-dir /mnt/d/agent/workspace --python-executable /mnt/d/agent/run_agent_python.sh
 python -m optiresearch.cli check-remote-worker --worker-id windows_wsl
 python -m optiresearch.cli run-remote-deeplens-source-smoke --worker-id windows_wsl
+python -m optiresearch.cli run-agent-plan-execution --objective "recover from native GeoLens optical update instability" --seed-result-path workspace/native_geolens_stabilization/geolens_stabilization_1779550632/sweep_results.json --mode local --execute-top-k 1
+python -m optiresearch.cli export-agent-plan-execution-report --execution-id <execution_id>
 python -m pytest
 ```
 
@@ -138,6 +142,8 @@ python -m optiresearch.cli check-remote-worker --worker-id windows_wsl
 python -m optiresearch.cli run-remote-deeplens-source-smoke --worker-id windows_wsl
 python -m optiresearch.cli run-remote-codesign --worker-id windows_wsl --objective "Run strict DeepLens-backed co-design on WSL D drive worker" --psf-source deeplens_parameterized --backend deeplens --fallback-policy fail --max-iterations 2
 python -m optiresearch.cli export-remote-execution-report --job-id <job_id>
+python -m optiresearch.cli run-agent-plan-execution --objective "recover from native GeoLens optical update instability" --seed-result-path workspace/native_geolens_stabilization/geolens_stabilization_1779550632/sweep_results.json --mode local --execute-top-k 1
+python -m optiresearch.cli export-agent-plan-execution-report --execution-id <execution_id>
 # Phase 24-27: Agentic Framework + Autonomous Loop + LLM Planner
 python -m optiresearch.cli list-optical-backends
 python -m optiresearch.cli inspect-optical-backend --backend-id deeplens_geolens_geometric

@@ -21,6 +21,8 @@ ViolationType = Literal[
     "unsupported_path_as_supported",
     "black_box_as_native",
     "proxy_as_native_geolens",
+    "report_only_as_improvement",
+    "structured_unsupported_as_success",
 ]
 
 
@@ -60,10 +62,19 @@ class ClaimGateV2:
             ClaimGateDecision with verdict and safe wording.
         """
         claim_lower = claim_text.lower()
-        result = experiment_result or {}
+        result = self._normalize_result(experiment_result or {})
 
         # Get backend claim ceiling
         max_claim = self._compute_max_allowed_claim(backend_id)
+
+        outcome_decision = self._check_plan_execution_outcome(claim_text, claim_lower, result, max_claim)
+        if outcome_decision is not None:
+            self._publish_claim_event(
+                outcome_decision.decision,
+                outcome_decision.violation_type,
+                claim_text,
+            )
+            return outcome_decision
 
         # Detect violations
         violations = self._detect_violations(claim_lower, backend_id, result, evidence_scope or {})
@@ -76,6 +87,7 @@ class ClaimGateV2:
                 violation_reason=None,
                 violation_type=None,
                 safe_wording=claim_text,
+                metadata={"outcome": result.get("outcome") or result.get("evidence_level", "")},
             )
 
         # Use the most severe violation
@@ -92,7 +104,81 @@ class ClaimGateV2:
             required_additional_evidence=self._required_evidence(primary_type, backend_id),
             safe_wording=safe,
             applicable_caveats=self._caveats(primary_type),
+            metadata={"outcome": result.get("outcome") or result.get("evidence_level", "")},
         )
+
+    def _normalize_result(self, result: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(result)
+        metrics = normalized.get("metrics")
+        if isinstance(metrics, dict):
+            for key, value in metrics.items():
+                normalized.setdefault(key, value)
+        return normalized
+
+    def _check_plan_execution_outcome(
+        self,
+        claim_text: str,
+        claim_lower: str,
+        result: dict[str, Any],
+        max_claim: str,
+    ) -> ClaimGateDecision | None:
+        evidence_level = result.get("evidence_level") or result.get("outcome")
+        task_type = result.get("task_type", "")
+        status = result.get("status", "")
+
+        if evidence_level == "report_only" or task_type == "report_generation":
+            if (
+                "negative result" in claim_lower
+                and ("document" in claim_lower or "report" in claim_lower)
+                and not _contains_success_or_improvement_claim(claim_lower)
+            ):
+                return ClaimGateDecision(
+                    decision="supported",
+                    max_allowed_claim="report_only",
+                    violation_reason=None,
+                    violation_type=None,
+                    safe_wording=claim_text,
+                    applicable_caveats=["Report-only evidence does not support optical improvement"],
+                    metadata={"outcome": "report_only"},
+                )
+            return ClaimGateDecision(
+                decision="unsupported",
+                max_allowed_claim="report_only",
+                violation_reason="Report-only evidence can document a negative result but cannot support optical improvement or task success",
+                violation_type="report_only_as_improvement",
+                required_additional_evidence=["Run a local scientific experiment that produces measured metrics"],
+                safe_wording="The negative result is documented; optical improvement remains unsupported.",
+                applicable_caveats=["Report-only evidence"],
+                metadata={"outcome": "report_only"},
+            )
+
+        if evidence_level == "structured_unsupported" or status == "unsupported":
+            boundary_terms = ("boundary", "unsupported", "unavailable", "detected", "limitation")
+            if any(term in claim_lower for term in boundary_terms) and not _contains_success_or_improvement_claim(claim_lower):
+                return ClaimGateDecision(
+                    decision="supported",
+                    max_allowed_claim="structured_unsupported",
+                    violation_reason=None,
+                    violation_type=None,
+                    safe_wording=claim_text,
+                    applicable_caveats=["Structured unsupported outcome records a boundary, not task success"],
+                    metadata={"outcome": "structured_unsupported"},
+                )
+            return ClaimGateDecision(
+                decision="unsupported",
+                max_allowed_claim="structured_unsupported",
+                violation_reason="Structured unsupported outcome cannot support task success",
+                violation_type="structured_unsupported_as_success",
+                required_additional_evidence=["Complete a supported local execution path"],
+                safe_wording="A local execution boundary was detected; task success is unsupported.",
+                applicable_caveats=["Structured unsupported outcome"],
+                metadata={"outcome": "structured_unsupported"},
+            )
+
+        if evidence_level == "local_execution_completed" and status in ("completed", "succeeded"):
+            return None
+
+        return None
 
     def _detect_violations(
         self,
@@ -242,6 +328,8 @@ class ClaimGateV2:
             "proxy_as_native_geolens",
             "black_box_as_native",
             "unsupported_path_as_supported",
+            "report_only_as_improvement",
+            "structured_unsupported_as_success",
         }
         qualified: set[ViolationType] = {
             "differentiable_as_improves",
@@ -271,6 +359,8 @@ class ClaimGateV2:
             "robust execution": "local execution (remote validation pending)",
             "optical improvement": "rollback-protected training",
             "supported": "partially supported (see caveats)",
+            "improvement": "documented boundary",
+            "succeeded": "was attempted",
         }
         safe = original
         for pattern, replacement in replacements.items():
@@ -321,6 +411,12 @@ class ClaimGateV2:
                 "Use differentiable backend (phase_to_fft_proxy or geolens_geometric)",
                 "Verify requires_grad on PSF output",
             ],
+            "report_only_as_improvement": [
+                "Run a local scientific experiment with measured metrics",
+            ],
+            "structured_unsupported_as_success": [
+                "Complete a supported local execution path",
+            ],
         }
         return evidence.get(violation_type, [])
 
@@ -352,6 +448,12 @@ class ClaimGateV2:
             "black_box_as_native": [
                 "This backend does not expose gradient information",
             ],
+            "report_only_as_improvement": [
+                "Report-only evidence documents a result but does not validate optical performance",
+            ],
+            "structured_unsupported_as_success": [
+                "Unsupported execution records a boundary only",
+            ],
         }
         return caveats.get(violation_type, [])
 
@@ -365,3 +467,17 @@ class ClaimGateV2:
                          "claim_text": claim_text[:200]}))
         except Exception:
             pass
+
+
+def _contains_success_or_improvement_claim(claim_lower: str) -> bool:
+    terms = (
+        "improvement",
+        "improved",
+        "improves",
+        "better",
+        "succeeded",
+        "success",
+        "completed",
+        "achieved",
+    )
+    return any(term in claim_lower for term in terms)

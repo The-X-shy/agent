@@ -48,6 +48,7 @@ class ControllerResult(StrictModel):
 
     spec_id: str
     status: Literal["succeeded", "failed", "unsupported", "claim_downgraded", "skipped"]
+    outcome: Optional[str] = None
     execution_target: Optional[str] = None
     backend_id: Optional[str] = None
     run_id: Optional[str] = None
@@ -90,6 +91,14 @@ def _claim_level_index(level: str) -> int:
         return _CLAIM_LEVELS.index(level)
     except ValueError:
         return -1
+
+
+def _is_deeplens_importable() -> bool:
+    try:
+        import importlib.util
+        return importlib.util.find_spec("deeplens") is not None
+    except Exception:
+        return False
 
 
 # Task type -> minimum required claim ceiling
@@ -189,6 +198,7 @@ class ExperimentControllerV2:
                 return ControllerResult(
                     spec_id=spec.spec_id,
                     status="unsupported",
+                    outcome="structured_unsupported",
                     execution_target="local",
                     backend_id=spec.backend_id,
                     errors=[{
@@ -202,11 +212,33 @@ class ExperimentControllerV2:
 
         spec.metadata["evidence_level_cap"] = evidence_cap
 
+        if (
+            spec.require_deeplens_native
+            and spec.backend_id == "deeplens_geolens_geometric"
+            and spec.task_type in ("stable_lens_hsi_codesign", "native_lens_simulation_codesign")
+            and not _is_deeplens_importable()
+        ):
+            return ControllerResult(
+                spec_id=spec.spec_id,
+                status="unsupported",
+                outcome="structured_unsupported",
+                execution_target="local",
+                backend_id=spec.backend_id,
+                evidence_level="structured_unsupported",
+                errors=[{
+                    "type": "DEEPLENS_UNAVAILABLE",
+                    "message": "DeepLens is not importable in this local environment",
+                }],
+                error_code="DEEPLENS_UNAVAILABLE",
+                error_message="DeepLens is not importable in this local environment",
+            )
+
         issues = self.validate_preconditions(spec)
         if issues:
             return ControllerResult(
                 spec_id=spec.spec_id,
                 status="skipped",
+                outcome="structured_unsupported",
                 execution_target="local",
                 backend_id=spec.backend_id,
                 errors=[{"type": "precondition", "message": i} for i in issues],
@@ -231,6 +263,7 @@ class ExperimentControllerV2:
             return ControllerResult(
                 spec_id=spec.spec_id,
                 status="failed",
+                outcome="structured_unsupported",
                 execution_target="local",
                 backend_id=spec.backend_id,
                 errors=[{"type": type(exc).__name__, "message": str(exc)}],
@@ -270,6 +303,7 @@ class ExperimentControllerV2:
         return ControllerResult(
             spec_id=spec.spec_id,
             status="succeeded",
+            outcome="remote_dispatched",
             execution_target="remote",
             backend_id=spec.backend_id,
             run_id=spec.spec_id,
@@ -432,6 +466,7 @@ class ExperimentControllerV2:
             return ControllerResult(
                 spec_id=spec.spec_id,
                 status="skipped",
+                outcome="structured_unsupported",
                 execution_target="local",
                 backend_id=spec.backend_id,
                 errors=[

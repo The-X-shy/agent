@@ -28,6 +28,7 @@ class AgentPlanExecutionSpec(StrictModel):
 class AgentPlanExecutionResult(StrictModel):
     execution_id: str
     status: Literal["completed", "dry_run_only", "failed", "stopped"]
+    outcome: str = ""
     objective: str = ""
     classified_failure: Optional[str] = None
     failure_category: Optional[str] = None
@@ -36,15 +37,27 @@ class AgentPlanExecutionResult(StrictModel):
     candidate_designs_count: int = 0
     candidate_designs: list[dict[str, Any]] = []
     plan_scores: list[dict[str, Any]] = []
+    selected_design: Optional[str] = None
+    selected_design_rank: Optional[int] = None
+    skipped_higher_ranked_designs: list[dict[str, Any]] = []
+    executable_selection_reason: str = ""
+    stop_reason: Optional[str] = None
     selected_designs: list[dict[str, Any]] = []
+    attempted_designs: list[dict[str, Any]] = []
+    execution_result: dict[str, Any] = {}
     execution_results: list[dict[str, Any]] = []
+    claim_gate_decision: dict[str, Any] = {}
     claim_gate_decisions: list[dict[str, Any]] = []
     memory_updates: list[str] = []
+    memory_updated: bool = False
     state_snapshots_count: int = 0
+    state_snapshot_refs: list[str] = []
     event_count: int = 0
     event_log_path: str = ""
     report_path: str = ""
     final_recommendation: str = ""
     mode: str = "dry_run"
     executed_or_dry_run: str = "dry_run"
+    selected_design_executed: bool = False
+    fallback_to_report_only: bool = False
     errors: list[str] = []

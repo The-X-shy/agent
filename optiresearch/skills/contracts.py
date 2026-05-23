@@ -27,6 +27,7 @@ class SkillSpec(StrictModel):
 class SkillResult(StrictModel):
     skill_id: str
     status: Literal["succeeded", "failed", "unsupported"]
+    outcome: Optional[str] = None
     inputs_hash: str = ""
     output: dict[str, Any] = {}
     artifacts: list[str] = []

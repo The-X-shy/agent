@@ -106,7 +106,7 @@ class EvidenceStrategyReasoner:
             risk="high",
             cost="high",
             required_skills=["deeplens_waveoptics_probe", "native_waveoptics_hsi_codesign"],
-            required_backend="deeplens_geolens_coherent",
+            required_backend="deeplens_coherent_asm",
             proposed_experiment_templates=["waveoptics_probe", "waveoptics_stabilization_sweep"],
             claim_ceiling="native_waveoptics_simulation",
         ))
