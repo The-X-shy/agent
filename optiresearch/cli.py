@@ -489,6 +489,32 @@ def main(argv: list[str] | None = None) -> None:
                                      help="Export a native GeoLens stabilization report.")
     geo_stab_report.add_argument("--sweep-id", required=True)
 
+    # ===================== Phase 36 CLI =====================
+    sub.add_parser("list-agent-events", help="List all agent events from the event bus.")
+    export_events = sub.add_parser("export-agent-events", help="Export agent events to JSON.")
+    export_events.add_argument("--output", default="workspace/reports/agent_events.json")
+    sub.add_parser("show-agent-state", help="Show current agent state.")
+    sub.add_parser("export-agent-state-report", help="Export agent state report.")
+    sub.add_parser("list-skills-v2", help="List all registered skills (v2).")
+    inspect_skill = sub.add_parser("inspect-skill", help="Inspect a specific skill.")
+    inspect_skill.add_argument("--skill-id", required=True)
+    run_skill = sub.add_parser("run-skill", help="Run a skill by ID.")
+    run_skill.add_argument("--skill-id", required=True)
+    run_skill.add_argument("--input-json", default="{}")
+    classify_fail = sub.add_parser("classify-failure", help="Classify a failure from result JSON.")
+    classify_fail.add_argument("--result-path", required=True)
+    rec_rec = sub.add_parser("recommend-recovery", help="Recommend recovery for a failure.")
+    rec_rec.add_argument("--failure-id", required=True)
+    reason_ev = sub.add_parser("reason-from-evidence", help="Generate strategies from evidence.")
+    reason_ev.add_argument("--objective", default="improve native optical HSI co-design")
+    gen_designs = sub.add_parser("generate-experiment-designs", help="Generate experiment designs.")
+    gen_designs.add_argument("--objective", default="recover from native GeoLens optical update instability")
+    eval_plans = sub.add_parser("evaluate-candidate-plans", help="Evaluate candidate plans.")
+    eval_plans.add_argument("--designs", default="workspace/reports/experiment_design_candidates.json")
+    sub.add_parser("run-agent-self-test", help="Run agent system self-test.")
+    sub.add_parser("run-agent-subunit-benchmark", help="Run agent subunit benchmark.")
+    sub.add_parser("export-system-subunit-report", help="Export system subunit report.")
+
     # ===================== Phase 24 CLI =====================
     sub.add_parser("list-optical-backends", help="List all registered optical backends.")
     inspect_backend = sub.add_parser("inspect-optical-backend", help="Inspect a specific optical backend.")
@@ -1004,6 +1030,37 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "export-native-geolens-stabilization-report":
         path = _export_native_geolens_stabilization_report(args.sweep_id)
         print(f"markdown: {path}")
+    # ---- Phase 36 handlers ----
+    elif args.command == "list-agent-events":
+        _list_agent_events()
+    elif args.command == "export-agent-events":
+        _export_agent_events(args.output)
+    elif args.command == "show-agent-state":
+        _show_agent_state()
+    elif args.command == "export-agent-state-report":
+        _export_agent_state_report()
+    elif args.command == "list-skills-v2":
+        _list_skills_v2()
+    elif args.command == "inspect-skill":
+        _inspect_skill(args.skill_id)
+    elif args.command == "run-skill":
+        _run_skill(args.skill_id, args.input_json)
+    elif args.command == "classify-failure":
+        _classify_failure(args.result_path)
+    elif args.command == "recommend-recovery":
+        _recommend_recovery(args.failure_id)
+    elif args.command == "reason-from-evidence":
+        _reason_from_evidence(args.objective)
+    elif args.command == "generate-experiment-designs":
+        _generate_experiment_designs(args.objective)
+    elif args.command == "evaluate-candidate-plans":
+        _evaluate_candidate_plans(args.designs)
+    elif args.command == "run-agent-self-test":
+        _run_agent_self_test()
+    elif args.command == "run-agent-subunit-benchmark":
+        _run_agent_subunit_benchmark()
+    elif args.command == "export-system-subunit-report":
+        _export_system_subunit_report()
     elif args.command == "run-remote-native-geolens-stabilization-sweep":
         payload = run_remote_native_geolens_stabilization_sweep(
             args.worker_id,
@@ -2628,6 +2685,132 @@ def _audit_autograd_graph(args: Any) -> None:
 def _export_agent_system_report() -> None:
     from optiresearch.reports.agent_system_report import export_agent_system_report
     path = export_agent_system_report()
+    print(f"markdown: {path}")
+
+
+# ---- Phase 36 handler functions ----
+
+def _list_agent_events() -> None:
+    from optiresearch.agent_system.event_bus import get_event_bus
+    bus = get_event_bus()
+    for e in bus.list_events():
+        print(f"[{e.event_type}] {e.source_module} severity={e.severity} {e.payload.get('status', '')}")
+
+
+def _export_agent_events(output: str) -> None:
+    from optiresearch.agent_system.event_bus import get_event_bus
+    path = get_event_bus().export_events(output)
+    print(f"events: {path}")
+
+
+def _show_agent_state() -> None:
+    from optiresearch.agent_system.state_store import StateStore
+    import json as _json
+    s = StateStore().state
+    print(_json.dumps(s.model_dump(mode="json"), indent=2, ensure_ascii=False))
+
+
+def _export_agent_state_report() -> None:
+    from optiresearch.agent_system.state_store import StateStore
+    path = StateStore().export_state_report()
+    print(f"markdown: {path}")
+
+
+def _list_skills_v2() -> None:
+    from optiresearch.skills.registry_v2 import SkillRegistryV2
+    for s in SkillRegistryV2().list_skills():
+        print(f"{s.skill_id}: {s.name} (risk={s.risk_level}, backends={s.required_backends})")
+
+
+def _inspect_skill(skill_id: str) -> None:
+    from optiresearch.skills.registry_v2 import SkillRegistryV2
+    import json as _json
+    info = SkillRegistryV2().inspect_skill(skill_id)
+    print(_json.dumps(info, indent=2, ensure_ascii=False) if info else f"Unknown skill: {skill_id}")
+
+
+def _run_skill(skill_id: str, input_json: str) -> None:
+    from optiresearch.skills.runtime_v2 import SkillRuntimeV2
+    import json as _json
+    inputs = _json.loads(input_json)
+    result = SkillRuntimeV2().execute_skill(skill_id, inputs)
+    print(_json.dumps(result.model_dump(mode="json"), indent=2, ensure_ascii=False))
+
+
+def _classify_failure(result_path: str) -> None:
+    from optiresearch.agent_system.failure_taxonomy import FailureClassifier
+    import json as _json
+    result = _json.loads(open(result_path).read())
+    fm = FailureClassifier().classify(result)
+    print(_json.dumps(fm.model_dump(mode="json") if fm else {"error": "no match"}, indent=2, ensure_ascii=False))
+
+
+def _recommend_recovery(failure_id: str) -> None:
+    from optiresearch.agent_system.recovery_policy import RecoveryPolicy
+    import json as _json
+    rec = RecoveryPolicy().recommend_recovery(failure_id)
+    print(_json.dumps(rec, indent=2, ensure_ascii=False))
+
+
+def _reason_from_evidence(objective: str) -> None:
+    from optiresearch.agents.evidence_strategy_reasoner import EvidenceStrategyReasoner
+    reasoner = EvidenceStrategyReasoner()
+    strategies = reasoner.reason(objective=objective)
+    reasoner.export()
+    reasoner.export_markdown()
+    for s in strategies:
+        print(f"  [{s.strategy_type}] {s.strategy_id}: {s.rationale[:100]}...")
+
+
+def _generate_experiment_designs(objective: str) -> None:
+    from optiresearch.agents.evidence_strategy_reasoner import EvidenceStrategyReasoner
+    from optiresearch.agents.experiment_design_generator import ExperimentDesignGenerator
+    reasoner = EvidenceStrategyReasoner()
+    strategies = reasoner.reason(objective=objective)
+    gen = ExperimentDesignGenerator()
+    designs = gen.generate_designs(strategies)
+    gen.export(designs)
+    gen.export_markdown(designs)
+    for d in designs:
+        print(f"  {d.design_id}: {d.backend_id} {d.task_type} risk={d.risk_level}")
+
+
+def _evaluate_candidate_plans(designs_path: str) -> None:
+    from optiresearch.agents.candidate_plan_evaluator import CandidatePlanEvaluator
+    from optiresearch.agents.experiment_design_generator import ExperimentDesignCandidate
+    import json as _json
+    data = _json.loads(open(designs_path).read())
+    designs = [ExperimentDesignCandidate(**d) for d in data]
+    scores = CandidatePlanEvaluator().evaluate(designs)
+    CandidatePlanEvaluator().export(scores)
+    CandidatePlanEvaluator().export_markdown(scores)
+    for s in scores[:3]:
+        print(f"  {s.design_id}: score={s.total_score:.3f} → {s.recommendation}")
+
+
+def _run_agent_self_test() -> None:
+    from optiresearch.agent_system.self_test import run_agent_self_test
+    results = run_agent_self_test()
+    passed = sum(1 for r in results if r.passed)
+    print(f"Self-test: {passed}/{len(results)} passed")
+    for r in results:
+        status = "PASS" if r.passed else f"FAIL: {r.error}"
+        print(f"  [{status}] {r.check_name} ({r.latency_sec:.3f}s)")
+
+
+def _run_agent_subunit_benchmark() -> None:
+    from optiresearch.benchmarks.agent_subunit_bench import run_agent_subunit_benchmark
+    results = run_agent_subunit_benchmark()
+    passed = sum(1 for r in results if r.passed)
+    print(f"Benchmark: {passed}/{len(results)} passed")
+    for r in results:
+        status = "PASS" if r.passed else f"FAIL: {r.error}"
+        print(f"  [{status}] {r.task_id} ({r.latency_sec:.3f}s)")
+
+
+def _export_system_subunit_report() -> None:
+    from optiresearch.reports.system_subunit_report import export_system_subunit_report
+    path = export_system_subunit_report()
     print(f"markdown: {path}")
 
 
