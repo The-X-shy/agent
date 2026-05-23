@@ -48,6 +48,8 @@ Phase 31 新增后端切换后验证：post-switch strategy context 注入（pen
 
 Phase 32 新增后端切换后延续实验：post-probe continuation signal（post_probe_continuation_required / validated_backend_id / validated_backend_evidence_level）；StrategyEngine 新增 run_validated_backend_experiment 规则；新增 native_lens_simulation_codesign task type；deep GeoLens geometric PSF probe（实际调用 deeplens.geolens.psf_geometric 路径，验证 differentiability 和 gradient flow）；CLI 注册 run-lightweight-backend-probe 命令（支持 shallow/deep probe depth）；alternative fallback 增强为 try-all-edges（遍历所有 alternative edges 直到成功或耗尽）；LLM prompt 新增 Rule 18 和 post-probe continuation 动态 section；report 新增 Post-Probe Continuation 和 Alternative Backend Attempts section。
 
+Phase 33 新增完整 DeepLens native GeoLens HSI co-design path：native_lens_simulation_codesign 在 deeplens_geolens_geometric 后端下路由到 _run_stable_lens_hsi（完整三阶段训练：warmup / joint finetune / final adaptation）；新增 execution_fidelity 字段区分 lightweight_proxy 和 deeplens_native_geometric；macOS GeoLens API IndexError 结构化处理（PSF smoke test 提前捕获，返回 GEOLENS_PSF_GEOMETRIC_FAILED_INDEXERROR）；ClaimGate 新增 proxy_as_native_geolens 违规类型（防止 proxy 实验被声明为 native GeoLens geometric PSF）；CLI 注册 run-deeplens-native-geolens-hsi-codesign 命令；remote command allowlist 新增对应条目。
+
 ## 安装
 
 ```bash
