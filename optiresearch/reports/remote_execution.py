@@ -43,16 +43,21 @@ def _markdown(job_id: str, result: dict[str, Any], ingestion: dict[str, Any]) ->
         lines.append(f"| {key} | {value} |")
 
     lines.extend(["", "## Execution Fidelity", ""])
+    def _fv(key):
+        v = _first(metrics, key)
+        if v is not None:
+            return v
+        return _first(result, key)
     fidelity_fields = [
-        ("execution_fidelity", metrics.get("execution_fidelity") or result.get("execution_fidelity", "")),
-        ("actual_execution_fidelity", result.get("actual_execution_fidelity", "")),
-        ("proxy_fallback_used", metrics.get("proxy_fallback_used") or result.get("proxy_fallback_used", "")),
-        ("deeplens_native_psf_path", result.get("deeplens_native_psf_path", "")),
-        ("full_wave_optics", result.get("full_wave_optics", "")),
-        ("phase_to_fft_proxy_used", result.get("phase_to_fft_proxy_used", "")),
-        ("platform", result.get("platform", "")),
+        ("execution_fidelity", _fv("execution_fidelity")),
+        ("actual_execution_fidelity", _fv("actual_execution_fidelity")),
+        ("proxy_fallback_used", _fv("proxy_fallback_used")),
+        ("deeplens_native_psf_path", _fv("deeplens_native_psf_path")),
+        ("full_wave_optics", _fv("full_wave_optics")),
+        ("phase_to_fft_proxy_used", _fv("phase_to_fft_proxy_used")),
+        ("platform", _fv("platform")),
     ]
-    fidelity_rows = [f"| {k} | {v} |" for k, v in fidelity_fields if v not in (None, "", "None")]
+    fidelity_rows = [f"| {k} | {v} |" for k, v in fidelity_fields if v is not None and v != ""]
     if fidelity_rows:
         lines.append("| Field | Value |")
         lines.append("|---|---|")
@@ -91,3 +96,8 @@ def _read_json(path: Path, default: dict[str, Any]) -> dict[str, Any]:
         return json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         return default
+
+
+def _first(d: dict[str, Any], key: str) -> Any:
+    """Get value from dict without treating False/0 as missing."""
+    return d.get(key) if isinstance(d, dict) else None
