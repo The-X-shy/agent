@@ -42,6 +42,8 @@ Phase 28 增加 LLM 规划多轮本地实验执行：新增 executable LLM plann
 
 Phase 29 修复 claim-downgrade 早停并启用多轮 metric trajectory：trajectory evaluator 新增 min_iterations_before_stop 和 no_improvement_patience 防止 premature stop；experiment controller 使用 backend task evidence cap 替代 claim ceiling 阻断；新增 lightweight stable lens HSI 路由；LLM prompt 新增 metric trajectory 约束；metrics schema 统一化；spec_patch 安全过滤；report 增强（claim downgrade events、metric trajectory data、stop diagnostics、spec patch table）。支持 multi-iteration autonomous loop with metric-first evaluation。
 
+Phase 30 增加多后端自主切换：新增 BackendProgressionGraph（7 条默认 progression edge）；StrategyEngine 新增 claim_ceiling_reached 自动推荐 switch_backend_after_claim_ceiling；trajectory evaluator 新增 backend_history / backend_switch_count / evidence_level_progression 跨后端追踪；autonomous loop 在 claim_ceiling_reached 后自动查询 progression graph 切换 backend 继续执行；LLM prompt 新增 backend switching 指引；controller 新增 psf_probe 和 component_optimization 轻量路由；report 新增 Backend Progression 和 Evidence Level Progression section。
+
 ## 安装
 
 ```bash

@@ -116,6 +116,12 @@ def _build_sections(result: Any) -> list[str]:
     # Best iteration summary
     sections.append(_build_best_iteration(result))
 
+    # Backend progression
+    sections.append(_build_backend_progression(result))
+
+    # Evidence level progression
+    sections.append(_build_evidence_level_progression(result))
+
     # Claim evolution table
     sections.append(_build_claim_evolution(result))
 
@@ -357,6 +363,43 @@ def _build_spec_patch_table(result: Any) -> str:
         lines.extend(rows)
     else:
         lines.append("No spec patches applied in this loop.")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _build_backend_progression(result: Any) -> str:
+    lines = ["## Backend Progression", ""]
+    rows = []
+    for it in result.iterations:
+        exec_result = it.execution_result or {}
+        bid = exec_result.get("backend_id", "-")
+        evidence = exec_result.get("evidence_level", "-")
+        rows.append(f"| {it.iteration_id} | {bid} | {evidence} |")
+    if rows:
+        lines.append("| Iter | Backend | Evidence Level |")
+        lines.append("|---|---|---|")
+        lines.extend(rows)
+    else:
+        lines.append("No backend progression data.")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _build_evidence_level_progression(result: Any) -> str:
+    lines = ["## Evidence Level Progression", ""]
+    rows = []
+    for it in result.iterations:
+        exec_result = it.execution_result or {}
+        evidence = exec_result.get("evidence_level", "-")
+        cgd = it.claim_gate_decision or {}
+        ceiling = cgd.get("max_allowed_claim", "-")
+        rows.append(f"| {it.iteration_id} | {evidence} | {ceiling} |")
+    if rows:
+        lines.append("| Iter | Evidence Level | Claim Ceiling |")
+        lines.append("|---|---|---|")
+        lines.extend(rows)
+    else:
+        lines.append("No evidence level data.")
     lines.append("")
     return "\n".join(lines)
 
