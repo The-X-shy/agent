@@ -393,6 +393,10 @@ class ExperimentControllerV2:
             return self._run_native_waveoptics_codesign(spec, payload)
         elif spec.task_type == "native_optimization_probe":
             return self._run_native_optimization_probe(spec, payload)
+        elif spec.task_type == "psf_probe":
+            return self._run_lightweight_psf_probe(spec, payload)
+        elif spec.task_type == "component_optimization":
+            return self._run_lightweight_stable_lens_hsi(spec, payload)
         else:
             return ControllerResult(
                 spec_id=spec.spec_id,
