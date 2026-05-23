@@ -49,6 +49,12 @@ We are building an agentic differentiable optics framework with:
     deeplens_geolens_geometric backend supports up to native_lens_simulation.
 15. **Treat claim_downgraded status** in prior iteration results as a signal
     to adjust the claim wording, NOT as a reason to stop the loop.
+16. **When claim_ceiling_reached, propose a backend switch.** If the previous
+    iteration saturated the backend's claim ceiling, propose
+    switch_backend_after_claim_ceiling with the next higher-evidence backend
+    rather than stop_and_report. Prefer deeplens_geolens_geometric after
+    phase_to_fft_proxy for local execution. Do NOT claim full wave-optics
+    just because the backend changed.
 
 ## Output Format
 Return a JSON object with a "proposals" array. Each proposal must have:
@@ -147,6 +153,16 @@ def build_planner_prompt(context: dict[str, Any]) -> list[dict[str, str]]:
         user_prompt_parts.append("")
         user_prompt_parts.append("## Metric Trajectory")
         user_prompt_parts.append(metric_summary)
+
+    if context.get("allowed_backends") and len(context["allowed_backends"]) > 1:
+        user_prompt_parts.append("")
+        user_prompt_parts.append("## Backend Progression Available")
+        user_prompt_parts.append(
+            "When the current backend's claim ceiling is reached, you may propose "
+            "switch_backend_after_claim_ceiling to continue the research on a "
+            "higher-evidence backend. Available backends: "
+            + ", ".join(context["allowed_backends"])
+        )
 
     user_prompt_parts.append("")
     user_prompt_parts.append("Generate candidate research proposals as JSON.")
