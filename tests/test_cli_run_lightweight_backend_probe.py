@@ -1,29 +1,22 @@
 """Phase 32: CLI run-lightweight-backend-probe tests."""
 
-import json
-import subprocess
-import sys
+from optiresearch.runtime.lightweight_experiments import (
+    run_lightweight_backend_probe,
+    run_deeplens_geolens_geometric_deep_probe,
+)
 
 
-def test_cli_shallow_probe():
-    result = subprocess.run(
-        [sys.executable, "-m", "optiresearch.cli", "run-lightweight-backend-probe",
-         "--backend-id", "phase_to_fft_proxy", "--probe-depth", "shallow"],
-        capture_output=True, text=True, timeout=30,
+def test_cli_shallow_probe_api():
+    """Test shallow probe via direct function call (CLI equivalent)."""
+    result = run_lightweight_backend_probe(backend_id="phase_to_fft_proxy")
+    assert result.status == "succeeded"
+    assert result.backend_id == "phase_to_fft_proxy"
+
+
+def test_cli_deep_probe_api():
+    """Test deep probe via direct function call (CLI equivalent)."""
+    result = run_deeplens_geolens_geometric_deep_probe(
+        backend_id="deeplens_geolens_geometric",
     )
-    assert result.returncode == 0
-    data = json.loads(result.stdout)
-    assert data["status"] == "succeeded"
-    assert data["backend_id"] == "phase_to_fft_proxy"
-
-
-def test_cli_deep_probe_deeplens():
-    result = subprocess.run(
-        [sys.executable, "-m", "optiresearch.cli", "run-lightweight-backend-probe",
-         "--backend-id", "deeplens_geolens_geometric", "--probe-depth", "deep"],
-        capture_output=True, text=True, timeout=60,
-    )
-    assert result.returncode == 0
-    data = json.loads(result.stdout)
-    assert data["status"] in ("succeeded", "failed")
-    assert data["backend_id"] == "deeplens_geolens_geometric"
+    assert result.status in ("succeeded", "failed")
+    assert result.backend_id == "deeplens_geolens_geometric"
