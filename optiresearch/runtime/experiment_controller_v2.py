@@ -60,6 +60,13 @@ class ControllerResult(StrictModel):
     errors: list[dict[str, Any]] = []
     artifact_paths: list[str] = []
     metadata: dict[str, Any] = {}
+    error_code: Optional[str] = None
+    error_message: Optional[str] = None
+    execution_fidelity: Optional[str] = None
+    actual_execution_fidelity: Optional[str] = None
+    proxy_fallback_used: Optional[bool] = None
+    deeplens_native_psf_path: Optional[str] = None
+    platform: Optional[str] = None
 
 
 # Claim level ordering for comparison
@@ -496,16 +503,33 @@ class ExperimentControllerV2:
             rollback_on_loss_increase=payload.get("rollback_on_loss_increase", True),
             device=payload.get("device", "cpu"),
         )
+        import platform as _platform
+
         result = run_stable_native_lens_hsi_codesign(inner_spec)
+        payload = result.model_dump(mode="json")
+        errors: list[dict[str, Any]] = []
+        if result.error_code:
+            errors.append({
+                "type": result.error_code,
+                "message": result.error_message or result.error_code,
+            })
         return ControllerResult(
             spec_id=spec.spec_id,
-            status="succeeded" if result.status == "succeeded" else "failed",
+            status=result.status,
             execution_target="local",
             backend_id=spec.backend_id,
             run_id=inner_spec.run_id,
             evidence_level=result.evidence_level,
-            result_payload=result.model_dump(mode="json"),
+            result_payload=payload,
             artifact_paths=result.artifact_paths,
+            errors=errors,
+            error_code=result.error_code,
+            error_message=result.error_message,
+            execution_fidelity="deeplens_native_geometric",
+            actual_execution_fidelity=getattr(result, "actual_execution_fidelity", None),
+            proxy_fallback_used=payload.get("proxy_fallback_used", False),
+            deeplens_native_psf_path=payload.get("deeplens_native_psf_path"),
+            platform=_platform.platform(),
         )
 
     def _run_native_hsi_codesign(
@@ -525,15 +549,24 @@ class ExperimentControllerV2:
             device=payload.get("device", "cpu"),
         )
         result = run_native_optical_hsi_codesign(inner_spec)
+        errors: list[dict[str, Any]] = []
+        if result.error_code:
+            errors.append({
+                "type": result.error_code,
+                "message": result.error_message or result.error_code,
+            })
         return ControllerResult(
             spec_id=spec.spec_id,
-            status="succeeded",
+            status=result.status,
             execution_target="local",
             backend_id=spec.backend_id,
             run_id=inner_spec.run_id,
             evidence_level=result.evidence_level,
             result_payload=result.model_dump(mode="json"),
             artifact_paths=result.artifact_paths,
+            errors=errors,
+            error_code=result.error_code,
+            error_message=result.error_message,
         )
 
     def _run_native_hsi_reconstruction_codesign(
@@ -557,15 +590,29 @@ class ExperimentControllerV2:
             device=payload.get("device", "cpu"),
         )
         result = run_native_hsi_reconstruction_codesign(inner_spec)
+        payload = result.model_dump(mode="json")
+        errors: list[dict[str, Any]] = []
+        if result.error_code:
+            errors.append({
+                "type": result.error_code,
+                "message": result.error_message or result.error_code,
+            })
         return ControllerResult(
             spec_id=spec.spec_id,
-            status="succeeded",
+            status=result.status,
             execution_target="local",
             backend_id=spec.backend_id,
             run_id=inner_spec.run_id,
             evidence_level=result.evidence_level,
-            result_payload=result.model_dump(mode="json"),
+            result_payload=payload,
             artifact_paths=result.artifact_paths,
+            errors=errors,
+            error_code=result.error_code,
+            error_message=result.error_message,
+            execution_fidelity=payload.get("execution_fidelity"),
+            actual_execution_fidelity=payload.get("actual_execution_fidelity"),
+            proxy_fallback_used=payload.get("proxy_fallback_used"),
+            deeplens_native_psf_path=payload.get("deeplens_native_psf_path"),
         )
 
     def _run_native_waveoptics_codesign(
@@ -588,15 +635,29 @@ class ExperimentControllerV2:
             device=payload.get("device", "cpu"),
         )
         result = run_native_waveoptics_hsi_codesign(inner_spec)
+        payload = result.model_dump(mode="json")
+        errors: list[dict[str, Any]] = []
+        if result.error_code:
+            errors.append({
+                "type": result.error_code,
+                "message": result.error_message or result.error_code,
+            })
         return ControllerResult(
             spec_id=spec.spec_id,
-            status="succeeded",
+            status=result.status,
             execution_target="local",
             backend_id=spec.backend_id,
             run_id=inner_spec.run_id,
             evidence_level=result.evidence_level,
-            result_payload=result.model_dump(mode="json"),
+            result_payload=payload,
             artifact_paths=result.artifact_paths,
+            errors=errors,
+            error_code=result.error_code,
+            error_message=result.error_message,
+            execution_fidelity="deeplens_native_waveoptics",
+            actual_execution_fidelity=payload.get("actual_execution_fidelity"),
+            proxy_fallback_used=payload.get("proxy_fallback_used"),
+            deeplens_native_psf_path=result.deeplens_native_psf_path,
         )
 
     def _run_native_optimization_probe(
@@ -616,13 +677,22 @@ class ExperimentControllerV2:
             device=payload.get("device", "cpu"),
         )
         result = run_native_optimization_probe(inner_spec)
+        errors: list[dict[str, Any]] = []
+        if result.error_code:
+            errors.append({
+                "type": result.error_code,
+                "message": result.error_message or result.error_code,
+            })
         return ControllerResult(
             spec_id=spec.spec_id,
-            status="succeeded",
+            status=result.status,
             execution_target="local",
             backend_id=spec.backend_id,
             run_id=inner_spec.run_id,
             evidence_level=result.evidence_level,
             result_payload=result.model_dump(mode="json"),
             artifact_paths=result.artifact_paths,
+            errors=errors,
+            error_code=result.error_code,
+            error_message=result.error_message,
         )

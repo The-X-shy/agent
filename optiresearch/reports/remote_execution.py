@@ -42,6 +42,25 @@ def _markdown(job_id: str, result: dict[str, Any], ingestion: dict[str, Any]) ->
     for key, value in sorted(metrics.items()):
         lines.append(f"| {key} | {value} |")
 
+    lines.extend(["", "## Execution Fidelity", ""])
+    fidelity_fields = [
+        ("execution_fidelity", metrics.get("execution_fidelity") or result.get("execution_fidelity", "")),
+        ("actual_execution_fidelity", result.get("actual_execution_fidelity", "")),
+        ("proxy_fallback_used", metrics.get("proxy_fallback_used") or result.get("proxy_fallback_used", "")),
+        ("deeplens_native_psf_path", result.get("deeplens_native_psf_path", "")),
+        ("full_wave_optics", result.get("full_wave_optics", "")),
+        ("phase_to_fft_proxy_used", result.get("phase_to_fft_proxy_used", "")),
+        ("platform", result.get("platform", "")),
+    ]
+    fidelity_rows = [f"| {k} | {v} |" for k, v in fidelity_fields if v not in (None, "", "None")]
+    if fidelity_rows:
+        lines.append("| Field | Value |")
+        lines.append("|---|---|")
+        lines.extend(fidelity_rows)
+    else:
+        lines.append("No execution fidelity data available.")
+    lines.append("")
+
     lines.extend(["", "## Artifacts", ""])
     for artifact_id in ingestion.get("artifact_ids", []):
         lines.append(f"- `{artifact_id}`")

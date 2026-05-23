@@ -69,8 +69,10 @@ from optiresearch.runtime.remote_jobs import (
     run_remote_native_waveoptics_hsi_codesign,
     run_remote_stable_native_lens_hsi_codesign,
     run_remote_stable_native_lens_hsi_ablation,
+    run_remote_deeplens_native_geolens_hsi_codesign,
 )
 from optiresearch.reports.remote_execution import export_remote_execution_report
+from optiresearch.reports.native_geolens_hsi_report import export_native_geolens_hsi_report
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -456,8 +458,21 @@ def main(argv: list[str] | None = None) -> None:
     remote_abl.add_argument("--reconstructor", required=True, choices=["differentiable_linear", "tiny_cnn"])
     remote_abl.add_argument("--dataset", default="synthetic")
     remote_abl.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
+    remote_geolens = sub.add_parser("run-remote-deeplens-native-geolens-hsi-codesign",
+                                    help="Run DeepLens native GeoLens geometric HSI co-design on a remote worker.")
+    remote_geolens.add_argument("--worker-id", required=True)
+    remote_geolens.add_argument("--lens-file", default="auto:cooke")
+    remote_geolens.add_argument("--dataset", default="synthetic")
+    remote_geolens.add_argument("--reconstructor", default="differentiable_linear",
+                                choices=["differentiable_linear", "tiny_cnn"])
+    remote_geolens.add_argument("--max-steps", type=int, default=5)
+    remote_geolens.add_argument("--optical-lr", type=float, default=1e-6)
+    remote_geolens.add_argument("--rollback-on-loss-increase", action="store_true", default=True)
+    remote_geolens.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
     remote_report = sub.add_parser("export-remote-execution-report", help="Export a remote execution report.")
     remote_report.add_argument("--job-id", required=True)
+    geolens_hsi_report = sub.add_parser("export-native-geolens-hsi-report", help="Export a native GeoLens HSI report.")
+    geolens_hsi_report.add_argument("--run-id", required=True)
 
     # ===================== Phase 24 CLI =====================
     sub.add_parser("list-optical-backends", help="List all registered optical backends.")
@@ -940,8 +955,22 @@ def main(argv: list[str] | None = None) -> None:
             args.worker_id, args.candidate, args.reconstructor, device=args.device,
         )
         _print_remote_payload(payload)
+    elif args.command == "run-remote-deeplens-native-geolens-hsi-codesign":
+        payload = run_remote_deeplens_native_geolens_hsi_codesign(
+            args.worker_id,
+            lens_file=args.lens_file,
+            dataset=args.dataset,
+            reconstructor=args.reconstructor,
+            max_steps=args.max_steps,
+            optical_lr=args.optical_lr,
+            device=args.device,
+        )
+        _print_remote_payload(payload)
     elif args.command == "export-remote-execution-report":
         path = export_remote_execution_report(args.job_id)
+        print(f"markdown: {path}")
+    elif args.command == "export-native-geolens-hsi-report":
+        path = export_native_geolens_hsi_report(args.run_id)
         print(f"markdown: {path}")
     elif args.command == "list-optical-backends":
         _list_optical_backends()

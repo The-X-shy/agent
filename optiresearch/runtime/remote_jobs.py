@@ -312,6 +312,35 @@ def run_remote_stable_native_lens_hsi_ablation(
     return execute_remote_job(worker_id, job, runner=runner, ingest=ingest)
 
 
+def run_remote_deeplens_native_geolens_hsi_codesign(
+    worker_id: str,
+    lens_file: str = "auto:cooke",
+    dataset: str = "synthetic",
+    reconstructor: str = "differentiable_linear",
+    max_steps: int = 5,
+    optical_lr: float = 1e-6,
+    device: str = "cpu",
+    runner: Any | None = None,
+    ingest: bool = True,
+) -> dict[str, Any]:
+    job = _job(
+        "deeplens_native_geolens_hsi_codesign",
+        objective=f"DeepLens native GeoLens geometric HSI co-design: {lens_file} / {reconstructor}",
+        cli_args={
+            "lens_file": lens_file,
+            "dataset": dataset,
+            "reconstructor": reconstructor,
+            "max_steps": max_steps,
+            "optical_lr": optical_lr,
+            "rollback_on_loss_increase": True,
+            "device": device,
+        },
+        timeout_seconds=3600,
+        expected_outputs=["result.json", "spec.json"],
+    )
+    return execute_remote_job(worker_id, job, runner=runner, ingest=ingest)
+
+
 def run_remote_native_optimization_inspection(
     worker_id: str,
     runner: Any | None = None,
@@ -430,13 +459,15 @@ def _remote_backend_capability_level(job_type: str) -> str:
         return "native_lens"
     if job_type == "stable_native_lens_hsi_ablation":
         return "native_lens"
+    if job_type == "deeplens_native_geolens_hsi_codesign":
+        return "native_lens"
     return "adapter_proxy"
 
 
 def _remote_realization_level(job_type: str) -> str | None:
     if job_type == "codesign_loop":
         return "adapter_proxy"
-    if job_type in {"deeplens_surface_optimization_probe", "deeplens_lensfile_optimization_probe"}:
+    if job_type in {"deeplens_surface_optimization_probe", "deeplens_lensfile_optimization_probe", "deeplens_native_geolens_hsi_codesign"}:
         return "native"
     return None
 
@@ -454,6 +485,8 @@ def _remote_claim_scope(job_type: str) -> str:
         return "DeepLens native differentiable lens simulation"
     if job_type == "native_waveoptics_hsi_codesign":
         return "DeepLens native differentiable lens simulation HSI co-design"
+    if job_type == "deeplens_native_geolens_hsi_codesign":
+        return "DeepLens native GeoLens geometric HSI co-design"
     return "DeepLens-backed black-box execution, not native differentiable optimization"
 
 

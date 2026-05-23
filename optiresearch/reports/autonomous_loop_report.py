@@ -529,14 +529,18 @@ def _build_execution_fidelity(result: Any) -> str:
         fidelity = payload.get("execution_fidelity") or payload.get("actual_execution_fidelity", "")
         proxy_fallback = payload.get("proxy_fallback_used", "")
         native_psf_path = payload.get("deeplens_native_psf_path", "")
+        full_wave_optics = payload.get("full_wave_optics", "")
+        phase_to_fft = payload.get("phase_to_fft_proxy_used", "")
+        platform = payload.get("platform", "")
         if fidelity:
             rows.append(
                 f"| {it.iteration_id} | {bid} | {fidelity} | "
-                f"{proxy_fallback} | {native_psf_path} |"
+                f"{proxy_fallback} | {native_psf_path} | "
+                f"{full_wave_optics} | {phase_to_fft} | {platform} |"
             )
     if rows:
-        lines.append("| Iter | Backend | Execution Fidelity | Proxy Fallback | Native PSF Path |")
-        lines.append("|---|---|---|---|---|")
+        lines.append("| Iter | Backend | Execution Fidelity | Proxy Fallback | Native PSF Path | Full Wave Optics | Phase-to-FFT Proxy | Platform |")
+        lines.append("|---|---|---|---|---|---|---|---|")
         lines.extend(rows)
     else:
         lines.append("No execution fidelity data in this loop.")
