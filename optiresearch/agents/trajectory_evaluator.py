@@ -27,6 +27,11 @@ class TrajectoryEvaluation(StrictModel):
     backend_history: list[str] = []
     backend_switch_count: int = 0
     evidence_level_progression: bool = False
+    backend_switch_triggered: bool = False
+    backend_switch_validated: bool = False
+    backend_probe_success: bool = False
+    backend_probe_unavailable: bool = False
+    evidence_gain_after_switch: bool = False
 
 
 def evaluate_trajectory(
@@ -129,6 +134,48 @@ def evaluate_trajectory(
         len(claim_ceilings) >= 2 and len(iterations) >= 2
     )
 
+    # Track backend switch validation
+    switch_triggered = False
+    switch_validated = False
+    probe_success = False
+    probe_unavailable = False
+
+    for it in iterations:
+        exec_result = it.execution_result or {}
+        if exec_result.get("switched_from_backend"):
+            switch_triggered = True
+        if exec_result.get("backend_switch_validated", False):
+            switch_validated = True
+        payload = exec_result.get("result_payload") or {}
+        probe_status = payload.get("probe_status", "")
+        if probe_status == "succeeded":
+            probe_success = True
+        if probe_status == "unavailable":
+            probe_unavailable = True
+
+    # Check evidence gain after switch
+    evidence_gain = False
+    if switch_triggered and len(backend_history) >= 2:
+        pre_switch_backends = set()
+        post_switch_backends = set()
+        switched_at = -1
+        for i, it in enumerate(iterations):
+            er = it.execution_result or {}
+            if er.get("switched_from_backend"):
+                switched_at = i
+                break
+        if switched_at > 0:
+            for i in range(switched_at):
+                er = iterations[i].execution_result or {}
+                if er.get("evidence_level"):
+                    pre_switch_backends.add(er["evidence_level"])
+            for i in range(switched_at, len(iterations)):
+                er = iterations[i].execution_result or {}
+                if er.get("evidence_level"):
+                    post_switch_backends.add(er["evidence_level"])
+            if post_switch_backends - pre_switch_backends:
+                evidence_gain = True
+
     # Count consecutive no-improvement iterations from most recent
     no_improvement_streak = 0
     best_so_far = float("inf")
@@ -172,6 +219,11 @@ def evaluate_trajectory(
         backend_history=backend_history,
         backend_switch_count=backend_switch_count,
         evidence_level_progression=evidence_level_progression,
+        backend_switch_triggered=switch_triggered,
+        backend_switch_validated=switch_validated,
+        backend_probe_success=probe_success,
+        backend_probe_unavailable=probe_unavailable,
+        evidence_gain_after_switch=evidence_gain,
     )
 
 

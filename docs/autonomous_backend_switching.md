@@ -30,6 +30,41 @@ it can automatically switch to a higher-evidence backend instead of stopping.
    - Next backend is not in `allowed_backends`
    - `max_iterations` is reached
 
+## Post-Switch Validation (Phase 31)
+
+After a backend switch, the loop runs a lightweight backend probe on the new
+backend before proceeding with full experiments:
+
+5. At switch time, `pending_backend_switch=True` is injected into the
+   iteration's `execution_result` along with `switched_from_backend` and
+   `switched_to_backend`.
+
+6. The next iteration's StrategyEngine sees `pending_backend_switch` and
+   recommends `probe_new_backend`, which maps to the `backend_probe` task type.
+
+7. `run_lightweight_backend_probe()` executes a fast (<5s) FFT PSF probe to
+   validate backend availability. For DeepLens backends, it first checks
+   whether `deeplens.geolens` is importable.
+
+8. If the probe succeeds: `backend_switch_validated=True`,
+   `pending_backend_switch` is cleared, and the loop continues with normal
+   experiments on the new backend.
+
+9. If the probe fails and alternatives exist: the loop tries the next
+   available edge from the progression graph via `get_all_edges_from()`.
+
+## Alternative Backend Fallback
+
+When the primary next backend's probe fails:
+
+```python
+from optiresearch.backends.progression import get_all_edges_from
+alt_edges = get_all_edges_from(source_backend)
+# Try each edge, skipping the failed one
+# Respects max_backend_switches limit
+# Falls back to stop_reason=backend_switch_failed if all exhausted
+```
+
 ## CLI Usage
 
 ```bash

@@ -250,6 +250,7 @@ _BACKEND_TASK_RULES: dict[str, dict[str, Optional[str]]] = {
         "native_hsi_codesign": "native_hsi_proxy",
         "native_hsi_reconstruction_codesign": "native_full_reconstruction_proxy",
         "lightweight_psf_probe": "deeplens_integration_smoke",
+        "backend_probe": "deeplens_integration_smoke",
     },
     "deeplens_geolens_geometric": {
         "stable_lens_hsi_codesign": "native_lens_simulation",
@@ -257,33 +258,40 @@ _BACKEND_TASK_RULES: dict[str, dict[str, Optional[str]]] = {
         "native_hsi_reconstruction_codesign": "native_full_reconstruction_proxy",
         "psf_probe": "deeplens_integration_smoke",
         "native_optimization_probe": "native_component_optimization",
+        "backend_probe": "deeplens_integration_smoke",
     },
     "mock_deeplens": {
         "stable_lens_hsi_codesign": "mock_simulation",
         "native_hsi_codesign": "mock_simulation",
         "lightweight_psf_probe": "mock_simulation",
+        "backend_probe": "mock_simulation",
     },
     "local_synthetic_hsi": {
         "stable_lens_hsi_codesign": "synthetic_hsi_simulation",
         "native_hsi_codesign": "synthetic_hsi_simulation",
         "native_hsi_reconstruction_codesign": "synthetic_hsi_simulation",
         "lightweight_psf_probe": "synthetic_hsi_simulation",
+        "backend_probe": "synthetic_hsi_simulation",
     },
     "deeplens_fresnel_component": {
         "native_optimization_probe": "native_component_optimization",
         "component_optimization": "native_component_optimization",
+        "backend_probe": "deeplens_integration_smoke",
     },
     "deeplens_binary2phase_component": {
         "native_optimization_probe": "native_component_optimization",
         "component_optimization": "native_component_optimization",
+        "backend_probe": "deeplens_integration_smoke",
     },
     "deeplens_coherent_asm": {
         "psf_probe": "deeplens_integration_smoke",
         "lightweight_psf_probe": "deeplens_integration_smoke",
+        "backend_probe": "deeplens_integration_smoke",
     },
     "deeplens_blackbox_source_psf": {
         "psf_probe": "deeplens_integration_smoke",
         "lightweight_psf_probe": "deeplens_integration_smoke",
+        "backend_probe": "deeplens_integration_smoke",
     },
 }
 

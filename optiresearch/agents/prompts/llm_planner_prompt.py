@@ -55,8 +55,19 @@ We are building an agentic differentiable optics framework with:
     rather than stop_and_report. Prefer deeplens_geolens_geometric after
     phase_to_fft_proxy for local execution. Do NOT claim full wave-optics
     just because the backend changed.
+17. **When pending_backend_switch is detected** in recent results (the
+    pending_backend_switch flag is True), propose probe_new_backend to
+    validate the new backend's availability and basic functionality. Do NOT
+    choose stop_and_report immediately after a backend switch unless the
+    new backend is unavailable and no alternative backends exist. Treat
+    backend probes as evidence-level validation, not metric improvement.
 
 ## Output Format
+Return a JSON object with a "proposals" array. Each proposal must have:
+- proposal_id: unique string identifier
+- hypothesis: scientific hypothesis being tested (1-2 sentences)
+- rationale: why this proposal is the right next step (2-3 sentences)
+- recommended_action: one of [retry_with_smaller_lr, enable_rollback, switch_backend, run_ablation, probe_waveoptics_path, request_dataset, run_remote_validation, stop_and_report, probe_new_backend]
 Return a JSON object with a "proposals" array. Each proposal must have:
 - proposal_id: unique string identifier
 - hypothesis: scientific hypothesis being tested (1-2 sentences)
@@ -164,6 +175,28 @@ def build_planner_prompt(context: dict[str, Any]) -> list[dict[str, str]]:
             + ", ".join(context["allowed_backends"])
         )
 
+    # Detect pending backend switch in recent results
+    pending_switch_detected = False
+    switch_from = ""
+    switch_to = ""
+    for r in context.get("recent_results", []):
+        if isinstance(r, dict) and r.get("pending_backend_switch"):
+            pending_switch_detected = True
+            switch_from = r.get("switched_from_backend", "")
+            switch_to = r.get("switched_to_backend", "")
+            break
+    if pending_switch_detected:
+        user_prompt_parts.append("")
+        user_prompt_parts.append("## Pending Backend Switch Detected")
+        user_prompt_parts.append(
+            f"A backend switch from {switch_from} to {switch_to} is pending "
+            "validation. You MUST propose probe_new_backend to validate the "
+            "new backend's availability before running any experiments. "
+            "Use task_type=backend_probe with device=cpu. "
+            "Do NOT propose stop_and_report unless the backend is confirmed "
+            "unavailable and no alternatives exist."
+        )
+
     user_prompt_parts.append("")
     user_prompt_parts.append("Generate candidate research proposals as JSON.")
 
@@ -207,6 +240,20 @@ def build_mock_proposals() -> list[dict[str, Any]]:
     Used by the mock LLM provider path.
     """
     return [
+        {
+            "proposal_id": "mock_backend_probe_000",
+            "hypothesis": "The newly switched backend is available and produces valid PSF outputs.",
+            "rationale": "Pending backend switch detected. A lightweight probe will validate backend availability before running experiments.",
+            "recommended_action": "probe_new_backend",
+            "backend_id": "deeplens_geolens_geometric",
+            "task_type": "backend_probe",
+            "experiment_spec_patch": {"device": "cpu", "lightweight_mode": True},
+            "expected_evidence_level": "deeplens_integration_smoke",
+            "expected_claim_gain": None,
+            "risk_level": "low",
+            "proposed_claim": "Backend deeplens_geolens_geometric is available and produces valid PSF outputs.",
+            "safe_wording": "Backend deeplens_geolens_geometric integration smoke test [evidence ceiling: deeplens_integration_smoke]",
+        },
         {
             "proposal_id": "mock_safe_retry_001",
             "hypothesis": "Reducing optical LR to 1e-6 will stabilize geometric PSF gradients.",

@@ -43,3 +43,4 @@ This ensures at least one experiment executes before the loop stops.
 | `enable_rollback` | `stable_lens_hsi_codesign` | Enable rollback protection |
 | `run_ablation` | `stable_lens_hsi_codesign` | Systematic ablation study |
 | `probe_waveoptics_path` | `lightweight_psf_probe` | FFT-based PSF probe |
+| `probe_new_backend` | `backend_probe` | Validate new backend after switch (Phase 31) |

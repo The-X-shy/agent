@@ -13,6 +13,16 @@ across iterations, enabling multi-backend loops.
 | `backend_switch_count` | `int` | Number of backend switches detected |
 | `evidence_level_progression` | `bool` | True when multiple evidence levels seen |
 
+## Phase 31: Switch Validation Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `backend_switch_triggered` | `bool` | Any iteration has `switched_from_backend` in execution_result |
+| `backend_switch_validated` | `bool` | Any iteration has `backend_switch_validated=True` |
+| `backend_probe_success` | `bool` | Probe on new backend returned `probe_status=succeeded` |
+| `backend_probe_unavailable` | `bool` | Probe returned `probe_status=unavailable` |
+| `evidence_gain_after_switch` | `bool` | Post-switch evidence levels contain new levels not seen pre-switch |
+
 ## Claim Ceiling Detection
 
 `claim_ceiling_reached` now requires:

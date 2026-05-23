@@ -44,6 +44,8 @@ Phase 29 修复 claim-downgrade 早停并启用多轮 metric trajectory：trajec
 
 Phase 30 增加多后端自主切换：新增 BackendProgressionGraph（7 条默认 progression edge）；StrategyEngine 新增 claim_ceiling_reached 自动推荐 switch_backend_after_claim_ceiling；trajectory evaluator 新增 backend_history / backend_switch_count / evidence_level_progression 跨后端追踪；autonomous loop 在 claim_ceiling_reached 后自动查询 progression graph 切换 backend 继续执行；LLM prompt 新增 backend switching 指引；controller 新增 psf_probe 和 component_optimization 轻量路由；report 新增 Backend Progression 和 Evidence Level Progression section。
 
+Phase 31 新增后端切换后验证：post-switch strategy context 注入（pending_backend_switch / switched_from_backend / switched_to_backend）；StrategyEngine 新增 probe_new_backend 最高优先级规则；新增 backend_probe task type 和 lightweight backend probe runtime（支持 DeepLens unavailable 结构化返回）；strategy-to-spec 映射 probe_new_backend → backend_probe；LLM prompt 新增 Rule 17 和 pending switch context 动态 section；backend progression graph 新增 get_all_edges_from() 支持 alternative fallback；trajectory evaluator 新增 backend_switch_triggered / validated / probe_success / unavailable / evidence_gain_after_switch；report 新增 Backend Probe Results 和 Backend Switch Validation section；autonomous loop 在 probe 失败时自动尝试 alternative backend 或返回 structured unavailable。
+
 ## 安装
 
 ```bash

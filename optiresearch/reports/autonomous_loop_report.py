@@ -122,6 +122,12 @@ def _build_sections(result: Any) -> list[str]:
     # Evidence level progression
     sections.append(_build_evidence_level_progression(result))
 
+    # Backend probe results
+    sections.append(_build_backend_probe_results(result))
+
+    # Backend switch validation
+    sections.append(_build_backend_switch_validation(result))
+
     # Claim evolution table
     sections.append(_build_claim_evolution(result))
 
@@ -374,10 +380,17 @@ def _build_backend_progression(result: Any) -> str:
         exec_result = it.execution_result or {}
         bid = exec_result.get("backend_id", "-")
         evidence = exec_result.get("evidence_level", "-")
-        rows.append(f"| {it.iteration_id} | {bid} | {evidence} |")
+        validated = exec_result.get("backend_switch_validated", None)
+        if validated is True:
+            flag = "Yes"
+        elif validated is False:
+            flag = "No"
+        else:
+            flag = ""
+        rows.append(f"| {it.iteration_id} | {bid} | {evidence} | {flag} |")
     if rows:
-        lines.append("| Iter | Backend | Evidence Level |")
-        lines.append("|---|---|---|")
+        lines.append("| Iter | Backend | Evidence Level | Validated |")
+        lines.append("|---|---|---|---|")
         lines.extend(rows)
     else:
         lines.append("No backend progression data.")
@@ -400,6 +413,51 @@ def _build_evidence_level_progression(result: Any) -> str:
         lines.extend(rows)
     else:
         lines.append("No evidence level data.")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _build_backend_probe_results(result: Any) -> str:
+    lines = ["## Backend Probe Results", ""]
+    rows = []
+    for it in result.iterations:
+        exec_result = it.execution_result or {}
+        payload = exec_result.get("result_payload") or {}
+        probe_status = payload.get("probe_status", "")
+        if probe_status:
+            rows.append(
+                f"| {it.iteration_id} | "
+                f"{exec_result.get('backend_id', '-')} | "
+                f"{probe_status} | "
+                f"{payload.get('probe_time_seconds', '-')} |"
+            )
+    if rows:
+        lines.append("| Iter | Backend | Probe Status | Probe Time (s) |")
+        lines.append("|---|---|---|---|")
+        lines.extend(rows)
+    else:
+        lines.append("No backend probe results in this loop.")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _build_backend_switch_validation(result: Any) -> str:
+    lines = ["## Backend Switch Validation", ""]
+    triggered = False
+    validated = False
+    probe_success = False
+    for it in result.iterations:
+        exec_result = it.execution_result or {}
+        if exec_result.get("switched_from_backend"):
+            triggered = True
+        if exec_result.get("backend_switch_validated"):
+            validated = True
+        payload = exec_result.get("result_payload") or {}
+        if payload.get("probe_status") == "succeeded":
+            probe_success = True
+    lines.append(f"- **Switch Triggered:** {triggered}")
+    lines.append(f"- **Switch Validated:** {validated}")
+    lines.append(f"- **Probe Success:** {probe_success}")
     lines.append("")
     return "\n".join(lines)
 

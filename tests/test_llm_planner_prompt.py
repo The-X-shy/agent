@@ -22,26 +22,31 @@ def test_build_planner_prompt_returns_messages():
     assert "test" in messages[1]["content"]
 
 
-def test_build_mock_proposals_returns_three():
+def test_build_mock_proposals_returns_expected():
     proposals = build_mock_proposals()
-    assert len(proposals) == 3
-    assert proposals[0]["proposal_id"] == "mock_safe_retry_001"
+    assert len(proposals) >= 3
+    assert proposals[0]["proposal_id"] == "mock_backend_probe_000"
 
 
 def test_mock_proposals_have_valid_actions():
     valid_actions = {
         "retry_with_smaller_lr", "enable_rollback", "switch_backend",
         "run_ablation", "probe_waveoptics_path", "request_dataset",
-        "run_remote_validation", "stop_and_report",
+        "run_remote_validation", "stop_and_report", "probe_new_backend",
     }
     for p in build_mock_proposals():
         assert p["recommended_action"] in valid_actions
 
 
 def test_mock_proposals_have_safe_wording():
+    valid_ceilings = {
+        "native_lens_simulation", "deeplens_integration_smoke",
+        "native_component_optimization",
+    }
     for p in build_mock_proposals():
         assert len(p["safe_wording"]) > 0
-        assert "native_lens_simulation" in p["safe_wording"].lower()
+        assert any(c in p["safe_wording"].lower() for c in valid_ceilings), \
+            f"Expected one of {valid_ceilings} in safe_wording: {p['safe_wording']}"
 
 
 def test_prompt_includes_backend_list():

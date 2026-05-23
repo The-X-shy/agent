@@ -7,7 +7,7 @@ def test_mock_planner_returns_proposals():
     planner = LLMPlanner()
     result = planner.plan("test objective", provider_name="mock")
     assert result.status == "succeeded"
-    assert len(result.proposals) == 3
+    assert len(result.proposals) >= 2
     assert result.selected_proposal is not None
 
 
@@ -26,7 +26,10 @@ def test_mock_planner_has_valid_backend():
 
 def test_mock_planner_respects_max_proposals():
     planner = LLMPlanner()
-    result = planner.plan("test", provider_name="mock", max_candidate_plans=1)
+    result = planner.plan(
+        "test", provider_name="mock", max_candidate_plans=1,
+        allowed_task_types=["stable_lens_hsi_codesign", "backend_probe"],
+    )
     assert len(result.proposals) == 1
 
 

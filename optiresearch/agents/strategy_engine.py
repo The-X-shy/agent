@@ -81,8 +81,30 @@ class StrategyEngine:
         return recommendations[0]
 
     def _build_builtin_rules(self) -> list[dict[str, Any]]:
-        """9 built-in rules ordered by priority (highest first)."""
+        """10 built-in rules ordered by priority (highest first)."""
         return [
+            {
+                "id": "pending_backend_switch_probe",
+                "condition": lambda r: r.get("pending_backend_switch", False),
+                "action": "probe_new_backend",
+                "rationale": (
+                    "Pending backend switch detected: "
+                    "switched from {switched_from} to {switched_to}. "
+                    "Running lightweight backend probe to validate availability "
+                    "and basic functionality before proceeding with experiments."
+                ),
+                "expected_claim_gain": None,
+                "risk_level": "low",
+                "proposed_commands": [
+                    "python -m optiresearch.cli run-experiment-v2 "
+                    "--task-type backend_probe "
+                    "--backend-id {backend_id}"
+                ],
+                "required_evidence": [
+                    "Backend is available and responsive",
+                    "Basic PSF generation works on this backend",
+                ],
+            },
             {
                 "id": "claim_ceiling_reached_switch",
                 "condition": lambda r: r.get("stop_reason") == "claim_ceiling_reached",
@@ -284,6 +306,8 @@ class StrategyEngine:
             downgraded_to=result.get("downgraded_to", "unknown"),
             grad_max=result.get("optical_gradient_norm_max", 0),
             psf_energy_delta=result.get("psf_energy_delta", 0),
+            switched_from=result.get("switched_from_backend", "unknown"),
+            switched_to=result.get("switched_to_backend", "unknown"),
             backend_id=backend_id,
         )
 
@@ -309,6 +333,22 @@ class StrategyEngine:
         backend_id: str,
     ) -> StrategyRecommendation:
         """Fallback recommendation when no specific rule fires."""
+        if result.get("pending_backend_switch", False):
+            return StrategyRecommendation(
+                recommended_action="probe_new_backend",
+                rationale=(
+                    "Pending backend switch detected. "
+                    "Validating new backend availability before proceeding."
+                ),
+                risk_level="low",
+                required_evidence=["Backend availability confirmed"],
+                proposed_cli_commands=[
+                    "python -m optiresearch.cli run-experiment-v2 "
+                    "--task-type backend_probe "
+                    "--backend-id {backend_id}".format(backend_id=backend_id),
+                ],
+            )
+
         stable = result.get("stable_training_succeeded", None)
         loss_before = result.get("reconstruction_loss_before", result.get("loss_before"))
         loss_after = result.get("reconstruction_loss_after", result.get("loss_after"))

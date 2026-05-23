@@ -54,6 +54,10 @@ def build_feedback_context(
         "error_message": _truncate(
             (execution.get("errors") or [{}])[0].get("message", ""), 200
         ),
+        "pending_backend_switch": execution.get("pending_backend_switch", False),
+        "switched_from_backend": execution.get("switched_from_backend", ""),
+        "switched_to_backend": execution.get("switched_to_backend", ""),
+        "backend_switch_validated": execution.get("backend_switch_validated", False),
     }
 
 

@@ -220,6 +220,50 @@ def _run_local(
         it_obj.metrics_snapshot = execution.get("result_payload") or {}
 
         # 8. Decide — continue or stop
+        # Phase 31: Post-switch probe handling
+        if strategy_rec.get("recommended_action") == "probe_new_backend":
+            probe_status = execution.get("status", "")
+            if probe_status == "succeeded":
+                execution["backend_switch_validated"] = True
+                execution["pending_backend_switch"] = False
+                it_obj.metrics_snapshot["backend_switch_validated"] = True
+                it_obj.metrics_snapshot["probe_status"] = "succeeded"
+            else:
+                switched_from = execution.get("switched_from_backend")
+                if switched_from and backend_switch_count < spec.max_backend_switches:
+                    from optiresearch.backends.progression import get_all_edges_from
+                    alt_edges = get_all_edges_from(switched_from)
+                    for edge in alt_edges:
+                        if (edge["next_backend"] != backend_id
+                                and edge["next_backend"] in spec.allowed_backends):
+                            alt_backend = edge["next_backend"]
+                            backend_id = alt_backend
+                            backend_switch_count += 1
+                            exec_result = dict(execution)
+                            exec_result["pending_backend_switch"] = True
+                            exec_result["switched_from_backend"] = switched_from
+                            exec_result["switched_to_backend"] = alt_backend
+                            exec_result["backend_switch_count"] = backend_switch_count
+                            it_obj.execution_result = exec_result
+                            it_obj.next_action = "switch_backend"
+                            it_obj.metrics_snapshot["backend_switched_to"] = alt_backend
+                            it_obj.metrics_snapshot["backend_switch_count"] = backend_switch_count
+                            iterations.append(it_obj)
+                            break
+                    else:
+                        it_obj.next_action = "stop"
+                        it_obj.stop_reason = "backend_switch_failed"
+                        iterations.append(it_obj)
+                        stopped_reason = "backend_switch_failed"
+                        break
+                    continue
+
+                it_obj.next_action = "stop"
+                it_obj.stop_reason = "backend_switch_failed"
+                iterations.append(it_obj)
+                stopped_reason = "backend_switch_failed"
+                break
+
         traj_eval = evaluate_trajectory(
             iterations + [it_obj], spec,
             min_iterations_before_stop=spec.min_iterations_before_stop,
@@ -239,11 +283,18 @@ def _run_local(
                 if next_info:
                     next_backend = next_info["next_backend"]
                     if next_backend != backend_id and next_backend in spec.allowed_backends:
+                        old_backend = backend_id
                         backend_id = next_backend
                         backend_switch_count += 1
                         it_obj.next_action = "switch_backend"
                         it_obj.metrics_snapshot["backend_switched_to"] = backend_id
                         it_obj.metrics_snapshot["backend_switch_count"] = backend_switch_count
+                        exec_result = dict(it_obj.execution_result or {})
+                        exec_result["pending_backend_switch"] = True
+                        exec_result["switched_from_backend"] = old_backend
+                        exec_result["switched_to_backend"] = backend_id
+                        exec_result["backend_switch_count"] = backend_switch_count
+                        it_obj.execution_result = exec_result
                         iterations.append(it_obj)
                         continue
 

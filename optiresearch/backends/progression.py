@@ -167,6 +167,31 @@ def get_next_backend(
     }
 
 
+def get_all_edges_from(
+    backend_id: str,
+) -> list[dict[str, Any]]:
+    """Return ALL edges from a given backend, including non-preferred ones.
+
+    Unlike get_next_backend() which returns only the first edge, this
+    returns all edges so the loop can try alternatives when the primary
+    fails.
+    """
+    graph = _get_graph()
+    edges = graph.get_edges_from(backend_id)
+    return [
+        {
+            "next_backend": e.to_backend,
+            "reason": e.reason,
+            "expected_claim_gain": e.expected_claim_gain,
+            "runtime_cost": e.runtime_cost,
+            "required_preconditions": e.required_preconditions,
+            "fallback_backend": e.fallback_backend,
+            "allowed_task_types": e.allowed_task_types,
+        }
+        for e in edges
+    ]
+
+
 def list_progression_from(backend_id: str) -> list[str]:
     graph = _get_graph()
     return [e.to_backend for e in graph.get_edges_from(backend_id)]

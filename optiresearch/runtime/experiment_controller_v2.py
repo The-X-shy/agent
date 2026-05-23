@@ -26,6 +26,7 @@ class ExperimentSpecV2(StrictModel):
         "psf_probe",
         "component_optimization",
         "lightweight_psf_probe",
+        "backend_probe",
     ]
     backend_id: str
     execution_target: Literal["local", "remote"] = "local"
@@ -171,19 +172,22 @@ class ExperimentControllerV2:
 
         evidence_cap = get_backend_task_evidence_cap(spec.backend_id, spec.task_type)
         if evidence_cap is None:
-            return ControllerResult(
-                spec_id=spec.spec_id,
-                status="unsupported",
-                execution_target="local",
-                backend_id=spec.backend_id,
-                errors=[{
-                    "type": "unsupported_task_for_backend",
-                    "message": (
-                        f"Task '{spec.task_type}' not allowed on backend "
-                        f"'{spec.backend_id}'"
-                    ),
-                }],
-            )
+            if spec.task_type == "backend_probe":
+                evidence_cap = "deeplens_integration_smoke"
+            else:
+                return ControllerResult(
+                    spec_id=spec.spec_id,
+                    status="unsupported",
+                    execution_target="local",
+                    backend_id=spec.backend_id,
+                    errors=[{
+                        "type": "unsupported_task_for_backend",
+                        "message": (
+                            f"Task '{spec.task_type}' not allowed on backend "
+                            f"'{spec.backend_id}'"
+                        ),
+                    }],
+                )
 
         spec.metadata["evidence_level_cap"] = evidence_cap
 
@@ -397,6 +401,8 @@ class ExperimentControllerV2:
             return self._run_lightweight_psf_probe(spec, payload)
         elif spec.task_type == "component_optimization":
             return self._run_lightweight_stable_lens_hsi(spec, payload)
+        elif spec.task_type == "backend_probe":
+            return self._run_backend_probe(spec, payload)
         else:
             return ControllerResult(
                 spec_id=spec.spec_id,
@@ -419,6 +425,20 @@ class ExperimentControllerV2:
             run_lightweight_psf_probe,
         )
         result = run_lightweight_psf_probe(
+            backend_id=spec.backend_id,
+            device=payload.get("device", "cpu"),
+        )
+        result.spec_id = spec.spec_id
+        return result
+
+    def _run_backend_probe(
+        self, spec: ExperimentSpecV2, payload: dict[str, Any]
+    ) -> ControllerResult:
+        """Run a lightweight backend availability and functionality probe."""
+        from optiresearch.runtime.lightweight_experiments import (
+            run_lightweight_backend_probe,
+        )
+        result = run_lightweight_backend_probe(
             backend_id=spec.backend_id,
             device=payload.get("device", "cpu"),
         )

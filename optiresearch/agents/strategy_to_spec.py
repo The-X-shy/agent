@@ -87,6 +87,7 @@ def _action_to_task_type(action: str, backend_id: str) -> Optional[str]:
         "enable_rollback": "stable_lens_hsi_codesign",
         "run_remote_validation": "stable_lens_hsi_codesign",
         "probe_waveoptics_path": "lightweight_psf_probe",
+        "probe_new_backend": "backend_probe",
         "stop_and_report": None,
         "downgrade_claim": None,
     }
@@ -157,6 +158,10 @@ def _build_payload(
         payload["candidate"] = "GeoLensCooke"
         payload["reconstructor"] = "tiny_cnn"
         payload["device"] = "cpu"
+    elif action == "probe_new_backend":
+        payload["device"] = "cpu"
+        payload["max_steps"] = 1
+        payload["lightweight_mode"] = True
 
     if spec_patch:
         disallowed_keys = {
