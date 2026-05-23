@@ -506,6 +506,7 @@ def main(argv: list[str] | None = None) -> None:
     geo_hsi.add_argument("--recon-lr", type=float, default=1e-3)
     geo_hsi.add_argument("--rollback-on-loss-increase", action="store_true", default=True)
     geo_hsi.add_argument("--device", default="cpu")
+    geo_hsi.add_argument("--remote-job-id")
 
     recommend_strategy = sub.add_parser("recommend-next-strategy", help="Recommend next action via StrategyEngine.")
     recommend_strategy.add_argument("--backend-id", required=True)
@@ -2388,7 +2389,11 @@ def _run_deeplens_native_geolens_hsi(args: Any) -> None:
     )
     result = run_stable_native_lens_hsi_codesign(spec)
 
-    output_dir = _Path("workspace/native_geolens_hsi") / run_id
+    remote_job_id = getattr(args, "remote_job_id", None)
+    if remote_job_id:
+        output_dir = _Path("workspace/remote_jobs") / remote_job_id
+    else:
+        output_dir = _Path("workspace/native_geolens_hsi") / run_id
     output_dir.mkdir(parents=True, exist_ok=True)
     (_Path(output_dir) / "spec.json").write_text(
         _json.dumps(spec.model_dump(mode="json"), indent=2, default=str),
@@ -2398,6 +2403,36 @@ def _run_deeplens_native_geolens_hsi(args: Any) -> None:
         _json.dumps(result.model_dump(mode="json"), indent=2, default=str),
         encoding="utf-8",
     )
+
+    if remote_job_id:
+        from optiresearch.runtime.remote_jobs import export_remote_job_outputs
+        metrics_summary = {
+            "job_type": "deeplens_native_geolens_hsi_codesign",
+            "candidate": "GeoLensCooke",
+            "reconstructor": args.reconstructor,
+            "status": result.status,
+            "execution_fidelity": "deeplens_native_geometric",
+            "proxy_fallback_used": False,
+            "deeplens_native_psf_path": result.deeplens_native_psf_path,
+            "full_wave_optics": result.full_wave_optics,
+            "phase_to_fft_proxy_used": result.phase_to_fft_proxy_used,
+            "reconstruction_loss_before": result.reconstruction_loss_before,
+            "reconstruction_loss_after": result.reconstruction_loss_after,
+            "optical_gradient_norm": result.optical_gradient_norm_max,
+            "accepted_update_count": result.accepted_update_count,
+            "rollback_count": result.rollback_count,
+            "stable_training_succeeded": result.stable_training_succeeded,
+            "evidence_level": result.evidence_level,
+            "error_code": result.error_code,
+        }
+        export_remote_job_outputs(
+            remote_job_id,
+            "deeplens_native_geolens_hsi_codesign",
+            {"status": result.status, "run_id": run_id, **metrics_summary},
+            [output_dir],
+            metrics_summary,
+        )
+
     print(_compact_json({
         "run_id": run_id,
         "status": result.status,
