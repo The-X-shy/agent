@@ -134,6 +134,9 @@ def _build_sections(result: Any) -> list[str]:
     # Alternative backend attempts
     sections.append(_build_alternative_backend_attempts(result))
 
+    # Execution fidelity
+    sections.append(_build_execution_fidelity(result))
+
     # Claim evolution table
     sections.append(_build_claim_evolution(result))
 
@@ -512,6 +515,31 @@ def _build_alternative_backend_attempts(result: Any) -> str:
         lines.extend(rows)
     else:
         lines.append("No alternative backend attempts in this loop.")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _build_execution_fidelity(result: Any) -> str:
+    lines = ["## Execution Fidelity", ""]
+    rows = []
+    for it in result.iterations:
+        exec_result = it.execution_result or {}
+        payload = exec_result.get("result_payload") or {}
+        bid = exec_result.get("backend_id", "-")
+        fidelity = payload.get("execution_fidelity") or payload.get("actual_execution_fidelity", "")
+        proxy_fallback = payload.get("proxy_fallback_used", "")
+        native_psf_path = payload.get("deeplens_native_psf_path", "")
+        if fidelity:
+            rows.append(
+                f"| {it.iteration_id} | {bid} | {fidelity} | "
+                f"{proxy_fallback} | {native_psf_path} |"
+            )
+    if rows:
+        lines.append("| Iter | Backend | Execution Fidelity | Proxy Fallback | Native PSF Path |")
+        lines.append("|---|---|---|---|---|")
+        lines.extend(rows)
+    else:
+        lines.append("No execution fidelity data in this loop.")
     lines.append("")
     return "\n".join(lines)
 
