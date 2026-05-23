@@ -102,6 +102,8 @@ class SkillRuntimeV2:
             return self._dispatch_geolens_hsi(inputs)
         if skill_id == "native_geolens_stabilization_sweep":
             return self._dispatch_stabilization_sweep(inputs)
+        if skill_id == "lightweight_scientific_hsi_mse_only":
+            return self._dispatch_lightweight_scientific_hsi(inputs)
         raise NotImplementedError(f"No runtime dispatch for skill: {skill_id}")
 
     def _dispatch_claim_check(self, inputs: dict[str, Any]) -> dict[str, Any]:
@@ -231,6 +233,46 @@ class SkillRuntimeV2:
             )
             return {"sweep_id": summary.get("sweep_id"), "configs_tested": summary.get("configs_tested"),
                     "configs_with_accepted_updates": summary.get("configs_with_accepted_updates")}
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+
+    def _dispatch_lightweight_scientific_hsi(self, inputs: dict[str, Any]) -> dict[str, Any]:
+        try:
+            from optiresearch.runtime.lightweight_experiments import (
+                run_lightweight_mse_only_hsi,
+            )
+            result = run_lightweight_mse_only_hsi(
+                backend_id=inputs.get("backend_id", "phase_to_fft_proxy"),
+                max_steps=inputs.get("max_steps", 10),
+                optical_lr=inputs.get("optical_lr", 1e-6),
+                recon_lr=inputs.get("recon_lr", 1e-3),
+                bands=inputs.get("bands", 4),
+                image_size=inputs.get("image_size", 16),
+                psf_size=inputs.get("psf_size", 15),
+                device=inputs.get("device", "cpu"),
+            )
+            self._event_bus.publish(AgentEvent.create(
+                "experiment_completed" if result.status == "succeeded" else "experiment_failed",
+                "controller",
+                payload={"run_id": result.run_id, "status": result.status,
+                         "evidence_level": result.evidence_level},
+            ))
+            payload = result.result_payload or {}
+            return {
+                "run_id": result.run_id,
+                "status": result.status,
+                "evidence_level": result.evidence_level,
+                "reconstruction_loss_before": payload.get("reconstruction_loss_before"),
+                "reconstruction_loss_after": payload.get("reconstruction_loss_after"),
+                "best_reconstruction_loss": payload.get("best_reconstruction_loss"),
+                "mse_before": payload.get("mse_before"),
+                "mse_after": payload.get("mse_after"),
+                "psnr_before": payload.get("psnr_before"),
+                "psnr_after": payload.get("psnr_after"),
+                "improvement_detected": payload.get("improvement_detected"),
+                "synthetic_data": payload.get("synthetic_data", True),
+                "physical_backend": payload.get("physical_backend", False),
+            }
         except Exception as e:
             return {"status": "failed", "error": str(e)}
 

@@ -23,6 +23,8 @@ ViolationType = Literal[
     "proxy_as_native_geolens",
     "report_only_as_improvement",
     "structured_unsupported_as_success",
+    "lightweight_as_native_physical",
+    "synthetic_metric_as_real_hsi",
 ]
 
 
@@ -175,6 +177,9 @@ class ClaimGateV2:
                 metadata={"outcome": "structured_unsupported"},
             )
 
+        if evidence_level == "lightweight_scientific_execution" and status in ("completed", "succeeded"):
+            return None
+
         if evidence_level == "local_execution_completed" and status in ("completed", "succeeded"):
             return None
 
@@ -305,6 +310,35 @@ class ClaimGateV2:
                 )
             )
 
+        # 10. lightweight_as_native_physical (Phase 39)
+        if result.get("evidence_level") == "lightweight_scientific_execution" and (
+            "native" in claim_lower
+            or "physical" in claim_lower
+            or "deep lens" in claim_lower
+            or "deeplens" in claim_lower
+        ):
+            violations.append(
+                (
+                    "lightweight_as_native_physical",
+                    "Lightweight scientific execution uses FFT proxy and synthetic data "
+                    "— cannot claim native DeepLens simulation or physical performance",
+                )
+            )
+
+        # 11. synthetic_metric_as_real_hsi (Phase 39)
+        if result.get("synthetic_data") is True and (
+            "real hsi" in claim_lower
+            or "real measurement" in claim_lower
+            or "physical hsi" in claim_lower
+        ):
+            violations.append(
+                (
+                    "synthetic_metric_as_real_hsi",
+                    "Experimental metrics from synthetic HSI data cannot support "
+                    "real HSI or physical measurement claims",
+                )
+            )
+
         return violations
 
     def _compute_max_allowed_claim(self, backend_id: str) -> str:
@@ -330,6 +364,8 @@ class ClaimGateV2:
             "unsupported_path_as_supported",
             "report_only_as_improvement",
             "structured_unsupported_as_success",
+            "lightweight_as_native_physical",
+            "synthetic_metric_as_real_hsi",
         }
         qualified: set[ViolationType] = {
             "differentiable_as_improves",
@@ -417,6 +453,14 @@ class ClaimGateV2:
             "structured_unsupported_as_success": [
                 "Complete a supported local execution path",
             ],
+            "lightweight_as_native_physical": [
+                "Run native DeepLens GeoLens geometric PSF experiment",
+                "Run real HSI measurement with physical camera",
+            ],
+            "synthetic_metric_as_real_hsi": [
+                "Acquire real HSI dataset",
+                "Run experiment on real sensor data",
+            ],
         }
         return evidence.get(violation_type, [])
 
@@ -453,6 +497,13 @@ class ClaimGateV2:
             ],
             "structured_unsupported_as_success": [
                 "Unsupported execution records a boundary only",
+            ],
+            "lightweight_as_native_physical": [
+                "Evidence based on synthetic HSI and FFT PSF proxy, not native DeepLens simulation",
+            ],
+            "synthetic_metric_as_real_hsi": [
+                "Evidence based on synthetic HSI data only",
+                "Real HSI performance may differ significantly",
             ],
         }
         return caveats.get(violation_type, [])

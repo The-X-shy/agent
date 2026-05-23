@@ -168,12 +168,15 @@ class CandidatePlanEvaluator:
         )
 
     def _score_design(self, d: ExperimentDesignCandidate) -> dict[str, float]:
-        evidence_map = {"negative_result": 0.3, "native_lens_simulation": 0.5,
+        evidence_map = {"negative_result": 0.3, "lightweight_scientific_execution": 0.4,
+                        "native_lens_simulation": 0.5,
                         "native_waveoptics_simulation": 0.8, "real_hsi": 1.0,
                         "sweep_analysis": 0.4, "": 0.1}
         metric_likelihood = 0.3 if "gradient_instability" in d.expected_failure_modes else 0.6
         if d.expected_evidence_level == "negative_result":
             metric_likelihood = 0.1
+        elif d.expected_evidence_level == "lightweight_scientific_execution":
+            metric_likelihood = 0.9
         risk_map = {"low": 1.0, "medium": 0.7, "high": 0.4}
         rt_map = {0: 1.0, 60: 1.0, 600: 0.8, 3600: 0.5, 7200: 0.3}
         return {
@@ -256,6 +259,8 @@ def _is_local_supported_design(design: ExperimentDesignCandidate) -> bool:
         return True
     if design.design_id == "backend_switch_waveoptics_coherent":
         return True
+    if _is_lightweight_scientific_design(design):
+        return True
     if not design.backend_id:
         return False
     try:
@@ -273,3 +278,14 @@ def _is_report_only_design(design: ExperimentDesignCandidate) -> bool:
         or design.spec_payload.get("action") == "export_system_subunit_report"
         or design.design_id == "report_negative_result_doc"
     )
+
+
+def _is_lightweight_scientific_design(design: ExperimentDesignCandidate) -> bool:
+    """Check if this design can be handled by the lightweight scientific handler."""
+    if design.design_id == "objective_redesign_simpler_metric_mse_only":
+        return True
+    loss_weights = design.spec_payload.get("loss_weights", {})
+    if isinstance(loss_weights, dict) and loss_weights.get("mse", 0) == 1.0:
+        if loss_weights.get("spectral_angle", 0) == 0.0:
+            return True
+    return False

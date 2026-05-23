@@ -22,7 +22,10 @@ from optiresearch.agents.experiment_design_generator import (
     ExperimentDesignCandidate,
     ExperimentDesignGenerator,
 )
-from optiresearch.agents.candidate_plan_evaluator import CandidatePlanEvaluator
+from optiresearch.agents.candidate_plan_evaluator import (
+    CandidatePlanEvaluator,
+    _is_lightweight_scientific_design,
+)
 from optiresearch.schemas.agent_plan_execution import (
     AgentPlanExecutionResult,
     AgentPlanExecutionSpec,
@@ -128,7 +131,7 @@ def run_agent_plan_execution(spec: AgentPlanExecutionSpec) -> AgentPlanExecution
             execution_result = {}
         else:
             executed = True
-            for d in _build_attempt_sequence(selected_designs, designs, max_attempts=max(2, spec.execute_top_k)):
+            for d in _build_attempt_sequence(selected_designs, designs, max_attempts=max(3, spec.execute_top_k + 2)):
                 bus.publish(AgentEvent.create(
                     "experiment_started",
                     "controller",
@@ -313,6 +316,9 @@ def _execute_design(d: ExperimentDesignCandidate) -> dict[str, Any]:
     if "report_generation" in d.required_skills or d.design_id == "report_negative_result_doc":
         return _execute_report_design(d)
 
+    if _is_lightweight_scientific_design(d):
+        return _execute_lightweight_scientific_design(d)
+
     if d.design_id == "param_reduction_sweep" or d.spec_payload.get("param_subset"):
         return _unsupported_execution_result(
             d,
@@ -398,6 +404,69 @@ def _execute_report_design(d: ExperimentDesignCandidate) -> dict[str, Any]:
         "artifacts": [],
         "errors": [{"type": "REPORT_GENERATION_UNSUPPORTED", "message": "; ".join(skill_result.errors)}],
         "caveats": ["Report generation did not complete"],
+    }
+
+
+def _execute_lightweight_scientific_design(d: ExperimentDesignCandidate) -> dict[str, Any]:
+    from optiresearch.runtime.lightweight_experiments import run_lightweight_mse_only_hsi
+
+    result = run_lightweight_mse_only_hsi(
+        backend_id=d.backend_id or "phase_to_fft_proxy",
+        max_steps=d.spec_payload.get("max_steps", 10),
+        optical_lr=d.spec_payload.get("optical_lr", 1e-6),
+        bands=d.spec_payload.get("bands", 4),
+    )
+    return _lightweight_result_to_execution_result(d, result)
+
+
+def _lightweight_result_to_execution_result(
+    d: ExperimentDesignCandidate, result: Any
+) -> dict[str, Any]:
+    completed = result.status == "succeeded"
+    payload = result.result_payload or {}
+    errors = list(result.errors or [])
+    metrics: dict[str, Any] = {}
+    for key in (
+        "reconstruction_loss_before",
+        "reconstruction_loss_after",
+        "best_reconstruction_loss",
+        "mse_before",
+        "mse_after",
+        "psnr_before",
+        "psnr_after",
+        "improvement_detected",
+        "metrics_valid",
+        "accepted_update_count",
+        "execution_time_sec",
+        "synthetic_data",
+        "physical_backend",
+        "mse_only_objective",
+    ):
+        if key in payload:
+            metrics[key] = payload[key]
+    return {
+        "status": "completed" if completed else "failed",
+        "outcome": "lightweight_scientific_execution" if completed else "structured_unsupported",
+        "design_id": d.design_id,
+        "task_type": d.task_type,
+        "backend_id": payload.get("backend_id", d.backend_id),
+        "evidence_level": "lightweight_scientific_execution" if completed else "structured_unsupported",
+        "backend_evidence_level": result.evidence_level,
+        "metrics": metrics,
+        "artifacts": list(result.artifact_paths or []),
+        "errors": errors,
+        "caveats": [
+            "MSE-only synthetic HSI experiment — not native DeepLens simulation",
+            "Synthetic HSI data — real HSI performance may differ",
+        ],
+        "run_id": result.run_id,
+        "metadata": {
+            "synthetic_data": True,
+            "physical_backend": False,
+            "mse_only_objective": True,
+            "deepens_used": False,
+            "psf_method": "fft_fraunhofer",
+        },
     }
 
 
@@ -498,7 +567,9 @@ def _run_claim_gate(d: ExperimentDesignCandidate | None, result: dict[str, Any])
     try:
         from optiresearch.memory.claim_gate_v2 import ClaimGateV2
         gate = ClaimGateV2()
-        if result.get("evidence_level") == "report_only":
+        if result.get("evidence_level") == "lightweight_scientific_execution":
+            claim_text = f"Lightweight scientific HSI co-design completed with MSE-only objective for {result.get('design_id', 'design')}"
+        elif result.get("evidence_level") == "report_only":
             claim_text = "The negative result is documented"
         elif result.get("status") in ("unsupported", "needs_followup"):
             claim_text = f"Boundary detected for local execution of {result.get('design_id', 'design')}"
@@ -532,17 +603,26 @@ def _build_attempt_sequence(
     max_attempts: int,
 ) -> list[ExperimentDesignCandidate]:
     sequence: list[ExperimentDesignCandidate] = []
+    seen: set[str] = set()
     for design in selected_designs:
-        if design.design_id not in {d.design_id for d in sequence}:
+        if design.design_id not in seen:
             sequence.append(design)
+            seen.add(design.design_id)
+    # Insert lightweight scientific designs before report fallback
+    for design in all_designs:
+        if design.design_id not in seen and _is_lightweight_scientific_design(design):
+            sequence.append(design)
+            seen.add(design.design_id)
     report = _find_design(all_designs, "report_negative_result_doc")
-    if report is not None and report.design_id not in {d.design_id for d in sequence}:
+    if report is not None and report.design_id not in seen:
         sequence.append(report)
+        seen.add(report.design_id)
     for design in all_designs:
         if len(sequence) >= max_attempts:
             break
-        if design.design_id not in {d.design_id for d in sequence} and design.estimated_runtime_sec > 0:
+        if design.design_id not in seen and design.estimated_runtime_sec > 0:
             sequence.append(design)
+            seen.add(design.design_id)
     return sequence[:max_attempts]
 
 
@@ -570,6 +650,8 @@ def _attempt_summary(result: dict[str, Any]) -> dict[str, Any]:
 def _skill_id_for_design(d: ExperimentDesignCandidate) -> str:
     if "report_generation" in d.required_skills or d.design_id == "report_negative_result_doc":
         return "report_generation"
+    if _is_lightweight_scientific_design(d):
+        return "lightweight_scientific_hsi_mse_only"
     if d.design_id == "backend_switch_waveoptics_coherent":
         return "backend_probe"
     if d.required_skills:
@@ -596,6 +678,11 @@ def _extract_metrics(payload: dict[str, Any]) -> dict[str, Any]:
         "stable_training_succeeded",
         "requires_grad",
         "report_generated",
+        "improvement_detected",
+        "metrics_valid",
+        "synthetic_data",
+        "physical_backend",
+        "mse_only_objective",
     ):
         if key in payload:
             metrics[key] = payload[key]
@@ -704,6 +791,19 @@ def _final_recommendation(
     execution_result = execution_result or {}
     if fallback_to_report_only:
         return "Report-only fallback completed. Do not upgrade optical improvement claims."
+    if execution_result.get("evidence_level") == "lightweight_scientific_execution":
+        metrics = execution_result.get("metrics", {})
+        improvement = "yes" if metrics.get("improvement_detected") else "no"
+        mse_after = metrics.get("mse_after", "?")
+        return (
+            f"Lightweight scientific execution completed for "
+            f"{execution_result.get('design_id', 'selected design')}. "
+            f"MSE after: {mse_after:.6f}, improvement detected: {improvement}."
+            if isinstance(mse_after, (int, float)) else
+            f"Lightweight scientific execution completed for "
+            f"{execution_result.get('design_id', 'selected design')}. "
+            f"Improvement detected: {improvement}."
+        )
     if execution_result.get("status") == "completed":
         return f"Local execution completed for {execution_result.get('design_id', 'selected design')}."
     if execution_result.get("status") in ("unsupported", "needs_followup"):

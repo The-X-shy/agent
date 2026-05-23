@@ -52,6 +52,8 @@ Phase 33 新增完整 DeepLens native GeoLens HSI co-design path：native_lens_s
 
 Phase 38 增加 Agent selected plan 本地执行闭环：local mode 会跳过需要用户数据、远程执行或不支持后端的高分方案，执行最高分本地可执行 scientific design；若本地 scientific path 不可用，会结构化记录 unsupported 并尝试 report-only fallback。执行结果写入 ClaimGate、ResearchMemoryV2、StateStore snapshot、EventBus 和 plan execution report，report-only 不会升级 optical improvement claim。
 
+Phase 39 补齐本地可执行 scientific handler：新增 `lightweight_scientific_execution` evidence level 和 `run_lightweight_mse_only_hsi()` 实验函数，使用 synthetic HSI + FFT PSF proxy 在无 DeepLens 环境下产出真实 metrics（MSE/PSNR/loss/improvement_detected）；`objective_redesign_simpler_metric_mse_only` design 由专属 handler 执行，优先于 report-only fallback；注册 `lightweight_scientific_hsi_mse_only` skill；ClaimGate 新增 `lightweight_as_native_physical` 和 `synthetic_metric_as_real_hsi` 违规类型防止声明升级。
+
 ## 安装
 
 ```bash

@@ -112,6 +112,32 @@ def _markdown(execution_id: str, r: dict[str, Any]) -> str:
     else:
         lines.append("(no local execution result)")
 
+    if ex.get("evidence_level") == "lightweight_scientific_execution":
+        m = ex.get("metrics", {})
+        lines.extend([
+            "",
+            "## 7a. Scientific Execution Metrics",
+            f"- **Evidence Level:** {ex.get('evidence_level', '-')}",
+            f"- **Reconstruction Loss Before:** {m.get('reconstruction_loss_before', '-')}",
+            f"- **Reconstruction Loss After:** {m.get('reconstruction_loss_after', '-')}",
+            f"- **Best Reconstruction Loss:** {m.get('best_reconstruction_loss', '-')}",
+            f"- **MSE Before:** {m.get('mse_before', '-')}",
+            f"- **MSE After:** {m.get('mse_after', '-')}",
+            f"- **PSNR Before:** {m.get('psnr_before', '-')}",
+            f"- **PSNR After:** {m.get('psnr_after', '-')}",
+            f"- **Improvement Detected:** {m.get('improvement_detected', '-')}",
+            f"- **Metrics Valid:** {m.get('metrics_valid', '-')}",
+            f"- **Execution Time (s):** {m.get('execution_time_sec', '-')}",
+            f"- **Synthetic Data:** {m.get('synthetic_data', '-')}",
+            f"- **Physical Backend:** {m.get('physical_backend', '-')}",
+            f"- **MSE-only Objective:** {m.get('mse_only_objective', '-')}",
+            "",
+            "### Caveats",
+            "- MSE-only synthetic HSI experiment — not native DeepLens simulation",
+            "- Synthetic HSI data — real HSI performance may differ",
+            "- Lightweight scientific execution — claim ceiling: synthetic_lightweight_metric_experiment",
+        ])
+
     lines.extend(["", "## 8. ClaimGate Outcome"])
     claim = r.get("claim_gate_decision") or {}
     if claim:

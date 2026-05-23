@@ -665,3 +665,134 @@ class _LinearReconstructor:
         # out[b, h, w] = sum_i measured[i, h, w] * weight[b, i] + bias[b, h, w]
         out = torch.einsum("ihw,bi->bhw", measured, self.combine_weight)
         return out + self.bias
+
+
+def run_lightweight_mse_only_hsi(
+    backend_id: str = "phase_to_fft_proxy",
+    max_steps: int = 10,
+    optical_lr: float = 1e-6,
+    recon_lr: float = 1e-3,
+    bands: int = 4,
+    image_size: int = 16,
+    psf_size: int = 15,
+    device: str = "cpu",
+) -> "ControllerResult":
+    """Run lightweight MSE-only HSI co-design for scientific metric execution.
+
+    Uses synthetic HSI data and FFT-based PSF generation without DeepLens.
+    MSE-only objective — no multi-objective loss, no rollback, no trust region.
+    Produces lightweight scientific execution evidence.
+    Completes in under 60 seconds on CPU.
+    """
+    import torch
+    import numpy as np
+
+    from optiresearch.runtime.experiment_controller_v2 import ControllerResult
+    from optiresearch.memory.schemas import make_deterministic_id
+
+    run_id = make_deterministic_id("lwmse", backend_id)
+    start = time.perf_counter()
+
+    try:
+        hsi_target = _generate_synthetic_hsi_torch(bands, image_size, device)
+        psf_cube, phase_mask = _generate_proxy_psf_torch(bands, psf_size, device)
+        reconstructor = _LinearReconstructor(bands, image_size, device)
+
+        optical_opt = torch.optim.Adam([phase_mask], lr=optical_lr)
+        recon_opt = torch.optim.Adam(reconstructor.parameters(), lr=recon_lr)
+        loss_fn = torch.nn.MSELoss()
+
+        loss_before = None
+        loss_after = None
+        best_loss = float("inf")
+        accepted_update_count = 0
+        grad_norms: list[float] = []
+
+        for step in range(max_steps):
+            band_offsets = torch.linspace(0, 2 * torch.pi, bands, device=device)
+            psfs = []
+            for b in range(bands):
+                field = torch.exp(1j * (phase_mask + band_offsets[b]))
+                psf_c = torch.abs(torch.fft.fft2(field)) ** 2
+                psf_c = psf_c / (psf_c.sum() + 1e-8)
+                psfs.append(psf_c.squeeze())
+            psf_cube = torch.stack(psfs)
+
+            measured = torch.zeros_like(hsi_target)
+            for b in range(bands):
+                hsi_fft = torch.fft.fft2(hsi_target[b])
+                otf = torch.fft.fft2(psf_cube[b], s=hsi_target[b].shape[-2:])
+                blurred = torch.fft.ifft2(hsi_fft * otf).real
+                measured[b] = blurred
+
+            reconstructed = reconstructor(measured)
+            loss = loss_fn(reconstructed, hsi_target)
+            loss_val = loss.item()
+
+            if step == 0:
+                loss_before = loss_val
+            loss_after = loss_val
+
+            if loss_val < best_loss:
+                best_loss = loss_val
+                accepted_update_count += 1
+
+            optical_opt.zero_grad()
+            recon_opt.zero_grad()
+            loss.backward()
+
+            grad_norm = phase_mask.grad.norm().item() if phase_mask.grad is not None else 0.0
+            grad_norms.append(grad_norm)
+
+            optical_opt.step()
+            recon_opt.step()
+
+        elapsed = round(time.perf_counter() - start, 3)
+        improvement = (
+            loss_after is not None
+            and loss_before is not None
+            and loss_after < loss_before
+        )
+
+        return ControllerResult(
+            spec_id=make_deterministic_id("spec", run_id),
+            status="succeeded",
+            execution_target="local",
+            backend_id=backend_id,
+            run_id=run_id,
+            evidence_level="lightweight_scientific_execution",
+            result_payload={
+                "status": "succeeded",
+                "reconstruction_loss_before": loss_before,
+                "reconstruction_loss_after": loss_after,
+                "best_reconstruction_loss": best_loss,
+                "mse_before": loss_before,
+                "mse_after": loss_after,
+                "psnr_before": _compute_psnr(loss_before) if loss_before else None,
+                "psnr_after": _compute_psnr(loss_after) if loss_after else None,
+                "accepted_update_count": accepted_update_count,
+                "optical_gradient_norm_max": max(grad_norms) if grad_norms else 0.0,
+                "optical_gradient_norm_mean": float(np.mean(grad_norms)) if grad_norms else 0.0,
+                "optical_parameters_changed": accepted_update_count > 0,
+                "improvement_detected": improvement,
+                "metrics_valid": True,
+                "execution_time_sec": elapsed,
+                "evidence_level": "lightweight_scientific_execution",
+                "claim_ceiling": "lightweight_scientific_execution",
+                "synthetic_data": True,
+                "physical_backend": False,
+                "mse_only_objective": True,
+                "deepens_used": False,
+                "psf_generation_method": "fft_fraunhofer",
+                "elapsed_seconds": elapsed,
+            },
+            artifact_paths=[],
+        )
+    except Exception as exc:
+        return ControllerResult(
+            spec_id=make_deterministic_id("spec", "lwmse_err"),
+            status="failed",
+            execution_target="local",
+            backend_id=backend_id,
+            errors=[{"type": type(exc).__name__, "message": str(exc)}],
+        )
