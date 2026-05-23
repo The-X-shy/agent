@@ -168,6 +168,17 @@ ALLOWED_CLI_COMMANDS: dict[str, set[str]] = {
         "--psf-size",
         "--remote-job-id",
     },
+    "run-deeplens-native-geolens-hsi-codesign": {
+        "--lens-file",
+        "--dataset",
+        "--reconstructor",
+        "--max-steps",
+        "--optical-lr",
+        "--recon-lr",
+        "--rollback-on-loss-increase",
+        "--device",
+        "--remote-job-id",
+    },
 }
 
 FLAG_OPTIONS = {"--strict-deeplens", "--use-optical-feature-maps", "--strict-native", "--allow-adapter-proxy", "--rollback-on-loss-increase"}

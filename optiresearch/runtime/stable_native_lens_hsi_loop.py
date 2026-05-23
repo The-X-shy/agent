@@ -63,6 +63,19 @@ def run_stable_native_lens_hsi_codesign(
     except Exception as exc:
         return _unsupported(spec, "BUILD_FAILED", caveats, metadata, str(exc))
 
+    # Phase 33: Smoke test PSF generation to catch macOS GeoLens IndexError early
+    try:
+        _test_psf = bridge.psf_cube_torch(num_bands=2, ks=16)
+        if _test_psf is None or _test_psf.numel() == 0:
+            return _unsupported(spec, "GEOLENS_PSF_GEOMETRIC_FAILED", caveats, metadata,
+                              "PSF generation returned empty tensor")
+    except IndexError as exc:
+        return _unsupported(spec, "GEOLENS_PSF_GEOMETRIC_FAILED_INDEXERROR",
+                           caveats, metadata,
+                           f"GeoLens geometric PSF path failed on this platform: {exc}")
+    except Exception as exc:
+        return _unsupported(spec, "GEOLENS_PSF_GEOMETRIC_FAILED", caveats, metadata, str(exc))
+
     try:
         opt_optimizer = bridge.get_optimizer(learning_rate=spec.optical_lr)
     except Exception as exc:

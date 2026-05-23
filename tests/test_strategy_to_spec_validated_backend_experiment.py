@@ -29,6 +29,21 @@ def test_continuation_for_proxy_backend():
 
 
 def test_continuation_payload_has_lightweight_mode():
+    """For proxy backend, continuation uses lightweight mode."""
+    rec = StrategyRecommendation(
+        recommended_action="run_validated_backend_experiment",
+        rationale="test",
+    )
+    spec = compile_experiment_spec(
+        rec, "phase_to_fft_proxy", prefer_executable=True,
+    )
+    assert spec.spec_payload.get("lightweight_mode") is True
+    assert spec.spec_payload.get("max_steps") == 3
+    assert spec.spec_payload.get("rollback_on_loss_increase") is True
+
+
+def test_continuation_deeplens_native_no_lightweight():
+    """For deeplens_geolens_geometric, continuation uses native path (no lightweight)."""
     rec = StrategyRecommendation(
         recommended_action="run_validated_backend_experiment",
         rationale="test",
@@ -36,9 +51,8 @@ def test_continuation_payload_has_lightweight_mode():
     spec = compile_experiment_spec(
         rec, "deeplens_geolens_geometric", prefer_executable=True,
     )
-    assert spec.spec_payload.get("lightweight_mode") is True
-    assert spec.spec_payload.get("max_steps") == 3
-    assert spec.spec_payload.get("rollback_on_loss_increase") is True
+    assert spec.spec_payload.get("execution_fidelity") == "deeplens_native_geometric"
+    assert spec.spec_payload.get("lightweight_mode") is False
 
 
 def test_continuation_for_component_backend():

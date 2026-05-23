@@ -180,9 +180,14 @@ def _build_payload(
         payload["lightweight_mode"] = True
     elif action == "run_validated_backend_experiment":
         payload["max_steps"] = 3
-        payload["lightweight_mode"] = True
         payload["device"] = "cpu"
         payload["rollback_on_loss_increase"] = True
+        if backend_id == "deeplens_geolens_geometric":
+            payload["execution_fidelity"] = "deeplens_native_geometric"
+            payload["lightweight_mode"] = False
+        else:
+            payload["execution_fidelity"] = "lightweight_proxy"
+            payload["lightweight_mode"] = True
 
     if spec_patch:
         disallowed_keys = {

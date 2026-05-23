@@ -20,6 +20,7 @@ ViolationType = Literal[
     "rollback_protection_as_improvement",
     "unsupported_path_as_supported",
     "black_box_as_native",
+    "proxy_as_native_geolens",
 ]
 
 
@@ -197,6 +198,25 @@ class ClaimGateV2:
                 )
             )
 
+        # 9. proxy_as_native_geolens (Phase 33)
+        exp_fidelity = ""
+        proxy_used = None
+        if result:
+            payload = result if isinstance(result, dict) else {}
+            exp_fidelity = payload.get("execution_fidelity", "")
+            proxy_used = payload.get("phase_to_fft_proxy_used", None)
+        if (
+            backend_id == "deeplens_geolens_geometric"
+            and ("native lens" in claim_lower or "geolens" in claim_lower)
+            and (exp_fidelity == "lightweight_proxy" or proxy_used is True)
+        ):
+            violations.append(
+                (
+                    "proxy_as_native_geolens",
+                    "FFT proxy experiment cannot be claimed as native GeoLens geometric PSF",
+                )
+            )
+
         return violations
 
     def _compute_max_allowed_claim(self, backend_id: str) -> str:
@@ -217,6 +237,7 @@ class ClaimGateV2:
             "proxy_as_waveoptics",
             "geometric_as_coherent",
             "synthetic_as_real",
+            "proxy_as_native_geolens",
             "black_box_as_native",
             "unsupported_path_as_supported",
         }

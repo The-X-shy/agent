@@ -38,6 +38,9 @@ class ExperimentSpecV2(StrictModel):
     expected_evidence_level: Optional[str] = None
     max_allowed_claim: Optional[str] = None
     task_requirement_level: Optional[str] = None
+    execution_fidelity: str = ""
+    allow_proxy_fallback: bool = True
+    require_deeplens_native: bool = False
 
 
 class ControllerResult(StrictModel):
@@ -173,7 +176,7 @@ class ExperimentControllerV2:
 
         evidence_cap = get_backend_task_evidence_cap(spec.backend_id, spec.task_type)
         if evidence_cap is None:
-            if spec.task_type == "backend_probe":
+            if spec.task_type in ("backend_probe", "native_lens_simulation_codesign"):
                 evidence_cap = "deeplens_integration_smoke"
             else:
                 return ControllerResult(
@@ -405,6 +408,8 @@ class ExperimentControllerV2:
         elif spec.task_type == "backend_probe":
             return self._run_backend_probe(spec, payload)
         elif spec.task_type == "native_lens_simulation_codesign":
+            if spec.backend_id == "deeplens_geolens_geometric":
+                return self._run_stable_lens_hsi(spec, payload)
             return self._run_lightweight_stable_lens_hsi(spec, payload)
         else:
             return ControllerResult(

@@ -480,6 +480,18 @@ def main(argv: list[str] | None = None) -> None:
     probe.add_argument("--probe-depth", choices=["shallow", "deep"], default="shallow")
     probe.add_argument("--device", default="cpu")
 
+    geo_hsi = sub.add_parser("run-deeplens-native-geolens-hsi-codesign",
+                             help="Run full DeepLens native GeoLens geometric HSI co-design.")
+    geo_hsi.add_argument("--lens-file", default="auto:cooke")
+    geo_hsi.add_argument("--dataset", default="synthetic")
+    geo_hsi.add_argument("--reconstructor", default="differentiable_linear",
+                         choices=["differentiable_linear", "tiny_cnn"])
+    geo_hsi.add_argument("--max-steps", type=int, default=5)
+    geo_hsi.add_argument("--optical-lr", type=float, default=1e-6)
+    geo_hsi.add_argument("--recon-lr", type=float, default=1e-3)
+    geo_hsi.add_argument("--rollback-on-loss-increase", action="store_true", default=True)
+    geo_hsi.add_argument("--device", default="cpu")
+
     recommend_strategy = sub.add_parser("recommend-next-strategy", help="Recommend next action via StrategyEngine.")
     recommend_strategy.add_argument("--backend-id", required=True)
     recommend_strategy.add_argument("--latest-result-json", required=True)
@@ -939,6 +951,8 @@ def main(argv: list[str] | None = None) -> None:
         _run_experiment_v2(args)
     elif args.command == "run-lightweight-backend-probe":
         _run_lightweight_backend_probe_cli(args)
+    elif args.command == "run-deeplens-native-geolens-hsi-codesign":
+        _run_deeplens_native_geolens_hsi(args)
     elif args.command == "recommend-next-strategy":
         _recommend_next_strategy(args)
     elif args.command == "compile-research-memory-v2":
@@ -2315,6 +2329,57 @@ def _run_lightweight_backend_probe_cli(args: Any) -> None:
         encoding="utf-8",
     )
     print(_compact_json(result.model_dump(mode="json")))
+
+
+def _run_deeplens_native_geolens_hsi(args: Any) -> None:
+    import json as _json
+    from pathlib import Path as _Path
+    from optiresearch.runtime.stable_native_lens_hsi_loop import (
+        run_stable_native_lens_hsi_codesign,
+    )
+    from optiresearch.schemas.stable_native_lens_hsi import (
+        StableNativeLensHSISpec, make_stable_lens_id,
+    )
+
+    run_id = make_stable_lens_id(
+        "GeoLensCooke", args.reconstructor,
+    )
+    spec = StableNativeLensHSISpec(
+        run_id=run_id,
+        candidate="GeoLensCooke",
+        reconstructor=args.reconstructor,
+        dataset=args.dataset,
+        max_steps=args.max_steps,
+        optical_lr=args.optical_lr,
+        recon_lr=args.recon_lr,
+        rollback_on_loss_increase=args.rollback_on_loss_increase,
+        device=args.device,
+        full_wave_optics=False,
+        phase_to_fft_proxy_used=False,
+    )
+    result = run_stable_native_lens_hsi_codesign(spec)
+
+    output_dir = _Path("workspace/native_geolens_hsi") / run_id
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (_Path(output_dir) / "spec.json").write_text(
+        _json.dumps(spec.model_dump(mode="json"), indent=2, default=str),
+        encoding="utf-8",
+    )
+    (_Path(output_dir) / "result.json").write_text(
+        _json.dumps(result.model_dump(mode="json"), indent=2, default=str),
+        encoding="utf-8",
+    )
+    print(_compact_json({
+        "run_id": run_id,
+        "status": result.status,
+        "execution_fidelity": "deeplens_native_geometric",
+        "full_wave_optics": result.full_wave_optics,
+        "phase_to_fft_proxy_used": result.phase_to_fft_proxy_used,
+        "deeplens_native_psf_path": result.deeplens_native_psf_path,
+        "evidence_level": result.evidence_level,
+        "error_code": result.error_code,
+        "output_dir": str(output_dir),
+    }))
 
 
 def _recommend_next_strategy(args: Any) -> None:
