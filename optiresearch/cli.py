@@ -70,9 +70,11 @@ from optiresearch.runtime.remote_jobs import (
     run_remote_stable_native_lens_hsi_codesign,
     run_remote_stable_native_lens_hsi_ablation,
     run_remote_deeplens_native_geolens_hsi_codesign,
+    run_remote_native_geolens_stabilization_sweep,
 )
 from optiresearch.reports.remote_execution import export_remote_execution_report
 from optiresearch.reports.native_geolens_hsi_report import export_native_geolens_hsi_report
+from optiresearch.reports.native_geolens_stabilization_report import export_native_geolens_stabilization_report
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -286,6 +288,8 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("export-phase23-report", help="Export Phase 23 stable native lens HSI co-design report.")
     diagnose = sub.add_parser("diagnose-native-lens-hsi-codesign", help="Diagnose Phase 22 native lens HSI co-design instability.")
     diagnose.add_argument("--run-dir", required=True)
+    diagnose_gl = sub.add_parser("diagnose-native-geolens-update", help="Diagnose native GeoLens HSI update instability.")
+    diagnose_gl.add_argument("--run-dir", required=True)
     stable_hsi = sub.add_parser("run-stable-native-lens-hsi-codesign", help="Run stable native lens HSI co-design.")
     stable_hsi.add_argument("--candidate", required=True, choices=["GeoLensCooke", "DiffractiveLens", "HybridLens"])
     stable_hsi.add_argument("--reconstructor", required=True, choices=["differentiable_linear", "tiny_cnn"])
@@ -469,10 +473,21 @@ def main(argv: list[str] | None = None) -> None:
     remote_geolens.add_argument("--optical-lr", type=float, default=1e-6)
     remote_geolens.add_argument("--rollback-on-loss-increase", action="store_true", default=True)
     remote_geolens.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
+    remote_geo_sweep = sub.add_parser("run-remote-native-geolens-stabilization-sweep",
+                                      help="Run native GeoLens stabilization sweep on a remote worker.")
+    remote_geo_sweep.add_argument("--worker-id", required=True)
+    remote_geo_sweep.add_argument("--lens-file", default="auto:cooke")
+    remote_geo_sweep.add_argument("--dataset", default="synthetic")
+    remote_geo_sweep.add_argument("--reconstructor", default="differentiable_linear",
+                                  choices=["differentiable_linear", "tiny_cnn"])
+    remote_geo_sweep.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
     remote_report = sub.add_parser("export-remote-execution-report", help="Export a remote execution report.")
     remote_report.add_argument("--job-id", required=True)
     geolens_hsi_report = sub.add_parser("export-native-geolens-hsi-report", help="Export a native GeoLens HSI report.")
     geolens_hsi_report.add_argument("--run-id", required=True)
+    geo_stab_report = sub.add_parser("export-native-geolens-stabilization-report",
+                                     help="Export a native GeoLens stabilization report.")
+    geo_stab_report.add_argument("--sweep-id", required=True)
 
     # ===================== Phase 24 CLI =====================
     sub.add_parser("list-optical-backends", help="List all registered optical backends.")
@@ -507,6 +522,14 @@ def main(argv: list[str] | None = None) -> None:
     geo_hsi.add_argument("--rollback-on-loss-increase", action="store_true", default=True)
     geo_hsi.add_argument("--device", default="cpu")
     geo_hsi.add_argument("--remote-job-id")
+    geo_sweep = sub.add_parser("run-native-geolens-stabilization-sweep",
+                               help="Run native GeoLens stabilization sweep.")
+    geo_sweep.add_argument("--lens-file", default="auto:cooke")
+    geo_sweep.add_argument("--dataset", default="synthetic")
+    geo_sweep.add_argument("--reconstructor", default="differentiable_linear",
+                           choices=["differentiable_linear", "tiny_cnn"])
+    geo_sweep.add_argument("--device", default="cpu")
+    geo_sweep.add_argument("--remote-job-id")
 
     recommend_strategy = sub.add_parser("recommend-next-strategy", help="Recommend next action via StrategyEngine.")
     recommend_strategy.add_argument("--backend-id", required=True)
@@ -826,6 +849,11 @@ def main(argv: list[str] | None = None) -> None:
         diagnosis = diagnose_native_lens_hsi_codesign(args.run_dir)
         import json as _json
         print(_json.dumps(diagnosis, indent=2, ensure_ascii=False, default=str))
+    elif args.command == "diagnose-native-geolens-update":
+        from optiresearch.analysis.native_geolens_update_diagnostics import diagnose_native_geolens_update
+        diagnosis = diagnose_native_geolens_update(args.run_dir)
+        import json as _json
+        print(_json.dumps(diagnosis, indent=2, ensure_ascii=False, default=str))
     elif args.command == "run-stable-native-lens-hsi-codesign":
         _run_stable_native_lens_hsi_codesign(args)
     elif args.command == "run-stable-native-lens-hsi-ablation":
@@ -973,6 +1001,18 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "export-native-geolens-hsi-report":
         path = export_native_geolens_hsi_report(args.run_id)
         print(f"markdown: {path}")
+    elif args.command == "export-native-geolens-stabilization-report":
+        path = _export_native_geolens_stabilization_report(args.sweep_id)
+        print(f"markdown: {path}")
+    elif args.command == "run-remote-native-geolens-stabilization-sweep":
+        payload = run_remote_native_geolens_stabilization_sweep(
+            args.worker_id,
+            lens_file=args.lens_file,
+            dataset=args.dataset,
+            reconstructor=args.reconstructor,
+            device=args.device,
+        )
+        _print_remote_payload(payload)
     elif args.command == "list-optical-backends":
         _list_optical_backends()
     elif args.command == "inspect-optical-backend":
@@ -983,6 +1023,8 @@ def main(argv: list[str] | None = None) -> None:
         _run_lightweight_backend_probe_cli(args)
     elif args.command == "run-deeplens-native-geolens-hsi-codesign":
         _run_deeplens_native_geolens_hsi(args)
+    elif args.command == "run-native-geolens-stabilization-sweep":
+        _run_native_geolens_stabilization_sweep(args)
     elif args.command == "recommend-next-strategy":
         _recommend_next_strategy(args)
     elif args.command == "compile-research-memory-v2":
@@ -2451,6 +2493,35 @@ def _run_deeplens_native_geolens_hsi(args: Any) -> None:
         "error_code": result.error_code,
         "output_dir": str(output_dir),
     }))
+
+
+def _run_native_geolens_stabilization_sweep(args: Any) -> None:
+    from optiresearch.runtime.native_geolens_stabilization_sweep import (
+        run_native_geolens_stabilization_sweep,
+    )
+    import json as _json
+    summary = run_native_geolens_stabilization_sweep(
+        lens_file=args.lens_file,
+        dataset=args.dataset,
+        reconstructor=args.reconstructor,
+        device=args.device,
+        save_artifacts=True,
+    )
+    print(_json.dumps({
+        "sweep_id": summary["sweep_id"],
+        "configs_tested": summary["configs_tested"],
+        "configs_with_accepted_updates": summary["configs_with_accepted_updates"],
+        "best_config_name": summary["best_config_name"],
+        "best_result": summary.get("best_result", {}),
+        "output_dir": summary.get("output_dir", ""),
+    }, indent=2, ensure_ascii=False, default=str))
+
+
+def _export_native_geolens_stabilization_report(sweep_id: str) -> str:
+    from optiresearch.reports.native_geolens_stabilization_report import (
+        export_native_geolens_stabilization_report,
+    )
+    return str(export_native_geolens_stabilization_report(sweep_id))
 
 
 def _recommend_next_strategy(args: Any) -> None:

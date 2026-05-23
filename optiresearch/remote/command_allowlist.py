@@ -179,6 +179,13 @@ ALLOWED_CLI_COMMANDS: dict[str, set[str]] = {
         "--device",
         "--remote-job-id",
     },
+    "run-native-geolens-stabilization-sweep": {
+        "--lens-file",
+        "--dataset",
+        "--reconstructor",
+        "--device",
+        "--remote-job-id",
+    },
 }
 
 FLAG_OPTIONS = {"--strict-deeplens", "--use-optical-feature-maps", "--strict-native", "--allow-adapter-proxy", "--rollback-on-loss-increase"}

@@ -341,6 +341,30 @@ def run_remote_deeplens_native_geolens_hsi_codesign(
     return execute_remote_job(worker_id, job, runner=runner, ingest=ingest)
 
 
+def run_remote_native_geolens_stabilization_sweep(
+    worker_id: str,
+    lens_file: str = "auto:cooke",
+    dataset: str = "synthetic",
+    reconstructor: str = "differentiable_linear",
+    device: str = "cpu",
+    runner: Any | None = None,
+    ingest: bool = True,
+) -> dict[str, Any]:
+    job = _job(
+        "native_geolens_stabilization_sweep",
+        objective=f"Native GeoLens stabilization sweep: {lens_file} / {reconstructor}",
+        cli_args={
+            "lens_file": lens_file,
+            "dataset": dataset,
+            "reconstructor": reconstructor,
+            "device": device,
+        },
+        timeout_seconds=7200,
+        expected_outputs=["sweep_results.json", "best_config.json", "sweep_table.md"],
+    )
+    return execute_remote_job(worker_id, job, runner=runner, ingest=ingest)
+
+
 def run_remote_native_optimization_inspection(
     worker_id: str,
     runner: Any | None = None,
@@ -461,6 +485,8 @@ def _remote_backend_capability_level(job_type: str) -> str:
         return "native_lens"
     if job_type == "deeplens_native_geolens_hsi_codesign":
         return "native_lens"
+    if job_type == "native_geolens_stabilization_sweep":
+        return "native_lens"
     return "adapter_proxy"
 
 
@@ -487,6 +513,8 @@ def _remote_claim_scope(job_type: str) -> str:
         return "DeepLens native differentiable lens simulation HSI co-design"
     if job_type == "deeplens_native_geolens_hsi_codesign":
         return "DeepLens native GeoLens geometric HSI co-design"
+    if job_type == "native_geolens_stabilization_sweep":
+        return "DeepLens native GeoLens geometric HSI stabilization sweep"
     return "DeepLens-backed black-box execution, not native differentiable optimization"
 
 

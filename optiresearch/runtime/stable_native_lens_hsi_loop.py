@@ -101,6 +101,8 @@ def run_stable_native_lens_hsi_codesign(
     best_loss = float("inf")
     opt_grad_norms: list[float] = []
     recon_grad_norms: list[float] = []
+    rollback_trace: list[dict[str, Any]] = []
+    trust_region_activated = False
 
     # --- Phase 1: Reconstructor Warmup ---
     initial_psf_raw = _normalize_psf_cube_for_hsi(
@@ -156,6 +158,22 @@ def run_stable_native_lens_hsi_codesign(
 
         if step % spec.optical_update_interval == 0:
             opt_optimizer.step()
+
+            # Trust region: scale down optical update if it exceeds max_optical_param_delta
+            if spec.trust_region_enabled:
+                max_delta = 0.0
+                deltas: list[torch.Tensor] = []
+                for p_before, p_after in zip(optical_params_before_step, bridge.get_trainable_parameters()):
+                    d = (p_after - p_before).abs().max().item()
+                    deltas.append(p_after.data - p_before.data)
+                    if d > max_delta:
+                        max_delta = d
+                if max_delta > spec.max_optical_param_delta:
+                    scale = spec.max_optical_param_delta / max_delta
+                    for p_before, p_after, delta in zip(optical_params_before_step, bridge.get_trainable_parameters(), deltas):
+                        p_after.data.copy_(p_before.data + delta * scale)
+                    trust_region_activated = True
+
             recon_optimizer.step()
             metadata["optimizer_step_executed"] = True
 
@@ -168,11 +186,40 @@ def run_stable_native_lens_hsi_codesign(
                 losses_after = hsi_reconstruction_losses(recon_after, hsi_target, measurement_after, psf_after, spec.loss_weights)
                 loss_after_step = float(losses_after["total_loss"].detach().cpu().item())
 
-                if loss_after_step > loss_before_step + spec.accept_if_loss_delta_below:
+                tolerance = spec.accept_tolerance if spec.accept_tolerance else spec.accept_if_loss_delta_below
+                loss_increased = loss_after_step > loss_before_step + tolerance
+
+                psf_unstable = False
+                psf_instability_reason = ""
+                if spec.rollback_on_psf_instability:
+                    psf_energy_step = float(psf_after.sum(dim=(-2, -1)).mean().cpu().item())
+                    psf_width_step = _psf_width_metric(psf_after)
+                    energy_delta = abs(psf_energy_step - psf_energy_initial)
+                    width_delta = abs(psf_width_step - psf_width_initial)
+                    if energy_delta > spec.max_psf_energy_delta:
+                        psf_unstable = True
+                        psf_instability_reason = f"psf_energy_delta={energy_delta:.4f}>{spec.max_psf_energy_delta}"
+                    elif width_delta > spec.max_psf_width_delta:
+                        psf_unstable = True
+                        psf_instability_reason = f"psf_width_delta={width_delta:.4f}>{spec.max_psf_width_delta}"
+
+                should_rollback = loss_increased or psf_unstable
+                if should_rollback:
+                    trace_entry: dict[str, Any] = {
+                        "step": step,
+                        "loss_before": loss_before_step,
+                        "loss_after": loss_after_step,
+                    }
+                    if loss_increased:
+                        trace_entry["reason"] = "loss_increase"
+                    if psf_unstable:
+                        trace_entry["reason"] = trace_entry.get("reason", "") + (";psf_instability" if trace_entry.get("reason") else "psf_instability")
+                        trace_entry["psf_instability_detail"] = psf_instability_reason
                     for p, saved in zip(bridge.get_trainable_parameters(), optical_params_before_step):
                         p.data.copy_(saved.data)
                     rejected += 1
                     rollbacks += 1
+                    rollback_trace.append(trace_entry)
                 else:
                     accepted += 1
                     if loss_after_step < best_loss:
@@ -260,6 +307,8 @@ def run_stable_native_lens_hsi_codesign(
         deeplens_native_psf_path="geolens.psf_geometric",
         evidence_level=evidence,
         optimizer_step_executed=metadata.get("optimizer_step_executed", False),
+        rollback_trace=rollback_trace,
+        trust_region_activated=trust_region_activated,
         caveats=caveats,
         metadata=metadata,
     )

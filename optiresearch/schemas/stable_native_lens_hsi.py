@@ -37,6 +37,12 @@ class StableNativeLensHSISpec(StrictModel):
     psf_width_reg_weight: float = Field(default=0.05, ge=0.0, le=10.0)
     optical_param_l2_weight: float = Field(default=1e-4, ge=0.0, le=1.0)
     max_optical_param_delta: float = Field(default=1e-3, gt=0.0, le=1.0)
+    trust_region_enabled: bool = Field(default=False)
+    rollback_on_psf_instability: bool = Field(default=False)
+    max_psf_energy_delta: float = Field(default=0.1, gt=0.0, le=10.0)
+    max_psf_centroid_delta: float = Field(default=1.0, gt=0.0, le=50.0)
+    max_psf_width_delta: float = Field(default=2.0, gt=0.0, le=50.0)
+    accept_tolerance: float = Field(default=0.0)
     loss_weights: dict[str, float] = Field(default_factory=lambda: {"mse": 1.0, "spectral_angle": 0.05, "measurement_consistency": 0.1})
     bands: int = Field(default=4, ge=1, le=256)
     image_size: int = Field(default=16, ge=8, le=256)
@@ -106,4 +112,6 @@ class StableNativeLensHSIResult(StrictModel):
     caveats: list[str] = Field(default_factory=list)
     error_code: Optional[str] = None
     error_message: Optional[str] = None
+    rollback_trace: list[dict[str, Any]] = Field(default_factory=list)
+    trust_region_activated: bool = False
     metadata: dict[str, Any] = Field(default_factory=dict)

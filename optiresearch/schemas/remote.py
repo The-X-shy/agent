@@ -25,6 +25,7 @@ RemoteJobType = Literal[
     "stable_native_lens_hsi_codesign",
     "stable_native_lens_hsi_ablation",
     "deeplens_native_geolens_hsi_codesign",
+    "native_geolens_stabilization_sweep",
     "autonomous_loop",
 ]
 
