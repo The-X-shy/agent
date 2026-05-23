@@ -2405,32 +2405,39 @@ def _run_deeplens_native_geolens_hsi(args: Any) -> None:
     )
 
     if remote_job_id:
-        from optiresearch.runtime.remote_jobs import export_remote_job_outputs
-        metrics_summary = {
-            "job_type": "deeplens_native_geolens_hsi_codesign",
-            "candidate": "GeoLensCooke",
-            "reconstructor": args.reconstructor,
+        command_result = {
             "status": result.status,
+            "run_id": run_id,
+            "error_code": result.error_code,
             "execution_fidelity": "deeplens_native_geometric",
             "proxy_fallback_used": False,
             "deeplens_native_psf_path": result.deeplens_native_psf_path,
             "full_wave_optics": result.full_wave_optics,
             "phase_to_fft_proxy_used": result.phase_to_fft_proxy_used,
-            "reconstruction_loss_before": result.reconstruction_loss_before,
-            "reconstruction_loss_after": result.reconstruction_loss_after,
-            "optical_gradient_norm": result.optical_gradient_norm_max,
-            "accepted_update_count": result.accepted_update_count,
-            "rollback_count": result.rollback_count,
-            "stable_training_succeeded": result.stable_training_succeeded,
-            "evidence_level": result.evidence_level,
-            "error_code": result.error_code,
         }
-        export_remote_job_outputs(
-            remote_job_id,
-            "deeplens_native_geolens_hsi_codesign",
-            {"status": result.status, "run_id": run_id, **metrics_summary},
-            [output_dir],
-            metrics_summary,
+        (_Path(output_dir) / "command_result.json").write_text(
+            _json.dumps(command_result, indent=2, default=str), encoding="utf-8",
+        )
+        (_Path(output_dir) / "metrics_summary.json").write_text(
+            _json.dumps({
+                "job_type": "deeplens_native_geolens_hsi_codesign",
+                "candidate": "GeoLensCooke",
+                "reconstructor": args.reconstructor,
+                "status": result.status,
+                "execution_fidelity": "deeplens_native_geometric",
+                "proxy_fallback_used": False,
+                "deeplens_native_psf_path": result.deeplens_native_psf_path,
+                "full_wave_optics": result.full_wave_optics,
+                "phase_to_fft_proxy_used": result.phase_to_fft_proxy_used,
+                "reconstruction_loss_before": result.reconstruction_loss_before,
+                "reconstruction_loss_after": result.reconstruction_loss_after,
+                "optical_gradient_norm": result.optical_gradient_norm_max,
+                "accepted_update_count": result.accepted_update_count,
+                "rollback_count": result.rollback_count,
+                "stable_training_succeeded": result.stable_training_succeeded,
+                "evidence_level": result.evidence_level,
+                "error_code": result.error_code,
+            }, indent=2, default=str), encoding="utf-8",
         )
 
     print(_compact_json({
