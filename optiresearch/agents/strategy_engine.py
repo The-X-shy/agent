@@ -81,8 +81,28 @@ class StrategyEngine:
         return recommendations[0]
 
     def _build_builtin_rules(self) -> list[dict[str, Any]]:
-        """8 built-in rules ordered by priority (highest first)."""
+        """9 built-in rules ordered by priority (highest first)."""
         return [
+            {
+                "id": "claim_ceiling_reached_switch",
+                "condition": lambda r: r.get("stop_reason") == "claim_ceiling_reached",
+                "action": "switch_backend_after_claim_ceiling",
+                "rationale": (
+                    "Claim ceiling reached on {backend_id}. "
+                    "Switching to a higher-evidence backend to continue "
+                    "research progression."
+                ),
+                "expected_claim_gain": "backend_progression",
+                "risk_level": "low",
+                "proposed_commands": [
+                    "python -m optiresearch.cli recommend-next-backend "
+                    "--current-backend {backend_id} --reason claim_ceiling_reached",
+                ],
+                "required_evidence": [
+                    "claim_ceiling_reached",
+                    "backend_id",
+                ],
+            },
             {
                 "id": "large_grad_small_lr",
                 "condition": lambda r: r.get("optical_gradient_norm", 0) > 100,
