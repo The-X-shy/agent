@@ -159,3 +159,17 @@ class StateStore:
             "Real HSI performance validation",
         ]
         self.save()
+
+    def update_from_events(self, events: list[AgentEvent]) -> None:
+        for event in events:
+            self.update_from_event(event)
+
+    def get_latest_snapshot(self) -> AgentState | None:
+        return self._snapshots[-1] if self._snapshots else None
+
+    def restore_snapshot(self, snapshot_id: int) -> bool:
+        if 0 <= snapshot_id < len(self._snapshots):
+            self._state = self._snapshots[snapshot_id].model_copy(deep=True)
+            self.save()
+            return True
+        return False

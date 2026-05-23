@@ -514,6 +514,18 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("run-agent-self-test", help="Run agent system self-test.")
     sub.add_parser("run-agent-subunit-benchmark", help="Run agent subunit benchmark.")
     sub.add_parser("export-system-subunit-report", help="Export system subunit report.")
+    plan_exec = sub.add_parser("run-agent-plan-execution", help="Run agent plan execution loop.")
+    plan_exec.add_argument("--objective", default="recover from native GeoLens optical update instability")
+    plan_exec.add_argument("--seed-result-path", default=None)
+    plan_exec.add_argument("--mode", choices=["dry_run", "local", "remote_opt_in"], default="dry_run")
+    plan_exec.add_argument("--execute-top-k", type=int, default=1)
+    hybrid_p = sub.add_parser("hybrid-plan", help="Run hybrid planner.")
+    hybrid_p.add_argument("--objective", default="recover from native GeoLens instability")
+    hybrid_p.add_argument("--mode", choices=["rule_only", "llm_only", "llm_with_rule_context", "llm_with_rule_fallback"], default="rule_only")
+    hybrid_p.add_argument("--llm-provider", default="")
+    plan_report = sub.add_parser("export-agent-plan-execution-report", help="Export agent plan execution report.")
+    plan_report.add_argument("--execution-id", required=True)
+    sub.add_parser("run-agent-e2e-benchmark", help="Run agent end-to-end benchmark.")
 
     # ===================== Phase 24 CLI =====================
     sub.add_parser("list-optical-backends", help="List all registered optical backends.")
@@ -1061,6 +1073,14 @@ def main(argv: list[str] | None = None) -> None:
         _run_agent_subunit_benchmark()
     elif args.command == "export-system-subunit-report":
         _export_system_subunit_report()
+    elif args.command == "run-agent-plan-execution":
+        _run_agent_plan_execution(args)
+    elif args.command == "hybrid-plan":
+        _hybrid_plan(args)
+    elif args.command == "export-agent-plan-execution-report":
+        _export_agent_plan_execution_report(args.execution_id)
+    elif args.command == "run-agent-e2e-benchmark":
+        _run_agent_e2e_benchmark()
     elif args.command == "run-remote-native-geolens-stabilization-sweep":
         payload = run_remote_native_geolens_stabilization_sweep(
             args.worker_id,
@@ -2812,6 +2832,73 @@ def _export_system_subunit_report() -> None:
     from optiresearch.reports.system_subunit_report import export_system_subunit_report
     path = export_system_subunit_report()
     print(f"markdown: {path}")
+
+
+def _run_agent_plan_execution(args: Any) -> None:
+    import time as _time
+    from optiresearch.runtime.agent_plan_execution_loop import run_agent_plan_execution
+    from optiresearch.schemas.agent_plan_execution import AgentPlanExecutionSpec
+    from optiresearch.memory.schemas import make_deterministic_id
+    import json as _json
+    spec = AgentPlanExecutionSpec(
+        execution_id=make_deterministic_id("plan_exec", args.objective, str(_time.time())),
+        objective=args.objective,
+        seed_result_path=args.seed_result_path,
+        mode=args.mode,
+        execute_top_k=args.execute_top_k,
+    )
+    result = run_agent_plan_execution(spec)
+    print(_json.dumps({
+        "execution_id": result.execution_id,
+        "status": result.status,
+        "classified_failure": result.classified_failure,
+        "candidate_strategies_count": result.candidate_strategies_count,
+        "candidate_designs_count": result.candidate_designs_count,
+        "selected_design": result.selected_designs[0]["design_id"] if result.selected_designs else "none",
+        "mode": result.mode,
+        "executed_or_dry_run": result.executed_or_dry_run,
+        "event_count": result.event_count,
+        "state_snapshots_count": result.state_snapshots_count,
+        "report_path": result.report_path,
+        "errors": result.errors,
+    }, indent=2, ensure_ascii=False))
+
+
+def _hybrid_plan(args: Any) -> None:
+    from optiresearch.agents.hybrid_planner import HybridPlanner
+    import json as _json
+    planner = HybridPlanner()
+    result = planner.plan(
+        objective=args.objective,
+        mode=args.mode,
+        llm_provider=args.llm_provider,
+    )
+    print(_json.dumps({
+        "mode": result.mode,
+        "strategies_count": result.strategies_count,
+        "designs_count": result.designs_count,
+        "top_design_id": result.top_design_id,
+        "top_score": result.top_score,
+        "top_recommendation": result.top_recommendation,
+        "llm_called": result.llm_called,
+        "errors": result.errors,
+    }, indent=2, ensure_ascii=False))
+
+
+def _export_agent_plan_execution_report(execution_id: str) -> None:
+    from optiresearch.reports.agent_plan_execution_report import export_agent_plan_execution_report
+    path = export_agent_plan_execution_report(execution_id)
+    print(f"markdown: {path}")
+
+
+def _run_agent_e2e_benchmark() -> None:
+    from optiresearch.benchmarks.agent_e2e_bench import run_agent_e2e_benchmark
+    results = run_agent_e2e_benchmark()
+    passed = sum(1 for r in results if r.passed)
+    print(f"E2E Benchmark: {passed}/{len(results)} passed")
+    for r in results:
+        status = "PASS" if r.passed else f"FAIL: {r.detail}"
+        print(f"  [{status}] {r.task} ({r.latency_sec:.3f}s)")
 
 
 def _csv(value: str) -> list[str]:

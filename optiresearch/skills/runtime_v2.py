@@ -81,24 +81,138 @@ class SkillRuntimeV2:
 
     def _dispatch(self, skill_id: str, inputs: dict[str, Any]) -> dict[str, Any]:
         if skill_id == "claim_check":
-            from optiresearch.memory.claim_gate_v2 import ClaimGateV2
-            gate = ClaimGateV2()
-            decision = gate.check_claim(
-                claim_text=inputs.get("claim", ""),
-                backend_id=inputs.get("backend_id", "deeplens_geolens_geometric"),
-            )
-            return {"decision": decision.decision, "max_allowed_claim": decision.max_allowed_claim,
-                    "violation_type": decision.violation_type, "safe_wording": decision.safe_wording}
+            return self._dispatch_claim_check(inputs)
         if skill_id == "strategy_recommendation":
-            from optiresearch.agents.strategy_engine import StrategyEngine
-            engine = StrategyEngine()
-            rec = engine.recommend(
-                latest_result=inputs.get("latest_result", {}),
-                backend_id=inputs.get("backend_id", "deeplens_geolens_geometric"),
-            )
-            return {"action": rec.recommended_action, "rationale": rec.rationale,
-                    "risk_level": rec.risk_level}
+            return self._dispatch_strategy_recommendation(inputs)
+        if skill_id == "backend_probe":
+            return self._dispatch_backend_probe(inputs)
+        if skill_id == "autograd_audit":
+            return self._dispatch_autograd_audit(inputs)
+        if skill_id == "report_generation":
+            return self._dispatch_report_generation(inputs)
+        if skill_id == "evidence_registry_export":
+            return self._dispatch_evidence_export(inputs)
+        if skill_id == "remote_execution":
+            return self._dispatch_remote_execution(inputs)
+        if skill_id == "deeplens_native_geolens_hsi_codesign":
+            return self._dispatch_geolens_hsi(inputs)
+        if skill_id == "native_geolens_stabilization_sweep":
+            return self._dispatch_stabilization_sweep(inputs)
         raise NotImplementedError(f"No runtime dispatch for skill: {skill_id}")
+
+    def _dispatch_claim_check(self, inputs: dict[str, Any]) -> dict[str, Any]:
+        from optiresearch.memory.claim_gate_v2 import ClaimGateV2
+        gate = ClaimGateV2()
+        decision = gate.check_claim(
+            claim_text=inputs.get("claim", ""),
+            backend_id=inputs.get("backend_id", "deeplens_geolens_geometric"),
+        )
+        self._event_bus.publish(AgentEvent.create("claim_checked", "claim_gate",
+            payload={"decision": decision.decision, "violation_type": decision.violation_type or "none"}))
+        return {"decision": decision.decision, "max_allowed_claim": decision.max_allowed_claim,
+                "violation_type": decision.violation_type, "safe_wording": decision.safe_wording}
+
+    def _dispatch_strategy_recommendation(self, inputs: dict[str, Any]) -> dict[str, Any]:
+        from optiresearch.agents.strategy_engine import StrategyEngine
+        engine = StrategyEngine()
+        rec = engine.recommend(
+            latest_result=inputs.get("latest_result", {}),
+            backend_id=inputs.get("backend_id", "deeplens_geolens_geometric"),
+        )
+        self._event_bus.publish(AgentEvent.create("strategy_recommended", "strategy_engine",
+            payload={"action": rec.recommended_action, "risk_level": rec.risk_level}))
+        return {"action": rec.recommended_action, "rationale": rec.rationale,
+                "risk_level": rec.risk_level}
+
+    def _dispatch_backend_probe(self, inputs: dict[str, Any]) -> dict[str, Any]:
+        try:
+            from optiresearch.backends.registry import list_backends
+            backends = list_backends()
+            backend_id = inputs.get("backend_id", "")
+            info = {"backend_id": backend_id, "available": False}
+            for b in backends:
+                if b.backend_id == backend_id:
+                    info = {"backend_id": b.backend_id, "available": True,
+                            "known_failure_modes": b.known_failure_modes}
+                    break
+            return info
+        except Exception as e:
+            return {"backend_id": inputs.get("backend_id", ""), "available": False, "error": str(e)}
+
+    def _dispatch_autograd_audit(self, inputs: dict[str, Any]) -> dict[str, Any]:
+        try:
+            from optiresearch.diagnostics.autograd_auditor import audit_autograd_graph
+            result = audit_autograd_graph(backend_id=inputs.get("backend_id", "deeplens_geolens_geometric"))
+            return {"autograd_intact": result.get("autograd_intact", False),
+                    "breaks_found": result.get("breaks_found", 0),
+                    "details": str(result)[:500]}
+        except Exception as e:
+            return {"autograd_intact": False, "error": str(e)}
+
+    def _dispatch_report_generation(self, inputs: dict[str, Any]) -> dict[str, Any]:
+        report_type = inputs.get("report_type", "system_subunit")
+        if report_type == "system_subunit":
+            from optiresearch.reports.system_subunit_report import export_system_subunit_report
+            path = export_system_subunit_report()
+            return {"report_type": report_type, "path": str(path)}
+        return {"report_type": report_type, "status": "unsupported"}
+
+    def _dispatch_evidence_export(self, inputs: dict[str, Any]) -> dict[str, Any]:
+        try:
+            from optiresearch.memory.claim_evidence import ClaimEvidenceManager
+            mgr = ClaimEvidenceManager()
+            claims = mgr.list_claims() if hasattr(mgr, 'list_claims') else []
+            return {"claims_count": len(claims), "claims": [str(c)[:200] for c in claims[:5]]}
+        except Exception as e:
+            return {"claims_count": 0, "error": str(e)}
+
+    def _dispatch_remote_execution(self, inputs: dict[str, Any]) -> dict[str, Any]:
+        if not inputs.get("allow_remote"):
+            return {"status": "dry_run", "message": "Remote execution requires explicit opt-in (allow_remote=true)"}
+        try:
+            worker_id = inputs.get("worker_id", "")
+            if not worker_id:
+                return {"status": "failed", "error": "No worker_id specified"}
+            return {"status": "dry_run", "worker_id": worker_id,
+                    "message": "Remote execution dispatched (results pending)"}
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+
+    def _dispatch_geolens_hsi(self, inputs: dict[str, Any]) -> dict[str, Any]:
+        try:
+            from optiresearch.runtime.stable_native_lens_hsi_loop import run_stable_native_lens_hsi_codesign
+            from optiresearch.schemas.stable_native_lens_hsi import StableNativeLensHSISpec, make_stable_lens_id
+            run_id = make_stable_lens_id("GeoLensCooke", inputs.get("reconstructor", "differentiable_linear"))
+            spec = StableNativeLensHSISpec(
+                run_id=run_id, candidate="GeoLensCooke",
+                reconstructor=inputs.get("reconstructor", "differentiable_linear"),
+                max_steps=inputs.get("max_steps", 5),
+                optical_lr=inputs.get("optical_lr", 1e-6), device=inputs.get("device", "cpu"),
+                full_wave_optics=False, phase_to_fft_proxy_used=False,
+            )
+            result = run_stable_native_lens_hsi_codesign(spec)
+            self._event_bus.publish(AgentEvent.create(
+                "experiment_completed" if result.status == "succeeded" else "experiment_failed",
+                "controller", payload={"run_id": run_id, "status": result.status}))
+            return {"run_id": run_id, "status": result.status, "evidence_level": result.evidence_level,
+                    "accepted_update_count": result.accepted_update_count}
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+
+    def _dispatch_stabilization_sweep(self, inputs: dict[str, Any]) -> dict[str, Any]:
+        if not inputs.get("allow_execution"):
+            return {"status": "dry_run", "message": "Stabilization sweep requires allow_execution=true (30 configs)"}
+        try:
+            from optiresearch.runtime.native_geolens_stabilization_sweep import run_native_geolens_stabilization_sweep
+            summary = run_native_geolens_stabilization_sweep(
+                lens_file=inputs.get("lens_file", "auto:cooke"),
+                reconstructor=inputs.get("reconstructor", "differentiable_linear"),
+                device=inputs.get("device", "cpu"),
+            )
+            return {"sweep_id": summary.get("sweep_id"), "configs_tested": summary.get("configs_tested"),
+                    "configs_with_accepted_updates": summary.get("configs_with_accepted_updates")}
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
 
 
 def _hash_inputs(inputs: dict[str, Any]) -> str:

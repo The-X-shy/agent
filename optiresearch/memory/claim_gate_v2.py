@@ -69,6 +69,7 @@ class ClaimGateV2:
         violations = self._detect_violations(claim_lower, backend_id, result, evidence_scope or {})
 
         if not violations:
+            self._publish_claim_event("supported", None, claim_text)
             return ClaimGateDecision(
                 decision="supported",
                 max_allowed_claim=max_claim,
@@ -82,6 +83,7 @@ class ClaimGateV2:
         decision = self._violation_to_decision(primary_type)
         safe = self._safe_wording(claim_text, primary_type, max_claim)
 
+        self._publish_claim_event(decision, primary_type, claim_text)
         return ClaimGateDecision(
             decision=decision,
             max_allowed_claim=max_claim,
@@ -352,3 +354,14 @@ class ClaimGateV2:
             ],
         }
         return caveats.get(violation_type, [])
+
+    def _publish_claim_event(self, decision: str, violation_type: str | None, claim_text: str) -> None:
+        try:
+            from optiresearch.agent_system.event_bus import get_event_bus
+            from optiresearch.agent_system.events import AgentEvent
+            event_type = "claim_downgraded" if violation_type else "claim_checked"
+            get_event_bus().publish(AgentEvent.create(event_type, "claim_gate",
+                payload={"decision": decision, "violation_type": violation_type or "none",
+                         "claim_text": claim_text[:200]}))
+        except Exception:
+            pass

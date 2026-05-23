@@ -214,6 +214,16 @@ class ExperimentControllerV2:
 
         try:
             result = self._dispatch_local(spec)
+            try:
+                from optiresearch.agent_system.event_bus import get_event_bus
+                from optiresearch.agent_system.events import AgentEvent
+                event_type = "experiment_completed" if result.status == "succeeded" else "experiment_failed"
+                get_event_bus().publish(AgentEvent.create(event_type, "controller",
+                    payload={"spec_id": spec.spec_id, "status": result.status,
+                             "evidence_level": result.evidence_level},
+                    related_run_id=result.run_id))
+            except Exception:
+                pass
             if result.evidence_level is None:
                 result.evidence_level = evidence_cap
             return result
