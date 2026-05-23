@@ -24,6 +24,9 @@ class TrajectoryEvaluation(StrictModel):
     evaluation: str = ""
     claim_downgraded_count: int = 0
     min_iterations_satisfied: bool = False
+    backend_history: list[str] = []
+    backend_switch_count: int = 0
+    evidence_level_progression: bool = False
 
 
 def evaluate_trajectory(
@@ -91,13 +94,40 @@ def evaluate_trajectory(
 
     repeated_failure = max_consecutive_failures >= 2
 
+    # Track backend history
+    backend_history: list[str] = []
+    for it in iterations:
+        result = it.execution_result or {}
+        bid = result.get("backend_id", "")
+        if bid:
+            backend_history.append(bid)
+
+    backend_switch_count = sum(
+        1 for i in range(1, len(backend_history))
+        if backend_history[i] != backend_history[i - 1]
+    )
+
     claim_ceilings: set[str] = set()
+    backend_per_iter: list[str] = []
     for it in iterations:
         cgd = it.claim_gate_decision or {}
         ceiling = cgd.get("max_allowed_claim")
+        result = it.execution_result or {}
+        bid = result.get("backend_id", "")
         if ceiling:
             claim_ceilings.add(str(ceiling))
-    ceiling_reached = len(claim_ceilings) == 1 and len(iterations) >= 2
+            backend_per_iter.append(bid)
+
+    unique_backends = set(backend_per_iter)
+    ceiling_reached = (
+        len(claim_ceilings) == 1
+        and len(unique_backends) == 1
+        and len(iterations) >= 2
+    )
+
+    evidence_level_progression = (
+        len(claim_ceilings) >= 2 and len(iterations) >= 2
+    )
 
     # Count consecutive no-improvement iterations from most recent
     no_improvement_streak = 0
@@ -139,6 +169,9 @@ def evaluate_trajectory(
         ),
         claim_downgraded_count=claim_downgraded_count,
         min_iterations_satisfied=min_iter_satisfied,
+        backend_history=backend_history,
+        backend_switch_count=backend_switch_count,
+        evidence_level_progression=evidence_level_progression,
     )
 
 
