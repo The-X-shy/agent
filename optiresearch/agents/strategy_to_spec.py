@@ -82,6 +82,7 @@ def _action_to_task_type(action: str, backend_id: str) -> Optional[str]:
     mapping: dict[str, Optional[str]] = {
         "retry_with_smaller_lr": "stable_lens_hsi_codesign",
         "switch_backend": "stable_lens_hsi_codesign",
+        "switch_backend_after_claim_ceiling": _pick_task_for_backend(backend_id),
         "run_ablation": "stable_lens_hsi_codesign",
         "enable_rollback": "stable_lens_hsi_codesign",
         "run_remote_validation": "stable_lens_hsi_codesign",
@@ -90,6 +91,21 @@ def _action_to_task_type(action: str, backend_id: str) -> Optional[str]:
         "downgrade_claim": None,
     }
     return mapping.get(action)
+
+
+def _pick_task_for_backend(backend_id: str) -> str:
+    """Pick the most appropriate task type for a backend when switching."""
+    task_map: dict[str, str] = {
+        "deeplens_geolens_geometric": "psf_probe",
+        "deeplens_fresnel_component": "component_optimization",
+        "deeplens_binary2phase_component": "component_optimization",
+        "deeplens_coherent_asm": "lightweight_psf_probe",
+        "deeplens_blackbox_source_psf": "psf_probe",
+        "phase_to_fft_proxy": "stable_lens_hsi_codesign",
+        "mock_deeplens": "lightweight_psf_probe",
+        "local_synthetic_hsi": "stable_lens_hsi_codesign",
+    }
+    return task_map.get(backend_id, "lightweight_psf_probe")
 
 
 def _build_payload(
@@ -132,6 +148,12 @@ def _build_payload(
         payload["rollback_on_loss_increase"] = True
     elif action == "probe_waveoptics_path":
         payload["max_steps"] = 3
+        payload["candidate"] = "GeoLensCooke"
+        payload["reconstructor"] = "tiny_cnn"
+        payload["device"] = "cpu"
+    elif action == "switch_backend_after_claim_ceiling":
+        payload["max_steps"] = max_steps
+        payload["rollback_on_loss_increase"] = True
         payload["candidate"] = "GeoLensCooke"
         payload["reconstructor"] = "tiny_cnn"
         payload["device"] = "cpu"
