@@ -5,7 +5,11 @@ from optiresearch.agents.llm_planner import LLMPlanner
 
 def test_mock_planner_returns_proposals():
     planner = LLMPlanner()
-    result = planner.plan("test objective", provider_name="mock")
+    result = planner.plan(
+        "test objective", provider_name="mock",
+        allowed_task_types=["stable_lens_hsi_codesign", "backend_probe",
+                           "native_lens_simulation_codesign"],
+    )
     assert result.status == "succeeded"
     assert len(result.proposals) >= 2
     assert result.selected_proposal is not None

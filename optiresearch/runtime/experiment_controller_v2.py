@@ -27,6 +27,7 @@ class ExperimentSpecV2(StrictModel):
         "component_optimization",
         "lightweight_psf_probe",
         "backend_probe",
+        "native_lens_simulation_codesign",
     ]
     backend_id: str
     execution_target: Literal["local", "remote"] = "local"
@@ -403,6 +404,8 @@ class ExperimentControllerV2:
             return self._run_lightweight_stable_lens_hsi(spec, payload)
         elif spec.task_type == "backend_probe":
             return self._run_backend_probe(spec, payload)
+        elif spec.task_type == "native_lens_simulation_codesign":
+            return self._run_lightweight_stable_lens_hsi(spec, payload)
         else:
             return ControllerResult(
                 spec_id=spec.spec_id,

@@ -88,6 +88,7 @@ def _action_to_task_type(action: str, backend_id: str) -> Optional[str]:
         "run_remote_validation": "stable_lens_hsi_codesign",
         "probe_waveoptics_path": "lightweight_psf_probe",
         "probe_new_backend": "backend_probe",
+        "run_validated_backend_experiment": _pick_continuation_task(backend_id),
         "stop_and_report": None,
         "downgrade_claim": None,
     }
@@ -107,6 +108,21 @@ def _pick_task_for_backend(backend_id: str) -> str:
         "local_synthetic_hsi": "stable_lens_hsi_codesign",
     }
     return task_map.get(backend_id, "lightweight_psf_probe")
+
+
+def _pick_continuation_task(backend_id: str) -> str:
+    """Pick the appropriate task for post-probe continuation on a validated backend."""
+    continuation_map: dict[str, str] = {
+        "deeplens_geolens_geometric": "native_lens_simulation_codesign",
+        "deeplens_fresnel_component": "component_optimization",
+        "deeplens_binary2phase_component": "component_optimization",
+        "deeplens_coherent_asm": "lightweight_psf_probe",
+        "deeplens_blackbox_source_psf": "psf_probe",
+        "phase_to_fft_proxy": "stable_lens_hsi_codesign",
+        "mock_deeplens": "lightweight_psf_probe",
+        "local_synthetic_hsi": "stable_lens_hsi_codesign",
+    }
+    return continuation_map.get(backend_id, "lightweight_psf_probe")
 
 
 def _build_payload(
@@ -162,6 +178,11 @@ def _build_payload(
         payload["device"] = "cpu"
         payload["max_steps"] = 1
         payload["lightweight_mode"] = True
+    elif action == "run_validated_backend_experiment":
+        payload["max_steps"] = 3
+        payload["lightweight_mode"] = True
+        payload["device"] = "cpu"
+        payload["rollback_on_loss_increase"] = True
 
     if spec_patch:
         disallowed_keys = {

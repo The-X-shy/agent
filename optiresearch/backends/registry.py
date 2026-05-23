@@ -259,6 +259,7 @@ _BACKEND_TASK_RULES: dict[str, dict[str, Optional[str]]] = {
         "psf_probe": "deeplens_integration_smoke",
         "native_optimization_probe": "native_component_optimization",
         "backend_probe": "deeplens_integration_smoke",
+        "native_lens_simulation_codesign": "native_lens_simulation",
     },
     "mock_deeplens": {
         "stable_lens_hsi_codesign": "mock_simulation",

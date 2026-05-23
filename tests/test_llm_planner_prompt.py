@@ -33,6 +33,7 @@ def test_mock_proposals_have_valid_actions():
         "retry_with_smaller_lr", "enable_rollback", "switch_backend",
         "run_ablation", "probe_waveoptics_path", "request_dataset",
         "run_remote_validation", "stop_and_report", "probe_new_backend",
+        "run_validated_backend_experiment",
     }
     for p in build_mock_proposals():
         assert p["recommended_action"] in valid_actions

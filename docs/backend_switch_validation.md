@@ -27,10 +27,15 @@ succeeds. These are distinct states tracked separately.
 6. If probe succeeds:
    - backend_switch_validated=True
    - pending_backend_switch cleared
-   - Next iteration uses normal strategy flow on backend B
+   - post_probe_continuation_required=True (Phase 32)
+   - validated_backend_id and validated_backend_evidence_level set
+   - Next iteration runs validated backend experiment
 7. If probe fails:
-   - Try alternative backend from progression graph
+   - Try ALL alternative backends from progression graph (Phase 32)
    - If no alternatives: stop with backend_switch_failed
+8. After continuation experiment succeeds (Phase 32):
+   - post_probe_continuation_required cleared
+   - Normal strategy flow resumes on validated backend
 ```
 
 ## Alternative Backend Fallback

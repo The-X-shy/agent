@@ -475,6 +475,11 @@ def main(argv: list[str] | None = None) -> None:
     run_v2.add_argument("--worker-id")
     run_v2.add_argument("--spec-payload-json", default="{}")
 
+    probe = sub.add_parser("run-lightweight-backend-probe", help="Run a lightweight backend availability probe.")
+    probe.add_argument("--backend-id", required=True)
+    probe.add_argument("--probe-depth", choices=["shallow", "deep"], default="shallow")
+    probe.add_argument("--device", default="cpu")
+
     recommend_strategy = sub.add_parser("recommend-next-strategy", help="Recommend next action via StrategyEngine.")
     recommend_strategy.add_argument("--backend-id", required=True)
     recommend_strategy.add_argument("--latest-result-json", required=True)
@@ -932,6 +937,8 @@ def main(argv: list[str] | None = None) -> None:
         _inspect_optical_backend(args.backend_id)
     elif args.command == "run-experiment-v2":
         _run_experiment_v2(args)
+    elif args.command == "run-lightweight-backend-probe":
+        _run_lightweight_backend_probe_cli(args)
     elif args.command == "recommend-next-strategy":
         _recommend_next_strategy(args)
     elif args.command == "compile-research-memory-v2":
@@ -2273,6 +2280,40 @@ def _run_experiment_v2(args: Any) -> None:
         result = ctrl.run_remote(spec)
     else:
         result = ctrl.run_local(spec)
+    print(_compact_json(result.model_dump(mode="json")))
+
+
+def _run_lightweight_backend_probe_cli(args: Any) -> None:
+    import json as _json
+    from pathlib import Path as _Path
+    from optiresearch.runtime.lightweight_experiments import (
+        run_lightweight_backend_probe,
+        run_deeplens_geolens_geometric_deep_probe,
+    )
+
+    if args.probe_depth == "deep":
+        result = run_deeplens_geolens_geometric_deep_probe(
+            backend_id=args.backend_id, device=args.device,
+        )
+    else:
+        result = run_lightweight_backend_probe(
+            backend_id=args.backend_id, device=args.device,
+        )
+
+    output_dir = _Path("workspace/backend_probes") / (result.run_id or "unknown")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    probe_spec = {
+        "backend_id": args.backend_id,
+        "probe_depth": args.probe_depth,
+        "device": args.device,
+    }
+    (output_dir / "probe_spec.json").write_text(
+        _json.dumps(probe_spec, indent=2, default=str), encoding="utf-8",
+    )
+    (output_dir / "result.json").write_text(
+        _json.dumps(result.model_dump(mode="json"), indent=2, default=str),
+        encoding="utf-8",
+    )
     print(_compact_json(result.model_dump(mode="json")))
 
 

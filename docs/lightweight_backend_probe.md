@@ -35,11 +35,31 @@ Returns a `ControllerResult` with `result_payload`:
 - `psf_width_x`, `psf_width_y`, `psf_energy`: float
 - `differentiable`: bool
 
+## Probe Depths
+
+### Shallow (default)
+- FFT-based Fraunhofer diffraction PSF
+- Fast (<5s), no external dependencies
+- Validates basic differentiability and PSF metrics
+
+### Deep (Phase 32)
+- Actually calls `deeplens.geolens.psf(points, wvln, ks, model="geometric")`
+- Loads real lens file (cooke.json)
+- Backpropagates through PSF to verify `requires_grad=True`
+- Reports `optical_gradient_norm`, `parameters_changed`
+- Evidence level: `native_lens_simulation`
+
 ## CLI
 
 ```bash
+# Shallow probe (FFT-based)
 python -m optiresearch.cli run-lightweight-backend-probe \
   --backend-id deeplens_geolens_geometric
+
+# Deep probe (actual GeoLens geometric PSF)
+python -m optiresearch.cli run-lightweight-backend-probe \
+  --backend-id deeplens_geolens_geometric \
+  --probe-depth deep
 ```
 
 ## Safety

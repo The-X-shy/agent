@@ -226,16 +226,25 @@ def _run_local(
             if probe_status == "succeeded":
                 execution["backend_switch_validated"] = True
                 execution["pending_backend_switch"] = False
+                execution["post_probe_continuation_required"] = True
+                execution["validated_backend_id"] = execution.get("backend_id", backend_id)
+                execution["validated_backend_evidence_level"] = (
+                    execution.get("evidence_level") or "deeplens_integration_smoke"
+                )
                 it_obj.metrics_snapshot["backend_switch_validated"] = True
                 it_obj.metrics_snapshot["probe_status"] = "succeeded"
+                it_obj.metrics_snapshot["post_probe_continuation_required"] = True
+                it_obj.metrics_snapshot["validated_backend_id"] = execution["validated_backend_id"]
             else:
                 switched_from = execution.get("switched_from_backend")
                 if switched_from and backend_switch_count < spec.max_backend_switches:
                     from optiresearch.backends.progression import get_all_edges_from
                     alt_edges = get_all_edges_from(switched_from)
+                    alt_attempted = []
                     for edge in alt_edges:
                         if (edge["next_backend"] != backend_id
                                 and edge["next_backend"] in spec.allowed_backends):
+                            alt_attempted.append(edge["next_backend"])
                             alt_backend = edge["next_backend"]
                             backend_id = alt_backend
                             backend_switch_count += 1
@@ -244,15 +253,18 @@ def _run_local(
                             exec_result["switched_from_backend"] = switched_from
                             exec_result["switched_to_backend"] = alt_backend
                             exec_result["backend_switch_count"] = backend_switch_count
+                            exec_result["alternative_backends_attempted"] = alt_attempted
                             it_obj.execution_result = exec_result
                             it_obj.next_action = "switch_backend"
                             it_obj.metrics_snapshot["backend_switched_to"] = alt_backend
                             it_obj.metrics_snapshot["backend_switch_count"] = backend_switch_count
+                            it_obj.metrics_snapshot["alternative_backends_attempted"] = alt_attempted
                             iterations.append(it_obj)
                             break
                     else:
                         it_obj.next_action = "stop"
                         it_obj.stop_reason = "backend_switch_failed"
+                        it_obj.metrics_snapshot["failed_alternatives"] = alt_attempted
                         iterations.append(it_obj)
                         stopped_reason = "backend_switch_failed"
                         break
@@ -263,6 +275,12 @@ def _run_local(
                 iterations.append(it_obj)
                 stopped_reason = "backend_switch_failed"
                 break
+
+        # Phase 32: Clear post-probe continuation after experiment on validated backend
+        if (strategy_rec.get("recommended_action") == "run_validated_backend_experiment"
+                and execution.get("status") == "succeeded"):
+            execution["post_probe_continuation_required"] = False
+            it_obj.metrics_snapshot["post_probe_continuation_completed"] = True
 
         traj_eval = evaluate_trajectory(
             iterations + [it_obj], spec,

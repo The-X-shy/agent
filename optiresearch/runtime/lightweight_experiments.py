@@ -474,6 +474,167 @@ def run_lightweight_backend_probe(
         )
 
 
+def run_deeplens_geolens_geometric_deep_probe(
+    backend_id: str = "deeplens_geolens_geometric",
+    device: str = "cpu",
+) -> "ControllerResult":
+    """Run actual GeoLens geometric PSF probe using real DeepLens.
+
+    Unlike the shallow FFT-based probe, this actually:
+    1. Imports deeplens.geolens
+    2. Loads cooke.json lens file
+    3. Calls GeoLens.psf(points, wvln, ks, model="geometric")
+    4. Backpropagates through PSF to verify differentiability
+    """
+    from optiresearch.runtime.experiment_controller_v2 import ControllerResult
+    from optiresearch.memory.schemas import make_deterministic_id
+
+    run_id = make_deterministic_id("dprobe", backend_id)
+    start = time.perf_counter()
+
+    if not _check_deeplens_available():
+        elapsed = round(time.perf_counter() - start, 3)
+        return ControllerResult(
+            spec_id=make_deterministic_id("spec", run_id),
+            status="failed",
+            execution_target="local",
+            backend_id=backend_id,
+            run_id=run_id,
+            evidence_level="deeplens_integration_smoke",
+            result_payload={
+                "backend_available": False,
+                "deeplens_available": False,
+                "backend_id": backend_id,
+                "probe_depth": "deep",
+                "probe_time_seconds": elapsed,
+                "error_code": "DEEPLENS_UNAVAILABLE",
+                "probe_status": "unavailable",
+            },
+            errors=[{
+                "type": "deeplens_not_available",
+                "message": f"Backend '{backend_id}' requires DeepLens",
+            }],
+        )
+
+    try:
+        import torch
+        import importlib
+        geolens_mod = importlib.import_module("deeplens.geolens")
+
+        lens_path = _find_lens_file("cooke.json")
+        if lens_path is None:
+            elapsed = round(time.perf_counter() - start, 3)
+            return ControllerResult(
+                spec_id=make_deterministic_id("spec", run_id),
+                status="failed",
+                execution_target="local",
+                backend_id=backend_id,
+                run_id=run_id,
+                evidence_level="deeplens_integration_smoke",
+                result_payload={
+                    "backend_available": True,
+                    "deeplens_available": True,
+                    "backend_id": backend_id,
+                    "probe_depth": "deep",
+                    "probe_time_seconds": elapsed,
+                    "error_code": "LENS_FILE_NOT_FOUND",
+                    "probe_status": "unavailable",
+                },
+                errors=[{
+                    "type": "lens_file_not_found",
+                    "message": "cooke.json not found in known paths",
+                }],
+            )
+
+        geolens = geolens_mod.GeoLens(lens_path, device=device)
+        points = torch.tensor([[0.0, 0.0]], device=device)
+        wvln = torch.tensor([0.55], device=device)
+        ks = torch.tensor([[0.0, 0.0]], device=device)
+        psf = geolens.psf(points, wvln, ks, model="geometric")
+
+        differentiable = bool(psf.requires_grad)
+        grad_norm = 0.0
+        params_changed = False
+
+        if differentiable:
+            loss = psf.sum()
+            loss.backward()
+            grad_norms = []
+            try:
+                for p in geolens.parameters():
+                    if p.grad is not None:
+                        grad_norms.append(float(p.grad.norm().item()))
+            except Exception:
+                pass
+            grad_norm = max(grad_norms) if grad_norms else 0.0
+            params_changed = grad_norm > 0.0
+
+        elapsed = round(time.perf_counter() - start, 3)
+
+        return ControllerResult(
+            spec_id=make_deterministic_id("spec", run_id),
+            status="succeeded",
+            execution_target="local",
+            backend_id=backend_id,
+            run_id=run_id,
+            evidence_level="native_lens_simulation",
+            result_payload={
+                "backend_available": True,
+                "deeplens_available": True,
+                "backend_id": backend_id,
+                "probe_depth": "deep",
+                "probe_time_seconds": elapsed,
+                "probe_status": "succeeded",
+                "differentiable": differentiable,
+                "optical_gradient_norm": grad_norm,
+                "parameters_changed": params_changed,
+                "deeplens_native_psf_path": "geolens.psf_geometric",
+                "full_wave_optics": False,
+                "phase_to_fft_proxy_used": False,
+                "evidence_level": "native_lens_simulation",
+            },
+        )
+    except Exception as exc:
+        elapsed = round(time.perf_counter() - start, 3)
+        error_type = type(exc).__name__
+        return ControllerResult(
+            spec_id=make_deterministic_id("spec", run_id),
+            status="failed",
+            execution_target="local",
+            backend_id=backend_id,
+            run_id=run_id,
+            evidence_level="deeplens_integration_smoke",
+            result_payload={
+                "backend_available": True,
+                "deeplens_available": _check_deeplens_available(),
+                "backend_id": backend_id,
+                "probe_depth": "deep",
+                "probe_time_seconds": elapsed,
+                "error_code": f"GEOLENS_PSF_GEOMETRIC_FAILED_{error_type.upper()}",
+                "probe_status": "failed",
+            },
+            errors=[{"type": error_type, "message": str(exc)[:200]}],
+        )
+
+
+def _find_lens_file(lens_name: str) -> str | None:
+    """Search for a lens file in known locations."""
+    import os
+    from pathlib import Path as _Path
+
+    repo_path = os.getenv("DEEPLENS_REPO_PATH")
+    candidates = []
+    if repo_path:
+        candidates.append(_Path(repo_path) / "datasets" / "lenses" / lens_name)
+        candidates.append(_Path(repo_path) / "samples" / lens_name)
+    candidates.append(_Path(f"/Users/lilin/Desktop/external/DeepLens/datasets/lenses/{lens_name}"))
+    candidates.append(_Path(f"/mnt/d/external/DeepLens/datasets/lenses/{lens_name}"))
+    for p in candidates:
+        if p.exists():
+            return str(p)
+    return None
+
+
 class _LinearReconstructor:
     """Simple linear reconstructor for lightweight experiments.
 

@@ -46,6 +46,8 @@ Phase 30 增加多后端自主切换：新增 BackendProgressionGraph（7 条默
 
 Phase 31 新增后端切换后验证：post-switch strategy context 注入（pending_backend_switch / switched_from_backend / switched_to_backend）；StrategyEngine 新增 probe_new_backend 最高优先级规则；新增 backend_probe task type 和 lightweight backend probe runtime（支持 DeepLens unavailable 结构化返回）；strategy-to-spec 映射 probe_new_backend → backend_probe；LLM prompt 新增 Rule 17 和 pending switch context 动态 section；backend progression graph 新增 get_all_edges_from() 支持 alternative fallback；trajectory evaluator 新增 backend_switch_triggered / validated / probe_success / unavailable / evidence_gain_after_switch；report 新增 Backend Probe Results 和 Backend Switch Validation section；autonomous loop 在 probe 失败时自动尝试 alternative backend 或返回 structured unavailable。
 
+Phase 32 新增后端切换后延续实验：post-probe continuation signal（post_probe_continuation_required / validated_backend_id / validated_backend_evidence_level）；StrategyEngine 新增 run_validated_backend_experiment 规则；新增 native_lens_simulation_codesign task type；deep GeoLens geometric PSF probe（实际调用 deeplens.geolens.psf_geometric 路径，验证 differentiability 和 gradient flow）；CLI 注册 run-lightweight-backend-probe 命令（支持 shallow/deep probe depth）；alternative fallback 增强为 try-all-edges（遍历所有 alternative edges 直到成功或耗尽）；LLM prompt 新增 Rule 18 和 post-probe continuation 动态 section；report 新增 Post-Probe Continuation 和 Alternative Backend Attempts section。
+
 ## 安装
 
 ```bash

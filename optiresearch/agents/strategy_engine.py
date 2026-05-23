@@ -106,6 +106,28 @@ class StrategyEngine:
                 ],
             },
             {
+                "id": "post_probe_continuation",
+                "condition": lambda r: r.get("post_probe_continuation_required", False),
+                "action": "run_validated_backend_experiment",
+                "rationale": (
+                    "Backend {validated_backend} has been validated by probe. "
+                    "Proceeding with executable experiment on validated backend "
+                    "at evidence level {validated_evidence}."
+                ),
+                "expected_claim_gain": "post_probe_experiment",
+                "risk_level": "low",
+                "proposed_commands": [
+                    "python -m optiresearch.cli run-experiment-v2 "
+                    "--backend-id {backend_id} "
+                    "--task-type stable_lens_hsi_codesign "
+                    "--execution-target local"
+                ],
+                "required_evidence": [
+                    "Experiment on validated backend",
+                    "Produce task metrics (loss, gradient)",
+                ],
+            },
+            {
                 "id": "claim_ceiling_reached_switch",
                 "condition": lambda r: r.get("stop_reason") == "claim_ceiling_reached",
                 "action": "switch_backend_after_claim_ceiling",
@@ -308,6 +330,8 @@ class StrategyEngine:
             psf_energy_delta=result.get("psf_energy_delta", 0),
             switched_from=result.get("switched_from_backend", "unknown"),
             switched_to=result.get("switched_to_backend", "unknown"),
+            validated_backend=result.get("validated_backend_id", result.get("backend_id", "unknown")),
+            validated_evidence=result.get("validated_backend_evidence_level", "unknown"),
             backend_id=backend_id,
         )
 
@@ -346,6 +370,24 @@ class StrategyEngine:
                     "python -m optiresearch.cli run-experiment-v2 "
                     "--task-type backend_probe "
                     "--backend-id {backend_id}".format(backend_id=backend_id),
+                ],
+            )
+
+        if result.get("post_probe_continuation_required", False):
+            return StrategyRecommendation(
+                recommended_action="run_validated_backend_experiment",
+                rationale=(
+                    "Post-probe continuation required. "
+                    "Running experiment on validated backend."
+                ),
+                risk_level="low",
+                required_evidence=["Experiment on validated backend produces metrics"],
+                proposed_cli_commands=[
+                    "python -m optiresearch.cli run-experiment-v2 "
+                    "--backend-id {backend_id} "
+                    "--task-type stable_lens_hsi_codesign".format(
+                        backend_id=backend_id,
+                    ),
                 ],
             )
 

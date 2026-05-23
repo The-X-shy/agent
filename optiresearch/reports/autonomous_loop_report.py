@@ -128,6 +128,12 @@ def _build_sections(result: Any) -> list[str]:
     # Backend switch validation
     sections.append(_build_backend_switch_validation(result))
 
+    # Post-probe continuation
+    sections.append(_build_post_probe_continuation(result))
+
+    # Alternative backend attempts
+    sections.append(_build_alternative_backend_attempts(result))
+
     # Claim evolution table
     sections.append(_build_claim_evolution(result))
 
@@ -458,6 +464,54 @@ def _build_backend_switch_validation(result: Any) -> str:
     lines.append(f"- **Switch Triggered:** {triggered}")
     lines.append(f"- **Switch Validated:** {validated}")
     lines.append(f"- **Probe Success:** {probe_success}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _build_post_probe_continuation(result: Any) -> str:
+    lines = ["## Post-Probe Continuation", ""]
+    rows = []
+    for it in result.iterations:
+        exec_result = it.execution_result or {}
+        payload = exec_result.get("result_payload") or {}
+        continuation = exec_result.get("post_probe_continuation_required")
+        if continuation is not None:
+            validated = exec_result.get("validated_backend_id", "-")
+            evidence = exec_result.get("validated_backend_evidence_level", "-")
+            exp_status = payload.get("status", "-")
+            rows.append(
+                f"| {it.iteration_id} | {validated} | {evidence} | {exp_status} |"
+            )
+    if rows:
+        lines.append("| Iter | Validated Backend | Evidence Level | Experiment Status |")
+        lines.append("|---|---|---|---|")
+        lines.extend(rows)
+    else:
+        lines.append("No post-probe continuation events in this loop.")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _build_alternative_backend_attempts(result: Any) -> str:
+    lines = ["## Alternative Backend Attempts", ""]
+    rows = []
+    for it in result.iterations:
+        exec_result = it.execution_result or {}
+        metrics = it.metrics_snapshot or {}
+        alt_list = exec_result.get("alternative_backends_attempted") or metrics.get("alternative_backends_attempted") or []
+        if alt_list:
+            for alt in alt_list:
+                rows.append(f"| {it.iteration_id} | {alt} | attempted |")
+        failed = exec_result.get("failed_alternatives") or metrics.get("failed_alternatives") or []
+        if failed:
+            for alt in failed:
+                rows.append(f"| {it.iteration_id} | {alt} | failed |")
+    if rows:
+        lines.append("| Iter | Backend | Status |")
+        lines.append("|---|---|---|")
+        lines.extend(rows)
+    else:
+        lines.append("No alternative backend attempts in this loop.")
     lines.append("")
     return "\n".join(lines)
 

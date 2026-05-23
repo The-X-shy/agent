@@ -61,8 +61,19 @@ We are building an agentic differentiable optics framework with:
     choose stop_and_report immediately after a backend switch unless the
     new backend is unavailable and no alternative backends exist. Treat
     backend probes as evidence-level validation, not metric improvement.
+18. **When post_probe_continuation_required is true** in recent results,
+    propose run_validated_backend_experiment to execute a lightweight
+    experiment on the validated backend. Use the
+    validated_backend_evidence_level as the claim ceiling. The probe
+    validated the backend's capability -- now produce actual task metrics
+    (loss, gradient). Do NOT stop after a successful probe.
 
 ## Output Format
+Return a JSON object with a "proposals" array. Each proposal must have:
+- proposal_id: unique string identifier
+- hypothesis: scientific hypothesis being tested (1-2 sentences)
+- rationale: why this proposal is the right next step (2-3 sentences)
+- recommended_action: one of [retry_with_smaller_lr, enable_rollback, switch_backend, run_ablation, probe_waveoptics_path, request_dataset, run_remote_validation, stop_and_report, probe_new_backend, run_validated_backend_experiment]
 Return a JSON object with a "proposals" array. Each proposal must have:
 - proposal_id: unique string identifier
 - hypothesis: scientific hypothesis being tested (1-2 sentences)
@@ -197,6 +208,28 @@ def build_planner_prompt(context: dict[str, Any]) -> list[dict[str, str]]:
             "unavailable and no alternatives exist."
         )
 
+    # Detect post-probe continuation required
+    continuation_detected = False
+    validated_bid = ""
+    validated_ev = ""
+    for r in context.get("recent_results", []):
+        if isinstance(r, dict) and r.get("post_probe_continuation_required"):
+            continuation_detected = True
+            validated_bid = r.get("validated_backend_id", "")
+            validated_ev = r.get("validated_backend_evidence_level", "")
+            break
+    if continuation_detected:
+        user_prompt_parts.append("")
+        user_prompt_parts.append("## Post-Probe Continuation Required")
+        user_prompt_parts.append(
+            f"Backend {validated_bid} has been validated by a probe. "
+            f"You MUST propose run_validated_backend_experiment to execute "
+            f"a lightweight experiment on this validated backend. "
+            f"Evidence ceiling: {validated_ev}. "
+            f"Use lightweight_mode=true with max_steps<=3. "
+            f"Do NOT propose stop_and_report after a successful probe."
+        )
+
     user_prompt_parts.append("")
     user_prompt_parts.append("Generate candidate research proposals as JSON.")
 
@@ -253,6 +286,20 @@ def build_mock_proposals() -> list[dict[str, Any]]:
             "risk_level": "low",
             "proposed_claim": "Backend deeplens_geolens_geometric is available and produces valid PSF outputs.",
             "safe_wording": "Backend deeplens_geolens_geometric integration smoke test [evidence ceiling: deeplens_integration_smoke]",
+        },
+        {
+            "proposal_id": "mock_continuation_000",
+            "hypothesis": "The validated backend can execute a lightweight native lens simulation experiment producing measurable metrics.",
+            "rationale": "Post-probe continuation required on validated backend. A lightweight experiment with 3 steps will produce reconstruction loss and gradient metrics.",
+            "recommended_action": "run_validated_backend_experiment",
+            "backend_id": "deeplens_geolens_geometric",
+            "task_type": "native_lens_simulation_codesign",
+            "experiment_spec_patch": {"max_steps": 3, "lightweight_mode": True, "device": "cpu"},
+            "expected_evidence_level": "native_lens_simulation",
+            "expected_claim_gain": "post_probe_experiment",
+            "risk_level": "low",
+            "proposed_claim": "Validated backend produces measurable reconstruction metrics.",
+            "safe_wording": "Validated backend produces measurable reconstruction metrics [evidence ceiling: native_lens_simulation]",
         },
         {
             "proposal_id": "mock_safe_retry_001",
