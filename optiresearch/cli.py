@@ -549,6 +549,10 @@ def main(argv: list[str] | None = None) -> None:
     aloop_v2.add_argument("--no-continue-on-claim-downgrade", dest="continue_on_claim_downgrade", action="store_false")
     aloop_v2.add_argument("--require-metrics-for-stop", action="store_true", default=True)
     aloop_v2.add_argument("--max-runtime-minutes-per-iter", type=int, default=10)
+    # Phase 30: multi-backend switching
+    aloop_v2.add_argument("--allow-backend-switching", action="store_true", default=True)
+    aloop_v2.add_argument("--no-allow-backend-switching", dest="allow_backend_switching", action="store_false")
+    aloop_v2.add_argument("--max-backend-switches", type=int, default=1)
 
     args = parser.parse_args(argv)
     if args.command == "init-db":
@@ -2158,6 +2162,9 @@ def _run_autonomous_research_loop_v2(args: Any) -> None:
         continue_on_claim_downgrade=getattr(args, "continue_on_claim_downgrade", True),
         require_metrics_for_stop=getattr(args, "require_metrics_for_stop", True),
         max_runtime_minutes_per_iter=getattr(args, "max_runtime_minutes_per_iter", 10),
+        # Phase 30: multi-backend switching
+        allow_backend_switching=getattr(args, "allow_backend_switching", True),
+        max_backend_switches=getattr(args, "max_backend_switches", 1),
     )
     result = run_autonomous_research_loop(spec)
     print(_compact_json({

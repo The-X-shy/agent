@@ -116,6 +116,7 @@ def _run_local(
 
     iterations: list[AutonomousLoopIteration] = []
     backend_id = spec.allowed_backends[0] if spec.allowed_backends else "unknown"
+    backend_switch_count = 0
     stopped_reason = ""
 
     for iteration in range(1, spec.max_iterations + 1):
@@ -193,7 +194,7 @@ def _run_local(
             _save_json(iter_dir / "04_autograd.json", audit)
 
         # 5. Claim Gate
-        claim_dec = _check_claim_gate(strategy_rec, execution, spec)
+        claim_dec = _check_claim_gate(strategy_rec, execution, spec, backend_id)
         it_obj.claim_gate_decision = claim_dec
         _save_json(iter_dir / "05_claim_gate.json", claim_dec)
 
@@ -225,6 +226,27 @@ def _run_local(
             no_improvement_patience=spec.no_improvement_patience,
         )
         if traj_eval.stop_reason:
+            # Phase 30: backend switching on claim_ceiling_reached
+            if (traj_eval.stop_reason == "claim_ceiling_reached"
+                    and spec.allow_backend_switching
+                    and backend_switch_count < spec.max_backend_switches):
+                from optiresearch.backends.progression import get_next_backend
+
+                next_info = get_next_backend(
+                    backend_id, reason="claim_ceiling_reached",
+                    prefer_local=True,
+                )
+                if next_info:
+                    next_backend = next_info["next_backend"]
+                    if next_backend != backend_id and next_backend in spec.allowed_backends:
+                        backend_id = next_backend
+                        backend_switch_count += 1
+                        it_obj.next_action = "switch_backend"
+                        it_obj.metrics_snapshot["backend_switched_to"] = backend_id
+                        it_obj.metrics_snapshot["backend_switch_count"] = backend_switch_count
+                        iterations.append(it_obj)
+                        continue
+
             it_obj.next_action = "stop"
             it_obj.stop_reason = traj_eval.stop_reason
             iterations.append(it_obj)
@@ -426,17 +448,18 @@ def _check_claim_gate(
     strategy_rec: dict[str, Any],
     execution_result: dict[str, Any],
     spec: "AutonomousLoopSpec",
+    backend_id: str = "",
 ) -> dict[str, Any]:
     from optiresearch.memory.claim_gate_v2 import ClaimGateV2
 
-    backend_id = spec.allowed_backends[0] if spec.allowed_backends else "unknown"
+    bid = backend_id or (spec.allowed_backends[0] if spec.allowed_backends else "unknown")
     action = strategy_rec.get("recommended_action", "unknown")
-    claim_text = f"Experiment on {backend_id}: {action}"
+    claim_text = f"Experiment on {bid}: {action}"
 
     gate = ClaimGateV2()
     decision = gate.check_claim(
         claim_text=claim_text,
-        backend_id=backend_id,
+        backend_id=bid,
         experiment_result=execution_result.get("result_payload"),
         evidence_scope={
             "execution_target": spec.execution_mode,

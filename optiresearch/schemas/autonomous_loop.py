@@ -56,6 +56,9 @@ class AutonomousLoopSpec(StrictModel):
     no_improvement_patience: int = 2
     continue_on_claim_downgrade: bool = True
     require_metrics_for_stop: bool = True
+    # Phase 30: multi-backend switching
+    allow_backend_switching: bool = True
+    max_backend_switches: int = 1
     metadata: dict[str, Any] = {}
 
 
