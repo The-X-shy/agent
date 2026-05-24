@@ -8,6 +8,7 @@ query this registry instead of hardcoding evidence levels.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 
@@ -24,23 +25,115 @@ class HandlerCapability:
     physical_backend: bool = False
     real_data_required: bool = False
     remote_required: bool = False
+    supports_remote: bool = False
+    requires_remote_validation: bool = False
+    remote_evidence_ceiling: str = ""
+    local_evidence_ceiling: str = ""
     metrics_supported: list[str] = field(default_factory=list)
     artifacts_supported: list[str] = field(default_factory=list)
     known_limitations: list[str] = field(default_factory=list)
     compatible_design_ids: list[str] = field(default_factory=list)
+    compatible_backend_ids: list[str] = field(default_factory=list)
+    default_timeout_sec: int = 600
+    risk_level: str = "low"
+    enabled: bool = True
 
 
 class HandlerCapabilityRegistry:
     """Central registry of handler capabilities.
 
+    Loads from YAML config by default, with hardcoded fallback.
     Query this to determine what evidence level a handler actually produces,
     whether it's locally executable, and what claims it supports.
     """
 
-    def __init__(self):
+    DEFAULT_CONFIG_PATH = str(
+        Path(__file__).resolve().parent.parent / "config" / "handler_capabilities.yaml"
+    )
+
+    def __init__(self, config_path: str | None = None):
         self._capabilities: dict[str, HandlerCapability] = {}
         self._by_design_id: dict[str, str] = {}  # design_id -> handler_id
-        self._register_builtins()
+        self._schema_version: str = ""
+        self._loaded_from_config = False
+        self._load(config_path)
+
+    def _load(self, config_path: str | None = None) -> None:
+        import os
+        path = (
+            config_path
+            or os.environ.get("OPTIRESEARCH_HANDLER_CAPABILITY_CONFIG")
+            or self.DEFAULT_CONFIG_PATH
+        )
+        try:
+            import yaml
+            from pathlib import Path
+            from optiresearch.skills.handler_capability_schema import (
+                validate_handler_capability_config,
+            )
+            config_path_obj = Path(path)
+            if not config_path_obj.exists():
+                self._register_builtins()
+                return
+            data = yaml.safe_load(config_path_obj.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                self._register_builtins()
+                return
+            errors = validate_handler_capability_config(data)
+            if errors:
+                # Config invalid — fall back to builtins
+                self._register_builtins()
+                return
+            self._schema_version = data.get("capability_schema_version", "")
+            self._capabilities.clear()
+            self._by_design_id.clear()
+            for h in data.get("handlers", []):
+                cap = HandlerCapability(
+                    handler_id=h.get("handler_id", ""),
+                    design_type=h.get("design_type", ""),
+                    task_type=h.get("task_type", ""),
+                    supported_execution_modes=h.get("supported_execution_modes", []),
+                    actual_evidence_level=h.get("actual_evidence_level", ""),
+                    max_claim_ceiling=h.get("max_claim_ceiling", ""),
+                    synthetic_only=h.get("synthetic_only", False),
+                    native_backend_required=h.get("native_backend_required", False),
+                    physical_backend=h.get("physical_backend", False),
+                    real_data_required=h.get("real_data_required", False),
+                    remote_required=h.get("remote_required", False),
+                    supports_remote=h.get("supports_remote", False),
+                    requires_remote_validation=h.get("requires_remote_validation", False),
+                    remote_evidence_ceiling=h.get("remote_evidence_ceiling", ""),
+                    local_evidence_ceiling=h.get("local_evidence_ceiling", ""),
+                    metrics_supported=h.get("metrics_supported", []),
+                    artifacts_supported=h.get("artifacts_supported", []),
+                    known_limitations=h.get("known_limitations", []),
+                    compatible_design_ids=h.get("compatible_design_ids", []),
+                    compatible_backend_ids=h.get("compatible_backend_ids", []),
+                    default_timeout_sec=h.get("default_timeout_sec", 600),
+                    risk_level=h.get("risk_level", "low"),
+                    enabled=h.get("enabled", True),
+                )
+                self._capabilities[cap.handler_id] = cap
+                for did in cap.compatible_design_ids:
+                    self._by_design_id[did] = cap.handler_id
+            self._loaded_from_config = True
+        except Exception:
+            self._register_builtins()
+
+    @classmethod
+    def from_config(cls, config_path: str) -> "HandlerCapabilityRegistry":
+        return cls(config_path=config_path)
+
+    def reload(self) -> None:
+        self._load()
+
+    @property
+    def schema_version(self) -> str:
+        return self._schema_version
+
+    @property
+    def loaded_from_config(self) -> bool:
+        return self._loaded_from_config
 
     def register(self, cap: HandlerCapability) -> None:
         self._capabilities[cap.handler_id] = cap
@@ -48,7 +141,22 @@ class HandlerCapabilityRegistry:
             self._by_design_id[did] = cap.handler_id
 
     def get(self, handler_id: str) -> HandlerCapability | None:
-        return self._capabilities.get(handler_id)
+        cap = self._capabilities.get(handler_id)
+        if cap and not cap.enabled:
+            return cap  # Return but caller should check enabled
+        return cap
+
+    def list_enabled(self) -> list[HandlerCapability]:
+        return [c for c in self._capabilities.values() if c.enabled]
+
+    def list_disabled(self) -> list[HandlerCapability]:
+        return [c for c in self._capabilities.values() if not c.enabled]
+
+    def list_all(self) -> list[HandlerCapability]:
+        return list(self._capabilities.values())
+
+    def find_by_backend_id(self, backend_id: str) -> list[HandlerCapability]:
+        return [c for c in self._capabilities.values() if backend_id in c.compatible_backend_ids]
 
     def find_by_design_id(self, design_id: str) -> HandlerCapability | None:
         handler_id = self._by_design_id.get(design_id)
@@ -62,9 +170,6 @@ class HandlerCapabilityRegistry:
 
     def find_by_task_type(self, task_type: str) -> list[HandlerCapability]:
         return [c for c in self._capabilities.values() if c.task_type == task_type]
-
-    def list_all(self) -> list[HandlerCapability]:
-        return list(self._capabilities.values())
 
     def get_actual_evidence_level(self, design_id: str) -> str | None:
         cap = self.find_by_design_id(design_id)
@@ -94,10 +199,17 @@ class HandlerCapabilityRegistry:
             "physical_backend": cap.physical_backend,
             "real_data_required": cap.real_data_required,
             "remote_required": cap.remote_required,
+            "supports_remote": cap.supports_remote,
+            "requires_remote_validation": cap.requires_remote_validation,
+            "remote_evidence_ceiling": cap.remote_evidence_ceiling,
+            "local_evidence_ceiling": cap.local_evidence_ceiling,
             "metrics_supported": cap.metrics_supported,
             "artifacts_supported": cap.artifacts_supported,
             "known_limitations": cap.known_limitations,
             "compatible_design_ids": cap.compatible_design_ids,
+            "compatible_backend_ids": cap.compatible_backend_ids,
+            "risk_level": cap.risk_level,
+            "enabled": cap.enabled,
         }
 
     def _register_builtins(self) -> None:

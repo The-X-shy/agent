@@ -501,7 +501,8 @@ def main(argv: list[str] | None = None) -> None:
     run_skill = sub.add_parser("run-skill", help="Run a skill by ID.")
     run_skill.add_argument("--skill-id", required=True)
     run_skill.add_argument("--input-json", default="{}")
-    sub.add_parser("list-handler-capabilities", help="List all registered handler capabilities.")
+    list_hc = sub.add_parser("list-handler-capabilities", help="List all registered handler capabilities.")
+    list_hc.add_argument("--include-disabled", action="store_true", default=False)
     inspect_hc = sub.add_parser("inspect-handler-capability", help="Inspect a specific handler capability.")
     inspect_hc.add_argument("--handler-id", required=True)
     resolve_cc = sub.add_parser("resolve-claim-ceiling", help="Resolve claim ceiling from handler capability.")
@@ -509,6 +510,8 @@ def main(argv: list[str] | None = None) -> None:
     resolve_cc.add_argument("--backend-id", default="")
     resolve_cc.add_argument("--dataset", default="synthetic")
     resolve_cc.add_argument("--execution-fidelity", default="lightweight_proxy")
+    sub.add_parser("validate-handler-capabilities", help="Validate handler capabilities config.")
+    sub.add_parser("export-handler-capability-config-report", help="Export handler capability config diagnostics report.")
     classify_fail = sub.add_parser("classify-failure", help="Classify a failure from result JSON.")
     classify_fail.add_argument("--result-path", required=True)
     rec_rec = sub.add_parser("recommend-recovery", help="Recommend recovery for a failure.")
@@ -1066,11 +1069,15 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "run-skill":
         _run_skill(args.skill_id, args.input_json)
     elif args.command == "list-handler-capabilities":
-        _list_handler_capabilities()
+        _list_handler_capabilities(include_disabled=getattr(args, "include_disabled", False))
     elif args.command == "inspect-handler-capability":
         _inspect_handler_capability(args.handler_id)
     elif args.command == "resolve-claim-ceiling":
         _resolve_claim_ceiling_cli(args.handler_id, args.backend_id, args.dataset, args.execution_fidelity)
+    elif args.command == "validate-handler-capabilities":
+        _validate_handler_capabilities()
+    elif args.command == "export-handler-capability-config-report":
+        _export_handler_capability_config_report()
     elif args.command == "classify-failure":
         _classify_failure(args.result_path)
     elif args.command == "recommend-recovery":
@@ -2771,11 +2778,11 @@ def _run_skill(skill_id: str, input_json: str) -> None:
     print(_json.dumps(result.model_dump(mode="json"), indent=2, ensure_ascii=False))
 
 
-def _list_handler_capabilities() -> None:
+def _list_handler_capabilities(include_disabled: bool = False) -> None:
     from optiresearch.skills.handler_capability_registry import get_handler_capability_registry
     import json as _json
     registry = get_handler_capability_registry()
-    caps = registry.list_all()
+    caps = registry.list_all() if include_disabled else registry.list_enabled()
     result = []
     for c in caps:
         result.append({
@@ -2787,6 +2794,9 @@ def _list_handler_capabilities() -> None:
             "supported_modes": c.supported_execution_modes,
             "metrics": c.metrics_supported,
             "compatible_designs": c.compatible_design_ids,
+            "enabled": c.enabled,
+            "supports_remote": c.supports_remote,
+            "remote_required": c.remote_required,
         })
     print(_json.dumps(result, indent=2, ensure_ascii=False))
 
@@ -2825,6 +2835,31 @@ def _resolve_claim_ceiling_cli(handler_id: str, backend_id: str, dataset: str, e
         "downgrade_reasons": result.downgrade_reasons,
         "warnings": result.warnings,
     }, indent=2, ensure_ascii=False))
+
+
+def _validate_handler_capabilities() -> None:
+    from optiresearch.skills.handler_capability_schema import validate_handler_capability_config
+    from pathlib import Path
+    import yaml
+    import json as _json
+    config_path = Path("optiresearch/config/handler_capabilities.yaml")
+    data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    errors = validate_handler_capability_config(data)
+    if errors:
+        print(f"Validation FAILED ({len(errors)} errors):")
+        for e in errors:
+            print(f"  - {e}")
+    else:
+        print("Validation PASSED")
+
+
+def _export_handler_capability_config_report() -> None:
+    from optiresearch.reports.handler_capability_config_report import (
+        export_handler_capability_config_report,
+    )
+    md_path, json_path = export_handler_capability_config_report()
+    print(f"MD report:  {md_path}")
+    print(f"JSON report: {json_path}")
 
 
 def _classify_failure(result_path: str) -> None:

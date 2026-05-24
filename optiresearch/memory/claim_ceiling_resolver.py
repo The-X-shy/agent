@@ -166,6 +166,8 @@ def _get_handler_claim_ceiling(handler_id: str) -> str:
         registry = get_handler_capability_registry()
         cap = registry.get(handler_id)
         if cap:
+            if not cap.enabled:
+                return "needs_followup"
             return cap.max_claim_ceiling
     except Exception:
         pass

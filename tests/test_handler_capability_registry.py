@@ -7,10 +7,10 @@ from optiresearch.skills.handler_capability_registry import (
 )
 
 
-def test_registry_has_five_builtins():
+def test_registry_has_nine_handlers():
     registry = HandlerCapabilityRegistry()
     caps = registry.list_all()
-    assert len(caps) == 5
+    assert len(caps) == 9  # 5 enabled + 4 disabled from config
 
 
 def test_find_by_design_id_objective_redesign():

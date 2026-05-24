@@ -58,6 +58,8 @@ Phase 40 新增 Handler Capability Registry 作为 handler 能力的唯一真相
 
 Phase 41 新增 ClaimCeilingResolver，根据 handler capability / backend / dataset / execution fidelity 四级 ceiling 取最小值作为 final claim ceiling，彻底修复 design backend_id 导致 claim ceiling 过高的问题；ClaimGate 新增 ceiling 相关字段（final_claim_ceiling、ceiling_source、limiting_factor、downgrade_reasons）；execution result 携带完整 ceiling metadata；StateStore 记录 claim ceiling；Report 新增 Claim Ceiling Resolution 段；CLI 新增 resolve-claim-ceiling 命令。
 
+Phase 42 将 HandlerCapabilityRegistry 从 hardcoded 迁移为 YAML 配置驱动（`optiresearch/config/handler_capabilities.yaml`），新增 schema validation（`handler_capability_schema.py`），5 个 enabled + 4 个 reserved disabled handler；registry 支持 reload / list_enabled / list_disabled / find_by_backend_id；ClaimCeilingResolver 处理 disabled handler；CLI 新增 validate-handler-capabilities / export-handler-capability-config-report；remote awareness 字段（supports_remote / remote_required / requires_remote_validation）预留给后续 remote execution。
+
 ## 安装
 
 ```bash
