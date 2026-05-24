@@ -456,6 +456,7 @@ def _lightweight_result_to_execution_result(
             "Synthetic HSI data — real HSI performance may differ",
         ],
         "run_id": result.run_id,
+        "handler_id": "objective_redesign_simpler_metric",
         "metadata": {
             "synthetic_data": True,
             "physical_backend": False,
@@ -463,6 +464,15 @@ def _lightweight_result_to_execution_result(
             "deepens_used": False,
             "psf_method": "fft_fraunhofer",
         },
+        "handler_claim_ceiling": "lightweight_scientific_execution",
+        "design_backend_claim_ceiling": _get_backend_claim_ceiling(d.backend_id),
+        "dataset_claim_ceiling": "lightweight_scientific_execution",
+        "execution_fidelity_claim_ceiling": "lightweight_scientific_execution",
+        "synthetic_data": True,
+        "physical_backend": False,
+        "native_backend": False,
+        "full_wave_optics": False,
+        "phase_to_fft_proxy_used": True,
     }
 
 
@@ -532,7 +542,27 @@ def _param_reduction_result_to_execution_result(
             "handler_id": "param_reduction_sweep",
             "deepens_used": False,
         },
+        "handler_claim_ceiling": "lightweight_scientific_execution",
+        "design_backend_claim_ceiling": _get_backend_claim_ceiling(d.backend_id),
+        "dataset_claim_ceiling": "lightweight_scientific_execution",
+        "execution_fidelity_claim_ceiling": "lightweight_scientific_execution",
+        "synthetic_data": True,
+        "physical_backend": False,
+        "native_backend": False,
+        "full_wave_optics": False,
+        "phase_to_fft_proxy_used": True,
     }
+
+
+def _get_backend_claim_ceiling(backend_id: str) -> str:
+    try:
+        from optiresearch.backends.registry import get_backend
+        backend = get_backend(backend_id)
+        if backend:
+            return backend.claim_ceiling
+    except Exception:
+        pass
+    return "unsupported"
 
 
 def _controller_result_to_execution_result(d: ExperimentDesignCandidate, result: Any) -> dict[str, Any]:
@@ -641,11 +671,13 @@ def _run_claim_gate(d: ExperimentDesignCandidate | None, result: dict[str, Any])
         else:
             claim_text = f"Local native lens simulation completed for {result.get('design_id', 'design')}"
         backend_id = result.get("backend_id") or (d.backend_id if d else "")
+        handler_id = result.get("handler_id") or (d.handler_id if d else "")
         decision = gate.check_claim(
             claim_text,
             backend_id,
             experiment_result=result,
             evidence_scope={"execution_target": "local"},
+            handler_id=handler_id,
         )
         return {
             "design_id": result.get("design_id") or (d.design_id if d else ""),
@@ -657,6 +689,10 @@ def _run_claim_gate(d: ExperimentDesignCandidate | None, result: dict[str, Any])
             "required_additional_evidence": decision.required_additional_evidence,
             "applicable_caveats": decision.applicable_caveats,
             "metadata": decision.metadata,
+            "final_claim_ceiling": decision.final_claim_ceiling,
+            "ceiling_source": decision.ceiling_source,
+            "limiting_factor": decision.limiting_factor,
+            "downgrade_reasons": decision.downgrade_reasons,
         }
     except Exception as e:
         return {"design_id": result.get("design_id", ""), "error": str(e)}

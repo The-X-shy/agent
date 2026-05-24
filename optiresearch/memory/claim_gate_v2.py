@@ -42,6 +42,11 @@ class ClaimGateDecision:
     safe_wording: str = ""
     applicable_caveats: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
+    # Phase 41: handler-capability-driven ceiling
+    final_claim_ceiling: str = ""
+    ceiling_source: str = ""
+    limiting_factor: str = ""
+    downgrade_reasons: list[str] = field(default_factory=list)
 
 
 class ClaimGateV2:
@@ -53,6 +58,7 @@ class ClaimGateV2:
         backend_id: str,
         experiment_result: Optional[dict[str, Any]] = None,
         evidence_scope: Optional[dict[str, Any]] = None,
+        handler_id: str = "",
     ) -> ClaimGateDecision:
         """Check a proposed claim and return a gating decision.
 
@@ -61,6 +67,7 @@ class ClaimGateV2:
             backend_id: The backend that produced the evidence.
             experiment_result: Optional result dict with metrics and metadata.
             evidence_scope: Optional scope dict (e.g. local_only, synthetic_data).
+            handler_id: Optional handler ID for capability-based ceiling.
 
         Returns:
             ClaimGateDecision with verdict and safe wording.
@@ -68,11 +75,16 @@ class ClaimGateV2:
         claim_lower = claim_text.lower()
         result = self._normalize_result(experiment_result or {})
 
-        # Get backend claim ceiling
-        max_claim = self._compute_max_allowed_claim(backend_id)
+        # Phase 41: Resolve claim ceiling from handler capability, not just backend
+        resolved = self._resolve_ceiling(backend_id, handler_id, result)
+        max_claim = resolved.final_claim_ceiling
 
         outcome_decision = self._check_plan_execution_outcome(claim_text, claim_lower, result, max_claim)
         if outcome_decision is not None:
+            outcome_decision.final_claim_ceiling = resolved.final_claim_ceiling
+            outcome_decision.ceiling_source = resolved.ceiling_source
+            outcome_decision.limiting_factor = resolved.limiting_factor
+            outcome_decision.downgrade_reasons = resolved.downgrade_reasons
             self._publish_claim_event(
                 outcome_decision.decision,
                 outcome_decision.violation_type,
@@ -92,6 +104,10 @@ class ClaimGateV2:
                 violation_type=None,
                 safe_wording=claim_text,
                 metadata={"outcome": result.get("outcome") or result.get("evidence_level", "")},
+                final_claim_ceiling=resolved.final_claim_ceiling,
+                ceiling_source=resolved.ceiling_source,
+                limiting_factor=resolved.limiting_factor,
+                downgrade_reasons=resolved.downgrade_reasons,
             )
 
         # Use the most severe violation
@@ -109,6 +125,36 @@ class ClaimGateV2:
             safe_wording=safe,
             applicable_caveats=self._caveats(primary_type),
             metadata={"outcome": result.get("outcome") or result.get("evidence_level", "")},
+            final_claim_ceiling=resolved.final_claim_ceiling,
+            ceiling_source=resolved.ceiling_source,
+            limiting_factor=resolved.limiting_factor,
+            downgrade_reasons=resolved.downgrade_reasons,
+        )
+
+    def _resolve_ceiling(
+        self, backend_id: str, handler_id: str, result: dict[str, Any]
+    ) -> Any:
+        from optiresearch.memory.claim_ceiling_resolver import (
+            resolve_claim_ceiling,
+        )
+        # Only pass constraints that are explicitly present in the result
+        has_synthetic = "synthetic_data" in result
+        has_physical = "physical_backend" in result
+        has_native = "native_backend" in result
+        has_fft = "phase_to_fft_proxy_used" in result
+        return resolve_claim_ceiling(
+            handler_id=handler_id or result.get("handler_id", ""),
+            backend_id=backend_id,
+            dataset="synthetic" if has_synthetic and result.get("synthetic_data") else ("real" if result.get("real_data") else ""),
+            execution_fidelity=result.get("execution_fidelity", ""),
+            evidence_level=result.get("evidence_level", ""),
+            synthetic_data=has_synthetic and result.get("synthetic_data", False),
+            physical_backend=result.get("physical_backend") if has_physical else None,
+            native_backend=result.get("native_backend") if has_native else None,
+            real_data=result.get("real_data", False),
+            proxy_fallback_used=result.get("proxy_fallback_used", False),
+            full_wave_optics=result.get("full_wave_optics", False),
+            phase_to_fft_proxy_used=result.get("phase_to_fft_proxy_used") if has_fft else None,
         )
 
     def _normalize_result(self, result: dict[str, Any]) -> dict[str, Any]:

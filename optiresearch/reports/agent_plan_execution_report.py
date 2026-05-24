@@ -178,8 +178,30 @@ def _markdown(execution_id: str, r: dict[str, Any]) -> str:
                 f"{metrics.get('improvement_detected', '-')} | {a.get('handler_id', '-')} |"
             )
 
-    lines.extend(["", "## 8. ClaimGate Outcome"])
+    # Claim Ceiling Resolution (Phase 41)
+    ex = r.get("execution_result") or {}
+    lines.extend([
+        "",
+        "## 7d. Claim Ceiling Resolution",
+        f"- **Design Backend Ceiling:** {ex.get('design_backend_claim_ceiling', '-')}",
+        f"- **Handler Ceiling:** {ex.get('handler_claim_ceiling', '-')}",
+        f"- **Dataset Ceiling:** {ex.get('dataset_claim_ceiling', '-')}",
+        f"- **Execution Fidelity Ceiling:** {ex.get('execution_fidelity_claim_ceiling', '-')}",
+    ])
     claim = r.get("claim_gate_decision") or {}
+    if claim:
+        lines.extend([
+            f"- **Final Claim Ceiling:** {claim.get('final_claim_ceiling') or claim.get('max_allowed_claim', '-')}",
+            f"- **Ceiling Source:** {claim.get('ceiling_source', '-')}",
+            f"- **Limiting Factor:** {claim.get('limiting_factor', '-')}",
+        ])
+        reasons = claim.get("downgrade_reasons", [])
+        if reasons:
+            lines.append("- **Downgrade Reasons:**")
+            for reason in reasons:
+                lines.append(f"  - {reason}")
+
+    lines.extend(["", "## 8. ClaimGate Outcome"])
     if claim:
         lines.extend([
             f"- **Decision:** {claim.get('decision', '-')}",

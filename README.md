@@ -56,6 +56,8 @@ Phase 39 补齐本地可执行 scientific handler：新增 `lightweight_scientif
 
 Phase 40 新增 Handler Capability Registry 作为 handler 能力的唯一真相源，消除 design expected evidence 与 handler actual evidence 不一致的问题；`ExperimentDesignGenerator` 查询 registry 设置正确的 expected_evidence_level；`CandidatePlanEvaluator` 基于 actual_handler_evidence_level 评分并对 evidence downgrade 施加惩罚；ClaimGate 新增 `evidence_level_overestimated` 和 `handler_capability_exceeded` 违规；补齐 `param_reduction_sweep` local handler（第二个可执行 scientific path），sweep k=1,2,3 pseudo-optical parameters 并产出 lightweight metrics；`_build_attempt_sequence` 在 local mode 下优先选择 scientific handler。
 
+Phase 41 新增 ClaimCeilingResolver，根据 handler capability / backend / dataset / execution fidelity 四级 ceiling 取最小值作为 final claim ceiling，彻底修复 design backend_id 导致 claim ceiling 过高的问题；ClaimGate 新增 ceiling 相关字段（final_claim_ceiling、ceiling_source、limiting_factor、downgrade_reasons）；execution result 携带完整 ceiling metadata；StateStore 记录 claim ceiling；Report 新增 Claim Ceiling Resolution 段；CLI 新增 resolve-claim-ceiling 命令。
+
 ## 安装
 
 ```bash

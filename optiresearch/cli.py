@@ -504,6 +504,11 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("list-handler-capabilities", help="List all registered handler capabilities.")
     inspect_hc = sub.add_parser("inspect-handler-capability", help="Inspect a specific handler capability.")
     inspect_hc.add_argument("--handler-id", required=True)
+    resolve_cc = sub.add_parser("resolve-claim-ceiling", help="Resolve claim ceiling from handler capability.")
+    resolve_cc.add_argument("--handler-id", default="")
+    resolve_cc.add_argument("--backend-id", default="")
+    resolve_cc.add_argument("--dataset", default="synthetic")
+    resolve_cc.add_argument("--execution-fidelity", default="lightweight_proxy")
     classify_fail = sub.add_parser("classify-failure", help="Classify a failure from result JSON.")
     classify_fail.add_argument("--result-path", required=True)
     rec_rec = sub.add_parser("recommend-recovery", help="Recommend recovery for a failure.")
@@ -1064,6 +1069,8 @@ def main(argv: list[str] | None = None) -> None:
         _list_handler_capabilities()
     elif args.command == "inspect-handler-capability":
         _inspect_handler_capability(args.handler_id)
+    elif args.command == "resolve-claim-ceiling":
+        _resolve_claim_ceiling_cli(args.handler_id, args.backend_id, args.dataset, args.execution_fidelity)
     elif args.command == "classify-failure":
         _classify_failure(args.result_path)
     elif args.command == "recommend-recovery":
@@ -2790,6 +2797,34 @@ def _inspect_handler_capability(handler_id: str) -> None:
     registry = get_handler_capability_registry()
     info = registry.inspect(handler_id)
     print(_json.dumps(info, indent=2, ensure_ascii=False) if info else f"Unknown handler: {handler_id}")
+
+
+def _resolve_claim_ceiling_cli(handler_id: str, backend_id: str, dataset: str, execution_fidelity: str) -> None:
+    from optiresearch.memory.claim_ceiling_resolver import resolve_claim_ceiling
+    import json as _json
+    result = resolve_claim_ceiling(
+        handler_id=handler_id,
+        backend_id=backend_id,
+        dataset=dataset,
+        execution_fidelity=execution_fidelity,
+        synthetic_data=(dataset == "synthetic"),
+        physical_backend=False,
+        native_backend=False,
+        real_data=(dataset == "real"),
+    )
+    print(_json.dumps({
+        "handler_id": result.handler_id,
+        "design_backend_id": result.design_backend_id,
+        "handler_claim_ceiling": result.handler_claim_ceiling,
+        "backend_claim_ceiling": result.backend_claim_ceiling,
+        "dataset_claim_ceiling": result.dataset_claim_ceiling,
+        "execution_fidelity_claim_ceiling": result.execution_fidelity_claim_ceiling,
+        "final_claim_ceiling": result.final_claim_ceiling,
+        "ceiling_source": result.ceiling_source,
+        "limiting_factor": result.limiting_factor,
+        "downgrade_reasons": result.downgrade_reasons,
+        "warnings": result.warnings,
+    }, indent=2, ensure_ascii=False))
 
 
 def _classify_failure(result_path: str) -> None:

@@ -29,6 +29,9 @@ class AgentState(StrictModel):
     remote_worker_status: dict[str, str] = {}
     memory_summary: dict[str, int] = {}
     evidence_summary: dict[str, int] = {}
+    last_claim_ceiling: str = ""
+    last_claim_ceiling_source: str = ""
+    known_claim_limits: list[str] = []
     snapshot_count: int = 0
     updated_at: float = 0.0
 
@@ -155,6 +158,12 @@ class StateStore:
         self._state.memory_summary["last_plan_execution_attempts"] = len(attempted_designs)
         self._state.evidence_summary["last_plan_execution_skipped"] = len(skipped_higher_ranked_designs)
         self._state.backend_status[execution_result.get("backend_id", "none")] = execution_result.get("status", "")
+        # Phase 41: Claim ceiling tracking
+        final_ceiling = decision_payload.get("final_claim_ceiling", "")
+        self._state.last_claim_ceiling = final_ceiling or decision_payload.get("max_allowed_claim", "")
+        self._state.last_claim_ceiling_source = decision_payload.get("ceiling_source", "")
+        if final_ceiling and final_ceiling not in self._state.known_claim_limits:
+            self._state.known_claim_limits.append(final_ceiling)
         self._state.last_strategy = {
             "execution_id": execution_id,
             "selected_design": selected_design or "",
