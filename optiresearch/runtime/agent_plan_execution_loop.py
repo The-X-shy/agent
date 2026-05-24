@@ -176,6 +176,83 @@ def run_agent_plan_execution(spec: AgentPlanExecutionSpec) -> AgentPlanExecution
             claim_gate_decision = _run_claim_gate(final_design, execution_result)
             claim_gate_decisions.append(claim_gate_decision)
 
+    elif spec.mode == "remote_opt_in":
+        if not spec.allow_remote:
+            execution_result = {
+                "status": "stopped",
+                "outcome": "remote_not_allowed",
+                "design_id": selection.selected_design or "none",
+                "evidence_level": "structured_unsupported",
+                "errors": [{"type": "REMOTE_NOT_ALLOWED", "message": "allow_remote must be true for remote_opt_in mode"}],
+            }
+            errors.append("Remote execution requires --allow-remote flag")
+        elif not spec.remote_worker_id:
+            execution_result = {
+                "status": "stopped",
+                "outcome": "remote_no_worker",
+                "design_id": selection.selected_design or "none",
+                "evidence_level": "structured_unsupported",
+                "errors": [{"type": "REMOTE_NO_WORKER", "message": "remote_worker_id is required for remote_opt_in mode"}],
+            }
+            errors.append("Remote execution requires --remote-worker-id")
+        elif not selected_designs:
+            execution_result = {}
+        else:
+            executed = True
+            for d in selected_designs[:max(1, spec.execute_top_k)]:
+                handler_id = getattr(d, "handler_id", "") or _handler_id_for_design(d)
+                cap = _get_handler_cap(handler_id)
+                if not cap or not cap.supports_remote:
+                    result = {
+                        "status": "unsupported",
+                        "outcome": "handler_does_not_support_remote",
+                        "design_id": d.design_id,
+                        "evidence_level": "structured_unsupported",
+                        "errors": [{"type": "HANDLER_NO_REMOTE", "message": f"Handler '{handler_id}' does not support remote execution"}],
+                    }
+                    execution_results.append(result)
+                    attempted_designs.append(_attempt_summary(result))
+                    continue
+
+                bus.publish(AgentEvent.create("remote_execution_requested", "controller",
+                    payload={"execution_id": spec.execution_id, "design_id": d.design_id, "worker_id": spec.remote_worker_id}))
+                bus.publish(AgentEvent.create("remote_execution_started", "controller",
+                    payload={"design_id": d.design_id, "handler_id": handler_id}))
+
+                try:
+                    remote_result = _execute_remote_design(d, spec.remote_worker_id)
+                    bus.publish(AgentEvent.create(
+                        "remote_execution_completed" if remote_result.get("status") == "completed" else "remote_execution_failed",
+                        "controller",
+                        payload=remote_result,
+                        severity="info" if remote_result.get("status") == "completed" else "warning",
+                    ))
+                except Exception as e:
+                    remote_result = {
+                        "status": "failed",
+                        "design_id": d.design_id,
+                        "evidence_level": "structured_unsupported",
+                        "errors": [{"type": "REMOTE_EXECUTION_EXCEPTION", "message": str(e)}],
+                    }
+                    bus.publish(AgentEvent.create("remote_execution_failed", "controller",
+                        payload={"design_id": d.design_id, "error": str(e)}, severity="error"))
+                    errors.append(f"Remote execution failed for {d.design_id}: {e}")
+
+                execution_results.append(remote_result)
+                attempted_designs.append(_attempt_summary(remote_result))
+                if remote_result.get("status") == "completed":
+                    execution_result = remote_result
+                    break
+            if not execution_result and execution_results:
+                execution_result = execution_results[-1]
+
+        if spec.require_claim_gate and execution_result:
+            final_design = _find_design(designs, execution_result.get("design_id")) or (
+                selected_designs[0] if selected_designs else None
+            )
+            claim_gate_decision = _run_claim_gate(final_design, execution_result)
+            claim_gate_decisions.append(claim_gate_decision)
+
     memory_updates: list[str] = []
     memory_updated = False
     if execution_result or spec.mode == "dry_run":
@@ -552,6 +629,76 @@ def _param_reduction_result_to_execution_result(
         "full_wave_optics": False,
         "phase_to_fft_proxy_used": True,
     }
+
+
+def _execute_remote_design(d: Any, worker_id: str) -> dict[str, Any]:
+    from optiresearch.skills.runtime_v2 import SkillRuntimeV2
+    skill_result = SkillRuntimeV2().execute_skill(
+        "remote_execution",
+        {
+            "allow_remote": True,
+            "worker_id": worker_id,
+            "design_id": d.design_id,
+            "handler_id": getattr(d, "handler_id", ""),
+            "spec_payload": d.spec_payload if hasattr(d, "spec_payload") else {},
+        },
+    )
+    output = skill_result.output or {}
+    if skill_result.status == "succeeded":
+        return {
+            "status": "completed",
+            "outcome": "remote_execution_completed",
+            "design_id": d.design_id,
+            "task_type": d.task_type if hasattr(d, "task_type") else "",
+            "backend_id": d.backend_id if hasattr(d, "backend_id") else "",
+            "evidence_level": output.get("evidence_level", "native_lens_simulation"),
+            "execution_target": "remote_wsl",
+            "remote_worker_id": worker_id,
+            "remote_job_id": output.get("remote_job_id", ""),
+            "remote_validation_passed": output.get("remote_validation_passed", True),
+            "metrics": output.get("metrics", {}),
+            "artifacts": output.get("artifacts", []),
+            "errors": [],
+            "caveats": ["Remote WSL execution — validation performed on remote worker"],
+            "run_id": output.get("run_id", ""),
+        }
+    return {
+        "status": "failed",
+        "outcome": "remote_execution_failed",
+        "design_id": d.design_id,
+        "evidence_level": "structured_unsupported",
+        "execution_target": "remote_wsl",
+        "metrics": {},
+        "artifacts": [],
+        "errors": [{"type": "REMOTE_SKILL_FAILED", "message": "; ".join(skill_result.errors)}],
+        "caveats": ["Remote execution did not complete"],
+    }
+
+
+def _handler_id_for_design(d: Any) -> str:
+    hid = getattr(d, "handler_id", "")
+    if hid:
+        return hid
+    try:
+        from optiresearch.skills.handler_capability_registry import (
+            get_handler_capability_registry,
+        )
+        cap = get_handler_capability_registry().find_by_design_id(d.design_id)
+        if cap:
+            return cap.handler_id
+    except Exception:
+        pass
+    return ""
+
+
+def _get_handler_cap(handler_id: str) -> Any:
+    try:
+        from optiresearch.skills.handler_capability_registry import (
+            get_handler_capability_registry,
+        )
+        return get_handler_capability_registry().get(handler_id)
+    except Exception:
+        return None
 
 
 def _get_backend_claim_ceiling(backend_id: str) -> str:

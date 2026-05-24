@@ -2797,6 +2797,8 @@ def _list_handler_capabilities(include_disabled: bool = False) -> None:
             "enabled": c.enabled,
             "supports_remote": c.supports_remote,
             "remote_required": c.remote_required,
+            "remote_evidence_ceiling": c.remote_evidence_ceiling,
+            "local_evidence_ceiling": c.local_evidence_ceiling,
         })
     print(_json.dumps(result, indent=2, ensure_ascii=False))
 

@@ -229,11 +229,24 @@ class CandidatePlanEvaluator:
         rec = score.recommendation
         if rec == "needs_user_data" or design.estimated_runtime_sec == 0 or design.spec_payload.get("action") == "request_real_data":
             return "needs_user_data"
+        # Remote-aware routing
+        handler_id = getattr(design, "handler_id", "")
+        cap = _get_handler_capability(handler_id) if handler_id else None
+        if cap:
+            if cap.remote_required:
+                if mode == "remote_opt_in" and allow_remote:
+                    return None  # Selectable in remote mode
+                return "needs_remote"
+            # Non-remote handlers are fine in remote_opt_in — they run locally
+            if mode == "remote_opt_in" and allow_remote:
+                return None  # Either remote-capable or locally executable
         if rec == "needs_remote" and not allow_remote:
             return "needs_remote"
         if mode == "remote_opt_in" and rec == "needs_remote" and allow_remote:
             return None
         if mode == "local":
+            if cap and cap.remote_required:
+                return "needs_remote"
             if rec not in ("execute_now", "dry_run_first"):
                 return rec or "not_recommended"
             if not _is_local_supported_design(design):
@@ -286,6 +299,16 @@ def _is_local_supported_design(design: ExperimentDesignCandidate) -> bool:
         return get_backend_task_evidence_cap(design.backend_id, design.task_type) is not None
     except Exception:
         return False
+
+
+def _get_handler_capability(handler_id: str) -> Any:
+    try:
+        from optiresearch.skills.handler_capability_registry import (
+            get_handler_capability_registry,
+        )
+        return get_handler_capability_registry().get(handler_id)
+    except Exception:
+        return None
 
 
 def _is_report_only_design(design: ExperimentDesignCandidate) -> bool:

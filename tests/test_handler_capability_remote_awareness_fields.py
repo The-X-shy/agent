@@ -16,12 +16,13 @@ def test_supports_remote_field_exists():
         assert hasattr(c, "local_evidence_ceiling")
 
 
-def test_enabled_handlers_dont_support_remote():
+def test_remote_required_handlers_are_remote_only():
     registry = get_handler_capability_registry()
     enabled = registry.list_enabled()
-    for c in enabled:
-        assert not c.remote_required
-        assert not c.supports_remote
+    remote_handlers = [c for c in enabled if c.remote_required]
+    for c in remote_handlers:
+        assert c.supports_remote
+        assert "local" not in c.supported_execution_modes
 
 
 def test_disabled_handlers_may_support_remote():
@@ -31,11 +32,11 @@ def test_disabled_handlers_may_support_remote():
     assert len(remote_enabled) >= 1  # At least one disabled handler supports remote
 
 
-def test_remote_native_geolens_is_disabled():
+def test_remote_native_geolens_is_enabled():
     registry = get_handler_capability_registry()
     cap = registry.get("remote_native_geolens_validation")
     assert cap is not None
-    assert cap.enabled is False
+    assert cap.enabled is True
     assert cap.supports_remote is True
     assert cap.remote_required is True
 
@@ -43,4 +44,4 @@ def test_remote_native_geolens_is_disabled():
 def test_disabled_handlers_count():
     registry = get_handler_capability_registry()
     disabled = registry.list_disabled()
-    assert len(disabled) == 4  # deeplens_native, stabilization_sweep, coherent_asm_probe, remote_geolens
+    assert len(disabled) == 3  # deeplens_native, stabilization_sweep, coherent_asm_probe (remote_geolens now enabled)

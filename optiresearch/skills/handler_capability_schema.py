@@ -20,7 +20,7 @@ KNOWN_EVIDENCE_LEVELS = {
 
 KNOWN_RISK_LEVELS = {"low", "medium", "high"}
 KNOWN_EXECUTION_MODES = {"dry_run", "local", "remote_opt_in"}
-KNOWN_DESIGN_TYPES = {"scientific", "probe", "report", "data_request"}
+KNOWN_DESIGN_TYPES = {"scientific", "probe", "report", "data_request", "remote_validation"}
 
 REQUIRED_FIELDS = [
     "handler_id", "display_name", "design_type",

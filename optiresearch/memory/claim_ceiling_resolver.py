@@ -65,6 +65,11 @@ def resolve_claim_ceiling(
     dataset: str = "synthetic",
     execution_fidelity: str = "",
     evidence_level: str = "",
+    execution_target: str = "local",
+    remote_worker_id: str = "",
+    remote_validation_passed: bool | None = None,
+    handler_remote_required: bool = False,
+    supports_remote: bool = False,
     synthetic_data: bool = False,
     physical_backend: bool | None = None,
     native_backend: bool | None = None,
@@ -97,6 +102,36 @@ def resolve_claim_ceiling(
         result.downgrade_reasons.append("Handler capability not found in registry")
         return result
     if handler_ceiling:
+        # Remote-aware ceiling: use appropriate ceiling based on execution target
+        cap = _get_handler_cap(handler_id)
+        if cap:
+            if execution_target == "local":
+                if cap.remote_required:
+                    result.final_claim_ceiling = "needs_followup"
+                    result.ceiling_source = "handler"
+                    result.limiting_factor = "handler_requires_remote"
+                    result.downgrade_reasons.append(
+                        f"Handler '{handler_id}' requires remote execution — not available locally"
+                    )
+                    return result
+                handler_ceiling = cap.local_evidence_ceiling or handler_ceiling
+            elif execution_target in ("remote_wsl", "remote"):
+                if cap.supports_remote:
+                    if remote_validation_passed is False:
+                        result.final_claim_ceiling = "needs_followup"
+                        result.ceiling_source = "handler"
+                        result.limiting_factor = "remote_validation_failed"
+                        result.downgrade_reasons.append("Remote validation did not pass")
+                        return result
+                    handler_ceiling = cap.remote_evidence_ceiling or handler_ceiling
+                else:
+                    result.final_claim_ceiling = "needs_followup"
+                    result.ceiling_source = "handler"
+                    result.limiting_factor = "handler_does_not_support_remote"
+                    result.downgrade_reasons.append(
+                        f"Handler '{handler_id}' does not support remote execution"
+                    )
+                    return result
         ceilings.append((handler_ceiling, "handler"))
 
     # 2. Backend ceiling
@@ -156,21 +191,27 @@ def resolve_claim_ceiling(
     return result
 
 
-def _get_handler_claim_ceiling(handler_id: str) -> str:
+def _get_handler_cap(handler_id: str) -> Any:
     if not handler_id:
-        return ""  # No handler — ceiling will come from other sources
+        return None
     try:
         from optiresearch.skills.handler_capability_registry import (
             get_handler_capability_registry,
         )
         registry = get_handler_capability_registry()
-        cap = registry.get(handler_id)
-        if cap:
-            if not cap.enabled:
-                return "needs_followup"
-            return cap.max_claim_ceiling
+        return registry.get(handler_id)
     except Exception:
-        pass
+        return None
+
+
+def _get_handler_claim_ceiling(handler_id: str) -> str:
+    cap = _get_handler_cap(handler_id)
+    if cap:
+        if not cap.enabled:
+            return "needs_followup"
+        return cap.max_claim_ceiling
+    if not handler_id:
+        return ""  # No handler — ceiling will come from other sources
     return "needs_followup"
 
 

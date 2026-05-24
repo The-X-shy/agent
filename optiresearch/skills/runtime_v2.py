@@ -197,8 +197,49 @@ class SkillRuntimeV2:
             worker_id = inputs.get("worker_id", "")
             if not worker_id:
                 return {"status": "failed", "error": "No worker_id specified"}
+            handler_id = inputs.get("handler_id", "")
+            design_id = inputs.get("design_id", "")
+            # Choose remote job based on handler
+            if handler_id == "remote_native_geolens_validation" or "geolens" in design_id:
+                from optiresearch.runtime.remote_jobs import (
+                    run_remote_deeplens_native_geolens_hsi_codesign,
+                )
+                spec = inputs.get("spec_payload", {})
+                result = run_remote_deeplens_native_geolens_hsi_codesign(
+                    worker_id=worker_id,
+                    lens_file=spec.get("candidate", "auto:cooke"),
+                    dataset=spec.get("dataset", "synthetic"),
+                    reconstructor=spec.get("reconstructor", "differentiable_linear"),
+                    max_steps=spec.get("max_steps", 5),
+                    optical_lr=spec.get("optical_lr", 1e-6),
+                    device=spec.get("device", "cpu"),
+                    ingest=True,
+                )
+                self._event_bus.publish(AgentEvent.create(
+                    "remote_validation_passed" if result.get("status") == "succeeded" else "remote_validation_failed",
+                    "controller",
+                    payload={"worker_id": worker_id, "status": result.get("status", ""),
+                             "job_id": result.get("job_id", "")},
+                ))
+                metrics = result.get("result_payload", {}) if isinstance(result, dict) else {}
+                return {
+                    "status": "succeeded" if result.get("status") == "succeeded" else "failed",
+                    "outcome": "remote_execution_completed",
+                    "remote_job_id": result.get("job_id", ""),
+                    "run_id": result.get("run_id", ""),
+                    "execution_target": "remote_wsl",
+                    "evidence_level": "native_lens_simulation",
+                    "remote_validation_passed": result.get("status") == "succeeded",
+                    "metrics": {
+                        "reconstruction_loss_before": metrics.get("reconstruction_loss_before"),
+                        "reconstruction_loss_after": metrics.get("reconstruction_loss_after"),
+                        "improvement_detected": metrics.get("improvement_detected"),
+                        "accepted_update_count": metrics.get("accepted_update_count"),
+                    },
+                    "artifacts": result.get("artifacts", []),
+                }
             return {"status": "dry_run", "worker_id": worker_id,
-                    "message": "Remote execution dispatched (results pending)"}
+                    "message": f"Remote execution dispatched for {handler_id} (results pending)"}
         except Exception as e:
             return {"status": "failed", "error": str(e)}
 

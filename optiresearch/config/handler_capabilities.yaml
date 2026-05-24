@@ -283,14 +283,14 @@ handlers:
     enabled: false
 
   - handler_id: remote_native_geolens_validation
-    display_name: "Remote Native GeoLens Validation"
-    design_type: scientific
-    task_type: stable_lens_hsi_codesign
+    display_name: "Remote Native GeoLens Validation (WSL)"
+    design_type: remote_validation
+    task_type: native_lens_simulation_codesign
     supported_execution_modes:
       - remote_opt_in
     actual_evidence_level: native_lens_simulation
     max_claim_ceiling: native_lens_simulation
-    synthetic_only: false
+    synthetic_only: true
     native_backend_required: true
     physical_backend: true
     real_data_required: false
@@ -298,20 +298,29 @@ handlers:
     supports_remote: true
     requires_remote_validation: true
     remote_evidence_ceiling: native_lens_simulation
-    local_evidence_ceiling: lightweight_scientific_execution
+    local_evidence_ceiling: needs_followup
     metrics_supported:
       - reconstruction_loss_before
       - reconstruction_loss_after
       - improvement_detected
+      - accepted_update_count
+      - optical_gradient_norm_max
     artifacts_supported:
       - remote_job_result.json
+      - result.json
+      - spec.json
     known_limitations:
-      - "Requires remote WSL DeepLens worker"
+      - "Requires remote WSL DeepLens worker (windows_wsl)"
       - "Remote execution only — not available locally"
+      - "Synthetic HSI data — real HSI performance may differ"
     compatible_design_ids:
       - remote_native_geolens_validation
     compatible_backend_ids:
       - deeplens_geolens_geometric
+    remote_worker_requirements:
+      - windows_wsl
+      - deeplens_available
+      - geolens_psf_geometric
     default_timeout_sec: 7200
     risk_level: high
-    enabled: false
+    enabled: true

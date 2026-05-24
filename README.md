@@ -60,6 +60,8 @@ Phase 41 新增 ClaimCeilingResolver，根据 handler capability / backend / dat
 
 Phase 42 将 HandlerCapabilityRegistry 从 hardcoded 迁移为 YAML 配置驱动（`optiresearch/config/handler_capabilities.yaml`），新增 schema validation（`handler_capability_schema.py`），5 个 enabled + 4 个 reserved disabled handler；registry 支持 reload / list_enabled / list_disabled / find_by_backend_id；ClaimCeilingResolver 处理 disabled handler；CLI 新增 validate-handler-capabilities / export-handler-capability-config-report；remote awareness 字段（supports_remote / remote_required / requires_remote_validation）预留给后续 remote execution。
 
+Phase 43 激活 `remote_native_geolens_validation` handler（enabled），将 remote awareness 字段接入 Agent plan selection：CandidatePlanEvaluator 区分 local/remote_opt_in 模式下的 remote_required / supports_remote handler；AgentPlanExecutionLoop 新增 remote_opt_in 执行路径，通过 SkillRuntimeV2 调用 `run_remote_deeplens_native_geolens_hsi_codesign`；ClaimCeilingResolver 区分 local_evidence_ceiling 与 remote_evidence_ceiling；StateStore 新增 remote job / worker 状态追踪；Report 新增 Remote Evidence Ceiling table；remote handler 不允许绕过 allowlist。
+
 ## 安装
 
 ```bash

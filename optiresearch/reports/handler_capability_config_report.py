@@ -63,10 +63,36 @@ def export_handler_capability_config_report(output_dir: str = "workspace/reports
         f"- **Remote Required:** {remote_required_count}",
         f"- **Requires Remote Validation:** {remote_validation_count}",
         "",
+        "### Local vs Remote Evidence Ceilings",
+        "| Handler | Local Ceiling | Remote Ceiling |",
+        "|---|---|---|",
+    ]
+    for c in all_caps:
+        lines.append(
+            f"| {c.handler_id} | {c.local_evidence_ceiling or c.max_claim_ceiling} | "
+            f"{c.remote_evidence_ceiling or 'N/A'} |"
+        )
+    lines.extend([
+        "",
+        "### Enabled Remote Handlers",
+    ])
+    enabled_remote = [c for c in enabled if c.supports_remote]
+    if enabled_remote:
+        lines.append("| Handler | Worker Requirements | Remote Only |")
+        lines.append("|---|---|---|")
+        for c in enabled_remote:
+            lines.append(
+                f"| {c.handler_id} | {', '.join(getattr(c, 'remote_worker_requirements', [])) or 'none'} | "
+                f"{'yes' if c.remote_required else 'no'} |"
+            )
+    else:
+        lines.append("(none)")
+    lines.extend([
+        "",
         "## Enabled Handlers",
         "| Handler | Type | Evidence | Ceiling | Remote |",
         "|---|---|---|---|---|",
-    ]
+    ])
     for c in enabled:
         lines.append(
             f"| {c.handler_id} | {c.design_type} | {c.actual_evidence_level} | "

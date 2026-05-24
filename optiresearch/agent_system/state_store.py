@@ -32,6 +32,10 @@ class AgentState(StrictModel):
     last_claim_ceiling: str = ""
     last_claim_ceiling_source: str = ""
     known_claim_limits: list[str] = []
+    last_remote_job_id: str = ""
+    last_remote_worker_id: str = ""
+    last_remote_execution_status: str = ""
+    remote_validation_history: list[dict[str, str]] = []
     snapshot_count: int = 0
     updated_at: float = 0.0
 
@@ -164,6 +168,18 @@ class StateStore:
         self._state.last_claim_ceiling_source = decision_payload.get("ceiling_source", "")
         if final_ceiling and final_ceiling not in self._state.known_claim_limits:
             self._state.known_claim_limits.append(final_ceiling)
+        # Phase 43: Remote execution state tracking
+        if execution_result.get("execution_target") == "remote_wsl":
+            self._state.last_remote_job_id = execution_result.get("remote_job_id", "")
+            self._state.last_remote_worker_id = execution_result.get("remote_worker_id", "")
+            self._state.last_remote_execution_status = execution_result.get("status", "")
+            self._state.remote_validation_history.append({
+                "execution_id": execution_id,
+                "worker_id": execution_result.get("remote_worker_id", ""),
+                "job_id": execution_result.get("remote_job_id", ""),
+                "status": execution_result.get("status", ""),
+                "validation_passed": str(execution_result.get("remote_validation_passed", False)),
+            })
         self._state.last_strategy = {
             "execution_id": execution_id,
             "selected_design": selected_design or "",
