@@ -27,6 +27,13 @@ EventType = Literal[
     "recovery_recommended",
     "state_snapshot_saved",
     "self_test_completed",
+    "remote_execution_requested",
+    "remote_execution_started",
+    "remote_execution_completed",
+    "remote_execution_failed",
+    "remote_validation_passed",
+    "remote_validation_failed",
+    "artifact_ingested",
 ]
 
 SourceModule = Literal[

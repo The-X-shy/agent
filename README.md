@@ -62,6 +62,8 @@ Phase 42 将 HandlerCapabilityRegistry 从 hardcoded 迁移为 YAML 配置驱动
 
 Phase 43 激活 `remote_native_geolens_validation` handler（enabled），将 remote awareness 字段接入 Agent plan selection：CandidatePlanEvaluator 区分 local/remote_opt_in 模式下的 remote_required / supports_remote handler；AgentPlanExecutionLoop 新增 remote_opt_in 执行路径，通过 SkillRuntimeV2 调用 `run_remote_deeplens_native_geolens_hsi_codesign`；ClaimCeilingResolver 区分 local_evidence_ceiling 与 remote_evidence_ceiling；StateStore 新增 remote job / worker 状态追踪；Report 新增 Remote Evidence Ceiling table；remote handler 不允许绕过 allowlist。
 
+Phase 44 完成 remote handler 端到端验收链路：`remote_native_geolens_validation` 在 `remote_opt_in + --allow-remote` 下优先选择；执行前校验 `RemoteWorkerRegistry` requirements、allowlist、runtime 与 artifact return path；SkillRuntimeV2 解析 `RemoteHandlerResult`，防止 fallback 或缺字段伪装 native；AgentPlanExecutionLoop 将 remote result 接入 ClaimGate、Memory、StateStore、EventBus 和 AgentPlanExecutionReport；CLI 补齐 `--allow-remote` 与 `--remote-worker-id`。
+
 ## 安装
 
 ```bash

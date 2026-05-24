@@ -96,6 +96,15 @@ class CandidatePlanEvaluator:
         selected: list[ExperimentDesignCandidate] = []
         skipped: list[dict[str, Any]] = []
         first_selected_rank: int | None = None
+        if mode == "remote_opt_in" and allow_remote:
+            remote_ranked = [
+                (rank, score, design)
+                for rank, score, design in ranked
+                if _is_remote_required_design(design)
+            ]
+            ranked = remote_ranked + [
+                item for item in ranked if item not in remote_ranked
+            ]
 
         deferred_report_designs: list[tuple[int, PlanScore, ExperimentDesignCandidate]] = []
         for rank, score, design in ranked:
@@ -309,6 +318,12 @@ def _get_handler_capability(handler_id: str) -> Any:
         return get_handler_capability_registry().get(handler_id)
     except Exception:
         return None
+
+
+def _is_remote_required_design(design: ExperimentDesignCandidate) -> bool:
+    handler_id = getattr(design, "handler_id", "")
+    cap = _get_handler_capability(handler_id) if handler_id else None
+    return bool(cap and cap.remote_required)
 
 
 def _is_report_only_design(design: ExperimentDesignCandidate) -> bool:

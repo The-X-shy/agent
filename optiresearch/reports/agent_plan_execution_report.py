@@ -93,11 +93,12 @@ def _markdown(execution_id: str, r: dict[str, Any]) -> str:
     else:
         lines.append("| - | none | - | - |")
 
+    ex = r.get("execution_result") or {}
+    execution_title = "## 7. Remote Execution Result" if ex.get("execution_target") == "remote_wsl" else "## 7. Local Execution Result"
     lines.extend([
         "",
-        "## 7. Local Execution Result",
+        execution_title,
     ])
-    ex = r.get("execution_result") or {}
     if ex:
         lines.extend([
             f"- **Status:** {ex.get('status', '-')}",
@@ -105,6 +106,7 @@ def _markdown(execution_id: str, r: dict[str, Any]) -> str:
             f"- **Task:** {ex.get('task_type', '-')}",
             f"- **Backend:** {ex.get('backend_id', '-')}",
             f"- **Evidence:** {ex.get('evidence_level', '-')}",
+            f"- **Execution Target:** {ex.get('execution_target', 'local')}",
             f"- **Metrics:** `{json.dumps(ex.get('metrics', {}), ensure_ascii=False, default=str)}`",
             f"- **Artifacts:** {', '.join(ex.get('artifacts', [])) if ex.get('artifacts') else '(none)'}",
             f"- **Errors:** `{json.dumps(ex.get('errors', []), ensure_ascii=False, default=str)}`",
@@ -138,8 +140,72 @@ def _markdown(execution_id: str, r: dict[str, Any]) -> str:
             "- Lightweight scientific execution — claim ceiling: synthetic_lightweight_metric_experiment",
         ])
 
+    if ex.get("execution_target") == "remote_wsl":
+        remote_result = ex.get("remote_handler_result") or ex
+        lines.extend([
+            "",
+            "## 7a. Remote Job",
+            "| Field | Value |",
+            "|---|---|",
+            f"| Worker | {ex.get('remote_worker_id', '-')} |",
+            f"| Job ID | {ex.get('remote_job_id', '-')} |",
+            f"| Run ID | {ex.get('run_id', '-')} |",
+            f"| Target | {ex.get('execution_target', '-')} |",
+            f"| Status | {ex.get('status', '-')} |",
+            "",
+            "## 7b. Remote Result Ingestion",
+            "| Field | Value |",
+            "|---|---|",
+            f"| Validation Passed | {remote_result.get('remote_validation_passed', ex.get('remote_validation_passed', '-'))} |",
+            f"| Evidence Level | {remote_result.get('evidence_level', ex.get('evidence_level', '-'))} |",
+            f"| Execution Fidelity | {remote_result.get('execution_fidelity', ex.get('execution_fidelity', '-'))} |",
+            f"| Proxy Fallback Used | {remote_result.get('proxy_fallback_used', ex.get('proxy_fallback_used', '-'))} |",
+            f"| Native PSF Path | {remote_result.get('deeplens_native_psf_path', ex.get('deeplens_native_psf_path', '-'))} |",
+            f"| Full Wave Optics | {remote_result.get('full_wave_optics', ex.get('full_wave_optics', '-'))} |",
+            f"| Phase-to-FFT Proxy Used | {remote_result.get('phase_to_fft_proxy_used', ex.get('phase_to_fft_proxy_used', '-'))} |",
+            "",
+            "## 7c. Artifact Return Path",
+            "| Field | Value |",
+            "|---|---|",
+            f"| Artifact Return Path | {ex.get('artifact_return_path', remote_result.get('artifact_return_path', '-'))} |",
+            f"| Artifact Count | {len(ex.get('artifacts', []))} |",
+        ])
+        artifacts = ex.get("artifacts", [])
+        if artifacts:
+            lines.extend(["", "| Artifact |", "|---|"])
+            for artifact in artifacts:
+                lines.append(f"| {artifact} |")
+        claim = r.get("claim_gate_decision") or {}
+        lines.extend([
+            "",
+            "## 7d. Remote Claim Ceiling",
+            "| Field | Value |",
+            "|---|---|",
+            f"| Final Claim Ceiling | {claim.get('final_claim_ceiling') or claim.get('max_allowed_claim', '-')} |",
+            f"| Ceiling Source | {claim.get('ceiling_source', '-')} |",
+            f"| Validation | {'passed' if ex.get('remote_validation_passed') else 'failed'} |",
+            "",
+            "## 7e. Remote Event Sequence",
+            "| # | Event |",
+            "|---|---|",
+        ])
+        remote_events = _remote_event_sequence(execution_id, r)
+        if remote_events:
+            for idx, event_type in enumerate(remote_events, 1):
+                lines.append(f"| {idx} | {event_type} |")
+        else:
+            lines.append("| - | none |")
+        lines.extend([
+            "",
+            "## 7f. Remote Validation Explanation",
+        ])
+        if ex.get("remote_validation_passed"):
+            lines.append("Remote validation passed without proxy fallback.")
+        else:
+            lines.append("Remote validation failed or did not run; claim ceiling remains needs_followup.")
+
     # Evidence alignment section
-    lines.extend(["", "## 7b. Evidence Alignment"])
+    lines.extend(["", "## 7g. Evidence Alignment" if ex.get("execution_target") == "remote_wsl" else "## 7b. Evidence Alignment"])
     designs = r.get("candidate_designs", [])
     aligned = sum(1 for d in designs if d.get("evidence_alignment_status") == "aligned")
     downgraded = sum(1 for d in designs if d.get("evidence_alignment_status") == "downgraded_to_handler_capability")
@@ -166,7 +232,7 @@ def _markdown(execution_id: str, r: dict[str, Any]) -> str:
     if len(scientific_attempts) >= 2:
         lines.extend([
             "",
-            "## 7c. Scientific Handler Comparison",
+            "## 7h. Scientific Handler Comparison" if ex.get("execution_target") == "remote_wsl" else "## 7c. Scientific Handler Comparison",
             "| Design | Status | MSE After | PSNR After | Improvement | Handler |",
             "|---|---|---|---|---|---|",
         ])
@@ -182,7 +248,7 @@ def _markdown(execution_id: str, r: dict[str, Any]) -> str:
     ex = r.get("execution_result") or {}
     lines.extend([
         "",
-        "## 7d. Claim Ceiling Resolution",
+        "## 7i. Claim Ceiling Resolution" if ex.get("execution_target") == "remote_wsl" else "## 7d. Claim Ceiling Resolution",
         f"- **Design Backend Ceiling:** {ex.get('design_backend_claim_ceiling', '-')}",
         f"- **Handler Ceiling:** {ex.get('handler_claim_ceiling', '-')}",
         f"- **Dataset Ceiling:** {ex.get('dataset_claim_ceiling', '-')}",
@@ -240,3 +306,32 @@ def _read_json(path: Path, default: dict[str, Any]) -> dict[str, Any]:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return default
+
+
+def _remote_event_sequence(execution_id: str, r: dict[str, Any]) -> list[str]:
+    event_path = r.get("event_log_path")
+    candidates = []
+    if event_path:
+        candidates.append(Path(event_path))
+    candidates.append(Path("workspace/agent_plan_executions") / execution_id / "events.json")
+    for path in candidates:
+        data = _read_json_list(path)
+        if not data:
+            continue
+        return [
+            item.get("event_type", "")
+            for item in data
+            if str(item.get("event_type", "")).startswith("remote_")
+            or item.get("event_type") == "artifact_ingested"
+        ]
+    return []
+
+
+def _read_json_list(path: Path) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    return data if isinstance(data, list) else []

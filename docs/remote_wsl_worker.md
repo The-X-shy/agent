@@ -51,6 +51,10 @@ Allowed OptiResearch commands:
 - `run-hsi-matrix`
 - `run-codesign-loop`
 - `run-autonomous-loop`
+- `run-deeplens-native-geolens-hsi-codesign`
+- `run-native-geolens-stabilization-sweep`
+
+Phase 44 additionally validates the selected handler against `RemoteWorkerRegistry` before running a remote job. See [remote_worker_requirements.md](remote_worker_requirements.md).
 
 ## Run Remote Jobs
 

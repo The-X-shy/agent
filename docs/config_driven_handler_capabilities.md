@@ -18,10 +18,12 @@ OPTIRESEARCH_HANDLER_CAPABILITY_CONFIG=/custom/path/to/config.yaml
 
 ## Enabled vs Disabled Handlers
 
-- **Enabled** (5): `objective_redesign_simpler_metric`, `param_reduction_sweep`, `backend_switch_waveoptics_coherent`, `report_negative_result_doc`, `real_data_request`
-- **Disabled** (4): `deeplens_native_geolens_hsi_codesign`, `native_geolens_stabilization_sweep`, `coherent_asm_waveoptics_probe`, `remote_native_geolens_validation`
+- **Enabled** (6): `objective_redesign_simpler_metric`, `param_reduction_sweep`, `backend_switch_waveoptics_coherent`, `report_negative_result_doc`, `real_data_request`, `remote_native_geolens_validation`
+- **Disabled** (3): `deeplens_native_geolens_hsi_codesign`, `native_geolens_stabilization_sweep`, `coherent_asm_waveoptics_probe`
 
 Disabled handlers can be inspected but not selected by the AgentPlanExecutionLoop.
+
+`remote_native_geolens_validation` is enabled only for `remote_opt_in` mode and requires `RemoteWorkerRegistry` validation before execution.
 
 ## CLI
 

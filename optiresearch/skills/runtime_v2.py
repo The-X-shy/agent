@@ -47,7 +47,12 @@ class SkillRuntimeV2:
         try:
             output = self._dispatch(skill_id, inputs)
             elapsed = time.time() - t0
-            status = "unsupported" if output.get("status") == "unsupported" else "succeeded"
+            if output.get("status") == "unsupported":
+                status = "unsupported"
+            elif output.get("status") == "failed":
+                status = "failed"
+            else:
+                status = "succeeded"
             result = SkillResult(
                 skill_id=skill_id, status=status,
                 outcome=output.get("outcome"),
@@ -201,11 +206,20 @@ class SkillRuntimeV2:
             design_id = inputs.get("design_id", "")
             # Choose remote job based on handler
             if handler_id == "remote_native_geolens_validation" or "geolens" in design_id:
-                from optiresearch.runtime.remote_jobs import (
-                    run_remote_deeplens_native_geolens_hsi_codesign,
-                )
+                from optiresearch.remote.result_ingestion import parse_remote_handler_result
+                from optiresearch.runtime import remote_jobs
                 spec = inputs.get("spec_payload", {})
-                result = run_remote_deeplens_native_geolens_hsi_codesign(
+                self._event_bus.publish(AgentEvent.create(
+                    "remote_execution_requested",
+                    "skill_runtime",
+                    payload={"worker_id": worker_id, "handler_id": handler_id, "design_id": design_id},
+                ))
+                self._event_bus.publish(AgentEvent.create(
+                    "remote_execution_started",
+                    "skill_runtime",
+                    payload={"worker_id": worker_id, "handler_id": handler_id, "design_id": design_id},
+                ))
+                payload = remote_jobs.run_remote_deeplens_native_geolens_hsi_codesign(
                     worker_id=worker_id,
                     lens_file=spec.get("candidate", "auto:cooke"),
                     dataset=spec.get("dataset", "synthetic"),
@@ -215,28 +229,68 @@ class SkillRuntimeV2:
                     device=spec.get("device", "cpu"),
                     ingest=True,
                 )
+                remote_job_result = payload.get("result") if isinstance(payload, dict) else payload
+                ingestion = payload.get("ingestion") if isinstance(payload, dict) else None
+                handler_result = parse_remote_handler_result(
+                    remote_job_result,
+                    worker_id=worker_id,
+                    ingestion=ingestion or {},
+                )
+                handler_dump = handler_result.model_dump(mode="json")
+                completed = handler_result.status == "succeeded"
                 self._event_bus.publish(AgentEvent.create(
-                    "remote_validation_passed" if result.get("status") == "succeeded" else "remote_validation_failed",
-                    "controller",
-                    payload={"worker_id": worker_id, "status": result.get("status", ""),
-                             "job_id": result.get("job_id", "")},
+                    "remote_execution_completed" if completed else "remote_execution_failed",
+                    "skill_runtime",
+                    payload=handler_dump,
+                    severity="info" if completed else "warning",
+                    related_run_id=handler_result.run_id,
+                    related_job_id=handler_result.remote_job_id,
                 ))
-                metrics = result.get("result_payload", {}) if isinstance(result, dict) else {}
-                return {
-                    "status": "succeeded" if result.get("status") == "succeeded" else "failed",
-                    "outcome": "remote_execution_completed",
-                    "remote_job_id": result.get("job_id", ""),
-                    "run_id": result.get("run_id", ""),
-                    "execution_target": "remote_wsl",
-                    "evidence_level": "native_lens_simulation",
-                    "remote_validation_passed": result.get("status") == "succeeded",
-                    "metrics": {
-                        "reconstruction_loss_before": metrics.get("reconstruction_loss_before"),
-                        "reconstruction_loss_after": metrics.get("reconstruction_loss_after"),
-                        "improvement_detected": metrics.get("improvement_detected"),
-                        "accepted_update_count": metrics.get("accepted_update_count"),
+                self._event_bus.publish(AgentEvent.create(
+                    "remote_validation_passed" if handler_result.remote_validation_passed else "remote_validation_failed",
+                    "skill_runtime",
+                    payload={
+                        "worker_id": worker_id,
+                        "status": handler_result.status,
+                        "job_id": handler_result.remote_job_id,
+                        "remote_validation_passed": handler_result.remote_validation_passed,
                     },
-                    "artifacts": result.get("artifacts", []),
+                    severity="info" if handler_result.remote_validation_passed else "warning",
+                    related_run_id=handler_result.run_id,
+                    related_job_id=handler_result.remote_job_id,
+                ))
+                if handler_result.artifacts:
+                    self._event_bus.publish(AgentEvent.create(
+                        "artifact_ingested",
+                        "skill_runtime",
+                        payload={
+                            "worker_id": worker_id,
+                            "job_id": handler_result.remote_job_id,
+                            "artifacts": handler_result.artifacts,
+                            "artifact_return_path": handler_result.artifact_return_path,
+                        },
+                        related_run_id=handler_result.run_id,
+                        related_job_id=handler_result.remote_job_id,
+                    ))
+                return {
+                    "status": "succeeded" if completed else "failed",
+                    "outcome": "remote_execution_completed" if completed else "remote_execution_failed",
+                    "remote_job_id": handler_result.remote_job_id,
+                    "run_id": handler_result.run_id,
+                    "execution_target": "remote_wsl",
+                    "evidence_level": handler_result.evidence_level,
+                    "execution_fidelity": handler_result.execution_fidelity,
+                    "remote_validation_passed": handler_result.remote_validation_passed,
+                    "proxy_fallback_used": handler_result.proxy_fallback_used,
+                    "deeplens_native_psf_path": handler_result.deeplens_native_psf_path,
+                    "full_wave_optics": handler_result.full_wave_optics,
+                    "phase_to_fft_proxy_used": handler_result.phase_to_fft_proxy_used,
+                    "metrics": handler_result.metrics,
+                    "artifacts": handler_result.artifacts,
+                    "artifact_return_path": handler_result.artifact_return_path,
+                    "errors": handler_result.errors,
+                    "caveats": handler_result.caveats,
+                    "remote_handler_result": handler_dump,
                 }
             return {"status": "dry_run", "worker_id": worker_id,
                     "message": f"Remote execution dispatched for {handler_id} (results pending)"}

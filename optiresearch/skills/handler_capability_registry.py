@@ -34,6 +34,7 @@ class HandlerCapability:
     known_limitations: list[str] = field(default_factory=list)
     compatible_design_ids: list[str] = field(default_factory=list)
     compatible_backend_ids: list[str] = field(default_factory=list)
+    remote_worker_requirements: list[str] = field(default_factory=list)
     default_timeout_sec: int = 600
     risk_level: str = "low"
     enabled: bool = True
@@ -109,6 +110,7 @@ class HandlerCapabilityRegistry:
                     known_limitations=h.get("known_limitations", []),
                     compatible_design_ids=h.get("compatible_design_ids", []),
                     compatible_backend_ids=h.get("compatible_backend_ids", []),
+                    remote_worker_requirements=h.get("remote_worker_requirements", []),
                     default_timeout_sec=h.get("default_timeout_sec", 600),
                     risk_level=h.get("risk_level", "low"),
                     enabled=h.get("enabled", True),
@@ -208,6 +210,7 @@ class HandlerCapabilityRegistry:
             "known_limitations": cap.known_limitations,
             "compatible_design_ids": cap.compatible_design_ids,
             "compatible_backend_ids": cap.compatible_backend_ids,
+            "remote_worker_requirements": cap.remote_worker_requirements,
             "risk_level": cap.risk_level,
             "enabled": cap.enabled,
         }

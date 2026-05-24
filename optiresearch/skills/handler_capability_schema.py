@@ -36,7 +36,7 @@ OPTIONAL_FIELDS = [
     "requires_remote_validation", "remote_evidence_ceiling",
     "local_evidence_ceiling", "artifacts_supported",
     "known_limitations", "compatible_backend_ids",
-    "default_timeout_sec",
+    "remote_worker_requirements", "default_timeout_sec",
 ]
 
 
@@ -123,6 +123,10 @@ def validate_handler_capability_config(data: dict[str, Any]) -> list[str]:
         metrics = h.get("metrics_supported")
         if metrics is not None and not isinstance(metrics, list):
             errors.append(f"{prefix}: 'metrics_supported' must be a list")
+
+        requirements = h.get("remote_worker_requirements")
+        if requirements is not None and not isinstance(requirements, list):
+            errors.append(f"{prefix}: 'remote_worker_requirements' must be a list")
 
         # Backward compat: remote-only checks
         if h.get("remote_required") and not h.get("supports_remote"):

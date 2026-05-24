@@ -249,7 +249,7 @@ handlers:
       - native_geolens_stabilization_sweep
     compatible_backend_ids:
       - deeplens_geolens_geometric
-    default_timeout_sec: 7200
+    default_timeout_sec: 3600
     risk_level: high
     enabled: false
 
@@ -321,6 +321,6 @@ handlers:
       - windows_wsl
       - deeplens_available
       - geolens_psf_geometric
-    default_timeout_sec: 7200
+    default_timeout_sec: 3600
     risk_level: high
     enabled: true

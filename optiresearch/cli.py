@@ -530,6 +530,8 @@ def main(argv: list[str] | None = None) -> None:
     plan_exec.add_argument("--seed-result-path", default=None)
     plan_exec.add_argument("--mode", choices=["dry_run", "local", "remote_opt_in"], default="dry_run")
     plan_exec.add_argument("--execute-top-k", type=int, default=1)
+    plan_exec.add_argument("--allow-remote", action="store_true")
+    plan_exec.add_argument("--remote-worker-id", default=None)
     hybrid_p = sub.add_parser("hybrid-plan", help="Run hybrid planner.")
     hybrid_p.add_argument("--objective", default="recover from native GeoLens instability")
     hybrid_p.add_argument("--mode", choices=["rule_only", "llm_only", "llm_with_rule_context", "llm_with_rule_fallback"], default="rule_only")
@@ -2953,6 +2955,8 @@ def _run_agent_plan_execution(args: Any) -> None:
         seed_result_path=args.seed_result_path,
         mode=args.mode,
         execute_top_k=args.execute_top_k,
+        allow_remote=getattr(args, "allow_remote", False),
+        remote_worker_id=getattr(args, "remote_worker_id", None),
     )
     result = run_agent_plan_execution(spec)
     print(_json.dumps({

@@ -83,6 +83,8 @@ def run_agent_plan_execution(spec: AgentPlanExecutionSpec) -> AgentPlanExecution
     ))
 
     designs = ExperimentDesignGenerator().generate_designs(strategies)[:spec.max_candidate_designs]
+    if spec.mode == "remote_opt_in" and spec.allow_remote:
+        designs = _ensure_remote_validation_design(designs)
     evaluator = CandidatePlanEvaluator()
     scores = evaluator.evaluate(designs)
     selection = evaluator.select_executable_designs(
@@ -214,6 +216,43 @@ def run_agent_plan_execution(spec: AgentPlanExecutionSpec) -> AgentPlanExecution
                     attempted_designs.append(_attempt_summary(result))
                     continue
 
+                from optiresearch.remote.worker_registry import validate_remote_worker_requirements
+                requirements = validate_remote_worker_requirements(cap, spec.remote_worker_id)
+                if not requirements.get("requirements_met"):
+                    result = {
+                        "status": "stopped",
+                        "outcome": "remote_worker_requirements_not_met",
+                        "design_id": d.design_id,
+                        "handler_id": handler_id,
+                        "task_type": d.task_type,
+                        "backend_id": d.backend_id,
+                        "evidence_level": "needs_followup",
+                        "execution_target": "remote_wsl",
+                        "remote_worker_id": spec.remote_worker_id,
+                        "remote_validation_passed": False,
+                        "metrics": {},
+                        "artifacts": [],
+                        "errors": requirements.get("errors") or [
+                            {
+                                "type": "REMOTE_WORKER_REQUIREMENTS_NOT_MET",
+                                "message": ", ".join(requirements.get("missing_requirements", [])),
+                            }
+                        ],
+                        "caveats": ["Remote worker requirements were not met"],
+                        "remote_worker_requirements": requirements,
+                        "handler_claim_ceiling": "needs_followup",
+                    }
+                    execution_results.append(result)
+                    attempted_designs.append(_attempt_summary(result))
+                    execution_result = result
+                    bus.publish(AgentEvent.create(
+                        "remote_validation_failed",
+                        "controller",
+                        payload=result,
+                        severity="warning",
+                    ))
+                    break
+
                 bus.publish(AgentEvent.create("remote_execution_requested", "controller",
                     payload={"execution_id": spec.execution_id, "design_id": d.design_id, "worker_id": spec.remote_worker_id}))
                 bus.publish(AgentEvent.create("remote_execution_started", "controller",
@@ -227,6 +266,26 @@ def run_agent_plan_execution(spec: AgentPlanExecutionSpec) -> AgentPlanExecution
                         payload=remote_result,
                         severity="info" if remote_result.get("status") == "completed" else "warning",
                     ))
+                    bus.publish(AgentEvent.create(
+                        "remote_validation_passed" if remote_result.get("remote_validation_passed") else "remote_validation_failed",
+                        "controller",
+                        payload=remote_result,
+                        severity="info" if remote_result.get("remote_validation_passed") else "warning",
+                        related_run_id=remote_result.get("run_id"),
+                        related_job_id=remote_result.get("remote_job_id"),
+                    ))
+                    if remote_result.get("artifacts"):
+                        bus.publish(AgentEvent.create(
+                            "artifact_ingested",
+                            "controller",
+                            payload={
+                                "remote_job_id": remote_result.get("remote_job_id", ""),
+                                "artifact_return_path": remote_result.get("artifact_return_path", ""),
+                                "artifacts": remote_result.get("artifacts", []),
+                            },
+                            related_run_id=remote_result.get("run_id"),
+                            related_job_id=remote_result.get("remote_job_id"),
+                        ))
                 except Exception as e:
                     remote_result = {
                         "status": "failed",
@@ -644,7 +703,8 @@ def _execute_remote_design(d: Any, worker_id: str) -> dict[str, Any]:
         },
     )
     output = skill_result.output or {}
-    if skill_result.status == "succeeded":
+    remote_handler_result = output.get("remote_handler_result", {}) if isinstance(output, dict) else {}
+    if output.get("status") == "succeeded" and output.get("remote_validation_passed") is True:
         return {
             "status": "completed",
             "outcome": "remote_execution_completed",
@@ -652,26 +712,48 @@ def _execute_remote_design(d: Any, worker_id: str) -> dict[str, Any]:
             "task_type": d.task_type if hasattr(d, "task_type") else "",
             "backend_id": d.backend_id if hasattr(d, "backend_id") else "",
             "evidence_level": output.get("evidence_level", "native_lens_simulation"),
+            "handler_id": getattr(d, "handler_id", "") or _handler_id_for_design(d),
             "execution_target": "remote_wsl",
             "remote_worker_id": worker_id,
             "remote_job_id": output.get("remote_job_id", ""),
-            "remote_validation_passed": output.get("remote_validation_passed", True),
+            "remote_validation_passed": output.get("remote_validation_passed", False),
+            "execution_fidelity": output.get("execution_fidelity", ""),
+            "proxy_fallback_used": output.get("proxy_fallback_used", False),
+            "deeplens_native_psf_path": output.get("deeplens_native_psf_path", ""),
+            "full_wave_optics": output.get("full_wave_optics", False),
+            "phase_to_fft_proxy_used": output.get("phase_to_fft_proxy_used", False),
             "metrics": output.get("metrics", {}),
             "artifacts": output.get("artifacts", []),
+            "artifact_return_path": output.get("artifact_return_path", ""),
             "errors": [],
-            "caveats": ["Remote WSL execution — validation performed on remote worker"],
+            "caveats": output.get("caveats", ["Remote WSL execution — validation performed on remote worker"]),
             "run_id": output.get("run_id", ""),
+            "remote_handler_result": remote_handler_result,
         }
     return {
         "status": "failed",
         "outcome": "remote_execution_failed",
         "design_id": d.design_id,
-        "evidence_level": "structured_unsupported",
+        "handler_id": getattr(d, "handler_id", "") or _handler_id_for_design(d),
+        "task_type": d.task_type if hasattr(d, "task_type") else "",
+        "backend_id": d.backend_id if hasattr(d, "backend_id") else "",
+        "evidence_level": output.get("evidence_level", "needs_followup"),
         "execution_target": "remote_wsl",
+        "remote_worker_id": worker_id,
+        "remote_job_id": output.get("remote_job_id", ""),
+        "remote_validation_passed": False,
+        "execution_fidelity": output.get("execution_fidelity", ""),
+        "proxy_fallback_used": output.get("proxy_fallback_used", False),
+        "deeplens_native_psf_path": output.get("deeplens_native_psf_path", ""),
+        "full_wave_optics": output.get("full_wave_optics", False),
+        "phase_to_fft_proxy_used": output.get("phase_to_fft_proxy_used", False),
         "metrics": {},
-        "artifacts": [],
-        "errors": [{"type": "REMOTE_SKILL_FAILED", "message": "; ".join(skill_result.errors)}],
-        "caveats": ["Remote execution did not complete"],
+        "artifacts": output.get("artifacts", []),
+        "artifact_return_path": output.get("artifact_return_path", ""),
+        "errors": output.get("errors") or [{"type": "REMOTE_SKILL_FAILED", "message": "; ".join(skill_result.errors)}],
+        "caveats": output.get("caveats", ["Remote execution did not complete"]),
+        "run_id": output.get("run_id", ""),
+        "remote_handler_result": remote_handler_result,
     }
 
 
@@ -815,6 +897,8 @@ def _run_claim_gate(d: ExperimentDesignCandidate | None, result: dict[str, Any])
             claim_text = "The negative result is documented"
         elif result.get("status") in ("unsupported", "needs_followup"):
             claim_text = f"Boundary detected for local execution of {result.get('design_id', 'design')}"
+        elif result.get("execution_target") == "remote_wsl":
+            claim_text = f"Remote native lens simulation completed for {result.get('design_id', 'design')}"
         else:
             claim_text = f"Local native lens simulation completed for {result.get('design_id', 'design')}"
         backend_id = result.get("backend_id") or (d.backend_id if d else "")
@@ -823,7 +907,7 @@ def _run_claim_gate(d: ExperimentDesignCandidate | None, result: dict[str, Any])
             claim_text,
             backend_id,
             experiment_result=result,
-            evidence_scope={"execution_target": "local"},
+            evidence_scope={"execution_target": result.get("execution_target", "local")},
             handler_id=handler_id,
         )
         return {
@@ -887,12 +971,16 @@ def _find_design(
 
 
 def _attempt_summary(result: dict[str, Any]) -> dict[str, Any]:
-    return {
+    summary = {
         "design_id": result.get("design_id", ""),
         "status": result.get("status", ""),
         "evidence_level": result.get("evidence_level", ""),
         "errors": result.get("errors", []),
     }
+    for key in ("handler_id", "execution_target", "remote_worker_id", "remote_job_id", "remote_validation_passed", "metrics"):
+        if key in result:
+            summary[key] = result.get(key)
+    return summary
 
 
 def _skill_id_for_design(d: ExperimentDesignCandidate) -> str:
@@ -956,11 +1044,47 @@ def _result_status(
         return "dry_run_only"
     if stop_reason and not execution_result:
         return "stopped"
+    if execution_result.get("status") == "stopped":
+        return "stopped"
     if errors and execution_result.get("status") == "failed":
         return "failed"
     if execution_result.get("status") == "failed":
         return "failed"
     return "completed"
+
+
+def _ensure_remote_validation_design(
+    designs: list[ExperimentDesignCandidate],
+) -> list[ExperimentDesignCandidate]:
+    if any(d.design_id == "remote_native_geolens_validation" for d in designs):
+        return designs
+    cap = _get_handler_cap("remote_native_geolens_validation")
+    if not cap or not cap.enabled:
+        return designs
+    remote_design = ExperimentDesignCandidate(
+        design_id="remote_native_geolens_validation",
+        objective="Validate native GeoLens geometric HSI path on WSL",
+        backend_id="deeplens_geolens_geometric",
+        task_type="native_lens_simulation_codesign",
+        spec_payload={
+            "candidate": "auto:cooke",
+            "dataset": "synthetic",
+            "reconstructor": "differentiable_linear",
+            "max_steps": 5,
+            "optical_lr": 1e-6,
+            "device": "cpu",
+        },
+        expected_evidence_level=cap.actual_evidence_level,
+        expected_failure_modes=["remote_execution_failure"],
+        required_skills=["remote_execution"],
+        claim_ceiling=cap.remote_evidence_ceiling or cap.max_claim_ceiling,
+        estimated_runtime_sec=cap.default_timeout_sec,
+        risk_level=cap.risk_level,
+        handler_id=cap.handler_id,
+        actual_handler_evidence_level=cap.actual_evidence_level,
+        evidence_alignment_status="aligned",
+    )
+    return [remote_design, *designs]
 
 
 def _export_report(
