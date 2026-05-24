@@ -171,18 +171,34 @@ class CandidatePlanEvaluator:
         evidence_map = {"negative_result": 0.3, "lightweight_scientific_execution": 0.4,
                         "native_lens_simulation": 0.5,
                         "native_waveoptics_simulation": 0.8, "real_hsi": 1.0,
-                        "sweep_analysis": 0.4, "": 0.1}
+                        "sweep_analysis": 0.4, "requires_user_data": 0.0,
+                        "structured_unsupported": 0.1, "needs_followup": 0.1,
+                        "report_only": 0.2, "": 0.1}
+        # Use actual handler evidence level if available, fall back to expected
+        effective_evidence = d.actual_handler_evidence_level or d.expected_evidence_level
+        evidence_score = evidence_map.get(effective_evidence, 0.3)
+        # Penalty for evidence downgrade
+        if d.evidence_alignment_status == "downgraded_to_handler_capability":
+            evidence_score = evidence_map.get(d.actual_handler_evidence_level, 0.3) - 0.05
         metric_likelihood = 0.3 if "gradient_instability" in d.expected_failure_modes else 0.6
         if d.expected_evidence_level == "negative_result":
             metric_likelihood = 0.1
-        elif d.expected_evidence_level == "lightweight_scientific_execution":
+        elif effective_evidence == "lightweight_scientific_execution":
             metric_likelihood = 0.9
+        elif effective_evidence in ("structured_unsupported", "needs_followup", "requires_user_data"):
+            metric_likelihood = 0.0
         risk_map = {"low": 1.0, "medium": 0.7, "high": 0.4}
         rt_map = {0: 1.0, 60: 1.0, 600: 0.8, 3600: 0.5, 7200: 0.3}
+        # Execution feasibility lowered for non-local handlers
+        exec_feasibility = risk_map.get(d.risk_level, 0.7)
+        if d.actual_handler_evidence_level in ("structured_unsupported", "needs_followup"):
+            exec_feasibility = 0.3
+        elif d.actual_handler_evidence_level == "requires_user_data":
+            exec_feasibility = 0.0
         return {
-            "evidence_gain_score": evidence_map.get(d.expected_evidence_level, 0.3) * self._weights["evidence_gain_score"],
+            "evidence_gain_score": evidence_score * self._weights["evidence_gain_score"],
             "metric_gain_likelihood": metric_likelihood * self._weights["metric_gain_likelihood"],
-            "execution_feasibility": risk_map.get(d.risk_level, 0.7) * self._weights["execution_feasibility"],
+            "execution_feasibility": exec_feasibility * self._weights["execution_feasibility"],
             "backend_availability": (0.8 if d.backend_id else 1.0) * self._weights["backend_availability"],
             "runtime_cost": rt_map.get(d.estimated_runtime_sec, 0.5) * self._weights["runtime_cost"],
             "claim_safety": (0.9 if d.claim_ceiling else 0.5) * self._weights["claim_safety"],
@@ -281,8 +297,10 @@ def _is_report_only_design(design: ExperimentDesignCandidate) -> bool:
 
 
 def _is_lightweight_scientific_design(design: ExperimentDesignCandidate) -> bool:
-    """Check if this design can be handled by the lightweight scientific handler."""
-    if design.design_id == "objective_redesign_simpler_metric_mse_only":
+    """Check if this design can be handled by a lightweight scientific handler."""
+    if design.design_id in ("objective_redesign_simpler_metric_mse_only", "param_reduction_sweep"):
+        return True
+    if design.spec_payload.get("param_subset"):
         return True
     loss_weights = design.spec_payload.get("loss_weights", {})
     if isinstance(loss_weights, dict) and loss_weights.get("mse", 0) == 1.0:

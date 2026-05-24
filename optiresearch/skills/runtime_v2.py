@@ -104,6 +104,8 @@ class SkillRuntimeV2:
             return self._dispatch_stabilization_sweep(inputs)
         if skill_id == "lightweight_scientific_hsi_mse_only":
             return self._dispatch_lightweight_scientific_hsi(inputs)
+        if skill_id == "param_reduction_sweep":
+            return self._dispatch_param_reduction_sweep(inputs)
         raise NotImplementedError(f"No runtime dispatch for skill: {skill_id}")
 
     def _dispatch_claim_check(self, inputs: dict[str, Any]) -> dict[str, Any]:
@@ -262,6 +264,48 @@ class SkillRuntimeV2:
                 "run_id": result.run_id,
                 "status": result.status,
                 "evidence_level": result.evidence_level,
+                "reconstruction_loss_before": payload.get("reconstruction_loss_before"),
+                "reconstruction_loss_after": payload.get("reconstruction_loss_after"),
+                "best_reconstruction_loss": payload.get("best_reconstruction_loss"),
+                "mse_before": payload.get("mse_before"),
+                "mse_after": payload.get("mse_after"),
+                "psnr_before": payload.get("psnr_before"),
+                "psnr_after": payload.get("psnr_after"),
+                "improvement_detected": payload.get("improvement_detected"),
+                "synthetic_data": payload.get("synthetic_data", True),
+                "physical_backend": payload.get("physical_backend", False),
+            }
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+
+
+    def _dispatch_param_reduction_sweep(self, inputs: dict[str, Any]) -> dict[str, Any]:
+        try:
+            from optiresearch.runtime.local_scientific_handlers import (
+                run_param_reduction_sweep_lightweight,
+            )
+            result = run_param_reduction_sweep_lightweight(
+                max_steps=inputs.get("max_steps", 3),
+                optical_lr=inputs.get("optical_lr", 1e-6),
+                recon_lr=inputs.get("recon_lr", 1e-3),
+                bands=inputs.get("bands", 4),
+                image_size=inputs.get("image_size", 16),
+                psf_size=inputs.get("psf_size", 15),
+                device=inputs.get("device", "cpu"),
+            )
+            self._event_bus.publish(AgentEvent.create(
+                "experiment_completed" if result.status == "succeeded" else "experiment_failed",
+                "controller",
+                payload={"run_id": result.run_id, "status": result.status,
+                         "evidence_level": result.evidence_level},
+            ))
+            payload = result.result_payload or {}
+            return {
+                "run_id": result.run_id,
+                "status": result.status,
+                "evidence_level": result.evidence_level,
+                "configs_tested": payload.get("configs_tested"),
+                "best_k": payload.get("best_k"),
                 "reconstruction_loss_before": payload.get("reconstruction_loss_before"),
                 "reconstruction_loss_after": payload.get("reconstruction_loss_after"),
                 "best_reconstruction_loss": payload.get("best_reconstruction_loss"),

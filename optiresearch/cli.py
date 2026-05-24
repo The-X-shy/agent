@@ -501,6 +501,9 @@ def main(argv: list[str] | None = None) -> None:
     run_skill = sub.add_parser("run-skill", help="Run a skill by ID.")
     run_skill.add_argument("--skill-id", required=True)
     run_skill.add_argument("--input-json", default="{}")
+    sub.add_parser("list-handler-capabilities", help="List all registered handler capabilities.")
+    inspect_hc = sub.add_parser("inspect-handler-capability", help="Inspect a specific handler capability.")
+    inspect_hc.add_argument("--handler-id", required=True)
     classify_fail = sub.add_parser("classify-failure", help="Classify a failure from result JSON.")
     classify_fail.add_argument("--result-path", required=True)
     rec_rec = sub.add_parser("recommend-recovery", help="Recommend recovery for a failure.")
@@ -1057,6 +1060,10 @@ def main(argv: list[str] | None = None) -> None:
         _inspect_skill(args.skill_id)
     elif args.command == "run-skill":
         _run_skill(args.skill_id, args.input_json)
+    elif args.command == "list-handler-capabilities":
+        _list_handler_capabilities()
+    elif args.command == "inspect-handler-capability":
+        _inspect_handler_capability(args.handler_id)
     elif args.command == "classify-failure":
         _classify_failure(args.result_path)
     elif args.command == "recommend-recovery":
@@ -2755,6 +2762,34 @@ def _run_skill(skill_id: str, input_json: str) -> None:
     inputs = _json.loads(input_json)
     result = SkillRuntimeV2().execute_skill(skill_id, inputs)
     print(_json.dumps(result.model_dump(mode="json"), indent=2, ensure_ascii=False))
+
+
+def _list_handler_capabilities() -> None:
+    from optiresearch.skills.handler_capability_registry import get_handler_capability_registry
+    import json as _json
+    registry = get_handler_capability_registry()
+    caps = registry.list_all()
+    result = []
+    for c in caps:
+        result.append({
+            "handler_id": c.handler_id,
+            "design_type": c.design_type,
+            "actual_evidence_level": c.actual_evidence_level,
+            "max_claim_ceiling": c.max_claim_ceiling,
+            "synthetic_only": c.synthetic_only,
+            "supported_modes": c.supported_execution_modes,
+            "metrics": c.metrics_supported,
+            "compatible_designs": c.compatible_design_ids,
+        })
+    print(_json.dumps(result, indent=2, ensure_ascii=False))
+
+
+def _inspect_handler_capability(handler_id: str) -> None:
+    from optiresearch.skills.handler_capability_registry import get_handler_capability_registry
+    import json as _json
+    registry = get_handler_capability_registry()
+    info = registry.inspect(handler_id)
+    print(_json.dumps(info, indent=2, ensure_ascii=False) if info else f"Unknown handler: {handler_id}")
 
 
 def _classify_failure(result_path: str) -> None:

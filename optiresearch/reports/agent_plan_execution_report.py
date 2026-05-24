@@ -138,6 +138,46 @@ def _markdown(execution_id: str, r: dict[str, Any]) -> str:
             "- Lightweight scientific execution — claim ceiling: synthetic_lightweight_metric_experiment",
         ])
 
+    # Evidence alignment section
+    lines.extend(["", "## 7b. Evidence Alignment"])
+    designs = r.get("candidate_designs", [])
+    aligned = sum(1 for d in designs if d.get("evidence_alignment_status") == "aligned")
+    downgraded = sum(1 for d in designs if d.get("evidence_alignment_status") == "downgraded_to_handler_capability")
+    unsupported = sum(1 for d in designs if d.get("evidence_alignment_status") == "unsupported")
+    lines.extend([
+        f"- **Aligned:** {aligned}",
+        f"- **Downgraded to Handler Capability:** {downgraded}",
+        f"- **Unsupported:** {unsupported}",
+    ])
+    if downgraded > 0:
+        lines.extend(["", "### Downgraded Designs", "| Design | Expected | Actual | Reason |", "|---|---|---|---|"])
+        for d in designs:
+            if d.get("evidence_alignment_status") == "downgraded_to_handler_capability":
+                lines.append(
+                    f"| {d.get('design_id', '-')} | "
+                    f"{d.get('expected_evidence_level', '-')} | "
+                    f"{d.get('actual_handler_evidence_level', '-')} | "
+                    f"{d.get('evidence_downgrade_reason', '-')[:100]} |"
+                )
+
+    # Handler comparison when multiple scientific handlers executed
+    attempts = r.get("attempted_designs", [])
+    scientific_attempts = [a for a in attempts if a.get("evidence_level") == "lightweight_scientific_execution"]
+    if len(scientific_attempts) >= 2:
+        lines.extend([
+            "",
+            "## 7c. Scientific Handler Comparison",
+            "| Design | Status | MSE After | PSNR After | Improvement | Handler |",
+            "|---|---|---|---|---|---|",
+        ])
+        for a in scientific_attempts:
+            metrics = a.get("metrics", {})
+            lines.append(
+                f"| {a.get('design_id', '-')} | {a.get('status', '-')} | "
+                f"{metrics.get('mse_after', '-')} | {metrics.get('psnr_after', '-')} | "
+                f"{metrics.get('improvement_detected', '-')} | {a.get('handler_id', '-')} |"
+            )
+
     lines.extend(["", "## 8. ClaimGate Outcome"])
     claim = r.get("claim_gate_decision") or {}
     if claim:

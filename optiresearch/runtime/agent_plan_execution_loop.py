@@ -316,15 +316,11 @@ def _execute_design(d: ExperimentDesignCandidate) -> dict[str, Any]:
     if "report_generation" in d.required_skills or d.design_id == "report_negative_result_doc":
         return _execute_report_design(d)
 
+    if d.design_id == "param_reduction_sweep" or d.spec_payload.get("param_subset"):
+        return _execute_param_reduction_sweep(d)
+
     if _is_lightweight_scientific_design(d):
         return _execute_lightweight_scientific_design(d)
-
-    if d.design_id == "param_reduction_sweep" or d.spec_payload.get("param_subset"):
-        return _unsupported_execution_result(
-            d,
-            "HANDLER_MISSING_PARAM_REDUCTION_SWEEP",
-            "Local parameter-reduction sweep handler is not implemented yet.",
-        )
 
     if d.design_id == "backend_switch_waveoptics_coherent" or d.backend_id == "deeplens_coherent_asm":
         return _needs_followup_execution_result(
@@ -466,6 +462,75 @@ def _lightweight_result_to_execution_result(
             "mse_only_objective": True,
             "deepens_used": False,
             "psf_method": "fft_fraunhofer",
+        },
+    }
+
+
+def _execute_param_reduction_sweep(d: ExperimentDesignCandidate) -> dict[str, Any]:
+    from optiresearch.runtime.local_scientific_handlers import (
+        run_param_reduction_sweep_lightweight,
+    )
+
+    result = run_param_reduction_sweep_lightweight(
+        design=d,
+        max_steps=d.spec_payload.get("max_steps", 3),
+        optical_lr=d.spec_payload.get("optical_lr", 1e-6),
+        bands=d.spec_payload.get("bands", 4),
+    )
+    return _param_reduction_result_to_execution_result(d, result)
+
+
+def _param_reduction_result_to_execution_result(
+    d: ExperimentDesignCandidate, result: Any
+) -> dict[str, Any]:
+    completed = result.status == "succeeded"
+    payload = result.result_payload or {}
+    errors = list(result.errors or [])
+    metrics: dict[str, Any] = {}
+    for key in (
+        "reconstruction_loss_before",
+        "reconstruction_loss_after",
+        "best_reconstruction_loss",
+        "mse_before",
+        "mse_after",
+        "psnr_before",
+        "psnr_after",
+        "improvement_detected",
+        "metrics_valid",
+        "accepted_update_count",
+        "execution_time_sec",
+        "configs_tested",
+        "best_k",
+        "synthetic_data",
+        "physical_backend",
+        "parameter_changed",
+    ):
+        if key in payload:
+            metrics[key] = payload[key]
+    return {
+        "status": "completed" if completed else "failed",
+        "outcome": "lightweight_scientific_execution" if completed else "structured_unsupported",
+        "design_id": d.design_id,
+        "task_type": d.task_type,
+        "backend_id": payload.get("backend_id", d.backend_id),
+        "evidence_level": "lightweight_scientific_execution" if completed else "structured_unsupported",
+        "backend_evidence_level": result.evidence_level,
+        "metrics": metrics,
+        "artifacts": list(result.artifact_paths or []),
+        "errors": errors,
+        "caveats": [
+            "Param reduction sweep on synthetic HSI — not native DeepLens simulation",
+            "Low-dimensional pseudo-optical parameter sweep",
+            "Synthetic HSI data — real HSI performance may differ",
+        ],
+        "run_id": result.run_id,
+        "handler_id": "param_reduction_sweep",
+        "metadata": {
+            "synthetic_data": True,
+            "physical_backend": False,
+            "native_backend": False,
+            "handler_id": "param_reduction_sweep",
+            "deepens_used": False,
         },
     }
 
@@ -650,6 +715,8 @@ def _attempt_summary(result: dict[str, Any]) -> dict[str, Any]:
 def _skill_id_for_design(d: ExperimentDesignCandidate) -> str:
     if "report_generation" in d.required_skills or d.design_id == "report_negative_result_doc":
         return "report_generation"
+    if d.design_id == "param_reduction_sweep" or d.spec_payload.get("param_subset"):
+        return "param_reduction_sweep"
     if _is_lightweight_scientific_design(d):
         return "lightweight_scientific_hsi_mse_only"
     if d.design_id == "backend_switch_waveoptics_coherent":

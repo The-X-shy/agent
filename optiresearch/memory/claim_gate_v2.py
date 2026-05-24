@@ -25,6 +25,8 @@ ViolationType = Literal[
     "structured_unsupported_as_success",
     "lightweight_as_native_physical",
     "synthetic_metric_as_real_hsi",
+    "evidence_level_overestimated",
+    "handler_capability_exceeded",
 ]
 
 
@@ -339,6 +341,28 @@ class ClaimGateV2:
                 )
             )
 
+        # 12. evidence_level_overestimated (Phase 40)
+        expected_ev = result.get("expected_evidence_level", "")
+        actual_ev = result.get("actual_handler_evidence_level") or result.get("evidence_level", "")
+        if expected_ev and actual_ev and _evidence_rank(expected_ev) > _evidence_rank(actual_ev):
+            violations.append(
+                (
+                    "evidence_level_overestimated",
+                    f"Expected evidence level '{expected_ev}' exceeds actual "
+                    f"handler capability '{actual_ev}'",
+                )
+            )
+
+        # 13. handler_capability_exceeded (Phase 40)
+        claim_ceiling = result.get("claim_ceiling", "")
+        if claim_ceiling and _evidence_rank_from_claim(claim_lower) > _evidence_rank(claim_ceiling):
+            violations.append(
+                (
+                    "handler_capability_exceeded",
+                    f"Claim exceeds handler max ceiling '{claim_ceiling}'",
+                )
+            )
+
         return violations
 
     def _compute_max_allowed_claim(self, backend_id: str) -> str:
@@ -366,11 +390,14 @@ class ClaimGateV2:
             "structured_unsupported_as_success",
             "lightweight_as_native_physical",
             "synthetic_metric_as_real_hsi",
+            "evidence_level_overestimated",
+            "handler_capability_exceeded",
         }
         qualified: set[ViolationType] = {
             "differentiable_as_improves",
             "rollback_protection_as_improvement",
             "unsupported_path_as_supported",
+            "evidence_level_overestimated",
         }
         if violation_type in fatal:
             return "unsupported"
@@ -461,6 +488,14 @@ class ClaimGateV2:
                 "Acquire real HSI dataset",
                 "Run experiment on real sensor data",
             ],
+            "evidence_level_overestimated": [
+                "Align expected evidence level with handler capability",
+                "Use a handler that can produce the claimed evidence level",
+            ],
+            "handler_capability_exceeded": [
+                "Reduce claim scope to match handler max claim ceiling",
+                "Use a higher-capability handler or backend",
+            ],
         }
         return evidence.get(violation_type, [])
 
@@ -505,6 +540,12 @@ class ClaimGateV2:
                 "Evidence based on synthetic HSI data only",
                 "Real HSI performance may differ significantly",
             ],
+            "evidence_level_overestimated": [
+                "Evidence level was downgraded to match handler capability",
+            ],
+            "handler_capability_exceeded": [
+                "This claim exceeds the handler's maximum evidence ceiling",
+            ],
         }
         return caveats.get(violation_type, [])
 
@@ -532,3 +573,44 @@ def _contains_success_or_improvement_claim(claim_lower: str) -> bool:
         "achieved",
     )
     return any(term in claim_lower for term in terms)
+
+
+def _evidence_rank(level: str) -> int:
+    """Return numeric rank for evidence level comparison. Higher = stronger evidence."""
+    ranks = {
+        "": 0,
+        "requires_user_data": 0,
+        "structured_unsupported": 0,
+        "needs_followup": 0,
+        "report_only": 1,
+        "negative_result": 1,
+        "mock_simulation": 2,
+        "deeplens_integration_smoke": 3,
+        "native_component_optimization": 4,
+        "native_hsi_proxy": 5,
+        "native_full_reconstruction_proxy": 6,
+        "lightweight_scientific_execution": 7,
+        "sweep_analysis": 7,
+        "native_lens_simulation": 8,
+        "native_waveoptics_simulation": 9,
+        "stable_native_lens_hsi_codesign": 10,
+        "rollback_protected_native_lens_hsi": 11,
+        "real_hsi_performance": 12,
+        "real_hsi": 12,
+    }
+    return ranks.get(level, 0)
+
+
+def _evidence_rank_from_claim(claim_lower: str) -> int:
+    """Estimate evidence rank from claim text content."""
+    if any(t in claim_lower for t in ("real hsi", "physical measurement", "production")):
+        return 12
+    if any(t in claim_lower for t in ("wave-optics", "coherent", "wave optics")):
+        return 9
+    if any(t in claim_lower for t in ("native lens", "native deeplens", "native simulation")):
+        return 8
+    if any(t in claim_lower for t in ("synthetic", "lightweight", "mse-only")):
+        return 7
+    if "report" in claim_lower or "negative result" in claim_lower:
+        return 1
+    return 0

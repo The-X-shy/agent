@@ -38,7 +38,7 @@ def test_report_negative_result_doc_executes_as_report_only():
     assert result["errors"] == []
 
 
-def test_param_reduction_sweep_returns_structured_unsupported():
+def test_param_reduction_sweep_returns_scientific_execution():
     result = _execute_design(
         _candidate(
             "param_reduction_sweep",
@@ -48,9 +48,10 @@ def test_param_reduction_sweep_returns_structured_unsupported():
         )
     )
 
-    assert result["status"] == "unsupported"
-    assert result["evidence_level"] == "structured_unsupported"
-    assert result["errors"][0]["type"] == "HANDLER_MISSING_PARAM_REDUCTION_SWEEP"
+    assert result["status"] == "completed"
+    assert result["evidence_level"] == "lightweight_scientific_execution"
+    assert "configs_tested" in result["metrics"]
+    assert "best_k" in result["metrics"]
 
 
 def test_backend_switch_waveoptics_probe_returns_needs_followup():

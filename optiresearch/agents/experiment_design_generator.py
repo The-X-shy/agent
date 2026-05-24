@@ -26,6 +26,10 @@ class ExperimentDesignCandidate:
     claim_ceiling: str = ""
     estimated_runtime_sec: int = 600
     risk_level: str = "low"
+    handler_id: str = ""
+    actual_handler_evidence_level: str = ""
+    evidence_alignment_status: str = ""  # aligned, downgraded_to_handler_capability, unsupported
+    evidence_downgrade_reason: str = ""
 
 
 class ExperimentDesignGenerator:
@@ -37,6 +41,35 @@ class ExperimentDesignGenerator:
         designs: list[ExperimentDesignCandidate] = []
         for s in strategies:
             designs.extend(self._generate_for_strategy(s))
+        return self._align_evidence_levels(designs)
+
+    def _align_evidence_levels(
+        self, designs: list[ExperimentDesignCandidate]
+    ) -> list[ExperimentDesignCandidate]:
+        from optiresearch.skills.handler_capability_registry import (
+            get_handler_capability_registry,
+        )
+        registry = get_handler_capability_registry()
+        for d in designs:
+            cap = registry.find_by_design_id(d.design_id)
+            if cap is None:
+                d.evidence_alignment_status = "unsupported"
+                d.evidence_downgrade_reason = f"No handler capability registered for {d.design_id}"
+                continue
+            d.handler_id = cap.handler_id
+            d.actual_handler_evidence_level = cap.actual_evidence_level
+            if d.expected_evidence_level == cap.actual_evidence_level:
+                d.evidence_alignment_status = "aligned"
+            elif _evidence_rank(d.expected_evidence_level) > _evidence_rank(cap.actual_evidence_level):
+                d.evidence_alignment_status = "downgraded_to_handler_capability"
+                d.evidence_downgrade_reason = (
+                    f"Strategy target {d.expected_evidence_level} downgraded to "
+                    f"handler capability {cap.actual_evidence_level}"
+                )
+                d.expected_evidence_level = cap.actual_evidence_level
+                d.claim_ceiling = cap.max_claim_ceiling
+            else:
+                d.evidence_alignment_status = "aligned"
         return designs
 
     def _generate_for_strategy(self, s: CandidateStrategy) -> list[ExperimentDesignCandidate]:
@@ -189,3 +222,29 @@ class ExperimentDesignGenerator:
             )
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")
         return path
+
+
+def _evidence_rank(level: str) -> int:
+    """Return numeric rank for evidence level comparison. Higher = stronger evidence."""
+    ranks = {
+        "": 0,
+        "requires_user_data": 0,
+        "structured_unsupported": 0,
+        "needs_followup": 0,
+        "report_only": 1,
+        "negative_result": 1,
+        "mock_simulation": 2,
+        "deeplens_integration_smoke": 3,
+        "native_component_optimization": 4,
+        "native_hsi_proxy": 5,
+        "native_full_reconstruction_proxy": 6,
+        "lightweight_scientific_execution": 7,
+        "sweep_analysis": 7,
+        "native_lens_simulation": 8,
+        "native_waveoptics_simulation": 9,
+        "stable_native_lens_hsi_codesign": 10,
+        "rollback_protected_native_lens_hsi": 11,
+        "real_hsi_performance": 12,
+        "real_hsi": 12,
+    }
+    return ranks.get(level, 0)

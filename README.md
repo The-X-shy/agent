@@ -54,6 +54,8 @@ Phase 38 增加 Agent selected plan 本地执行闭环：local mode 会跳过需
 
 Phase 39 补齐本地可执行 scientific handler：新增 `lightweight_scientific_execution` evidence level 和 `run_lightweight_mse_only_hsi()` 实验函数，使用 synthetic HSI + FFT PSF proxy 在无 DeepLens 环境下产出真实 metrics（MSE/PSNR/loss/improvement_detected）；`objective_redesign_simpler_metric_mse_only` design 由专属 handler 执行，优先于 report-only fallback；注册 `lightweight_scientific_hsi_mse_only` skill；ClaimGate 新增 `lightweight_as_native_physical` 和 `synthetic_metric_as_real_hsi` 违规类型防止声明升级。
 
+Phase 40 新增 Handler Capability Registry 作为 handler 能力的唯一真相源，消除 design expected evidence 与 handler actual evidence 不一致的问题；`ExperimentDesignGenerator` 查询 registry 设置正确的 expected_evidence_level；`CandidatePlanEvaluator` 基于 actual_handler_evidence_level 评分并对 evidence downgrade 施加惩罚；ClaimGate 新增 `evidence_level_overestimated` 和 `handler_capability_exceeded` 违规；补齐 `param_reduction_sweep` local handler（第二个可执行 scientific path），sweep k=1,2,3 pseudo-optical parameters 并产出 lightweight metrics；`_build_attempt_sequence` 在 local mode 下优先选择 scientific handler。
+
 ## 安装
 
 ```bash
