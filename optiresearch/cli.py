@@ -512,6 +512,11 @@ def main(argv: list[str] | None = None) -> None:
     resolve_cc.add_argument("--execution-fidelity", default="lightweight_proxy")
     sub.add_parser("validate-handler-capabilities", help="Validate handler capabilities config.")
     sub.add_parser("export-handler-capability-config-report", help="Export handler capability config diagnostics report.")
+    vm = sub.add_parser("validate-remote-artifact-manifest", help="Validate remote artifact manifest.")
+    vm.add_argument("--manifest-path", required=True)
+    ia = sub.add_parser("ingest-remote-artifacts", help="Ingest remote artifacts into ArtifactStore.")
+    ia.add_argument("--manifest-path", required=True)
+    sub.add_parser("export-remote-artifact-index-report", help="Export remote artifact index report.")
     classify_fail = sub.add_parser("classify-failure", help="Classify a failure from result JSON.")
     classify_fail.add_argument("--result-path", required=True)
     rec_rec = sub.add_parser("recommend-recovery", help="Recommend recovery for a failure.")
@@ -1080,6 +1085,12 @@ def main(argv: list[str] | None = None) -> None:
         _validate_handler_capabilities()
     elif args.command == "export-handler-capability-config-report":
         _export_handler_capability_config_report()
+    elif args.command == "validate-remote-artifact-manifest":
+        _validate_remote_artifact_manifest(args.manifest_path)
+    elif args.command == "ingest-remote-artifacts":
+        _ingest_remote_artifacts(args.manifest_path)
+    elif args.command == "export-remote-artifact-index-report":
+        _export_remote_artifact_index_report()
     elif args.command == "classify-failure":
         _classify_failure(args.result_path)
     elif args.command == "recommend-recovery":
@@ -2864,6 +2875,59 @@ def _export_handler_capability_config_report() -> None:
     md_path, json_path = export_handler_capability_config_report()
     print(f"MD report:  {md_path}")
     print(f"JSON report: {json_path}")
+
+
+def _validate_remote_artifact_manifest(manifest_path: str) -> None:
+    from optiresearch.remote.artifact_ingestion import validate_remote_artifact_manifest
+    import json as _json
+    result = validate_remote_artifact_manifest(manifest_path)
+    print(_json.dumps(result, indent=2, ensure_ascii=False))
+
+
+def _ingest_remote_artifacts(manifest_path: str) -> None:
+    from optiresearch.remote.artifact_ingestion import ingest_remote_artifact_manifest
+    import json as _json
+    result = ingest_remote_artifact_manifest(manifest_path)
+    print(_json.dumps({
+        "remote_job_id": result.remote_job_id,
+        "run_id": result.run_id,
+        "completeness": result.completeness,
+        "ingested_count": len(result.ingested_artifacts),
+        "artifact_ids": result.artifact_ids,
+        "primary_metric_artifact_id": result.primary_metric_artifact_id,
+        "execution_result_artifact_id": result.execution_result_artifact_id,
+        "missing_required": result.missing_required_artifacts,
+        "warnings": result.warnings,
+        "errors": result.errors,
+    }, indent=2, ensure_ascii=False))
+
+
+def _export_remote_artifact_index_report() -> None:
+    from optiresearch.storage.file_artifact_store import FileArtifactStore
+    from pathlib import Path
+    store = FileArtifactStore()
+    artifacts = store.list_artifacts()
+    remote_artifacts = [
+        a for a in artifacts
+        if hasattr(a, "metadata") and isinstance(a.metadata, dict)
+        and a.metadata.get("source") == "remote_wsl"
+    ]
+    out = Path("workspace/reports/remote_artifact_index_report.md")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "# Remote Artifact Index Report", "",
+        f"**Remote Artifacts:** {len(remote_artifacts)}", "",
+        "| Artifact ID | Name | Type | Evidence Role |",
+        "|---|---|---|---|",
+    ]
+    for a in remote_artifacts[:50]:
+        meta = a.metadata if isinstance(a.metadata, dict) else {}
+        lines.append(
+            f"| {a.artifact_id} | {meta.get('filename', '-')} | "
+            f"{meta.get('artifact_type', '-')} | {meta.get('evidence_role', '-')} |"
+        )
+    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"Report: {out}")
 
 
 def _classify_failure(result_path: str) -> None:

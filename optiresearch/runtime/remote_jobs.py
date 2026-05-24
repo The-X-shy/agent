@@ -444,10 +444,12 @@ def export_remote_job_outputs(
     (output_dir / "metrics_summary.json").write_text(
         json.dumps(metrics, indent=2, ensure_ascii=False, default=str), encoding="utf-8"
     )
-    manifest = _build_artifact_manifest(output_dir, copied_root)
-    (output_dir / "artifact_manifest.json").write_text(
-        json.dumps(manifest, indent=2, ensure_ascii=False, default=str), encoding="utf-8"
+    manifest = _build_artifact_manifest(
+        output_dir, copied_root,
+        job_id=remote_job_id,
+        run_id=result.get("run_id", ""),
     )
+    # Already written inside _build_artifact_manifest
     remote_job_result = {
         "job_id": remote_job_id,
         "status": status,
@@ -518,25 +520,118 @@ def _remote_claim_scope(job_type: str) -> str:
     return "DeepLens-backed black-box execution, not native differentiable optimization"
 
 
-def _build_artifact_manifest(output_dir: Path, copied_root: Path) -> dict[str, Any]:
-    artifacts: list[dict[str, Any]] = []
+def _build_artifact_manifest(
+    output_dir: Path, copied_root: Path, job_id: str = "", run_id: str = "", worker_id: str = ""
+) -> dict[str, Any]:
+    import hashlib
+    from datetime import datetime, timezone
+
+    entries: list[dict[str, Any]] = []
+    required_outputs = {"result.json", "spec.json"}
+
     for path in sorted(copied_root.rglob("*")):
         if not path.is_file():
             continue
         rel = path.relative_to(output_dir).as_posix()
+        sha256_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+        size = path.stat().st_size
         metrics = _extract_metrics(path)
-        artifacts.append(
-            {
-                "path": rel,
-                "artifact_type": _artifact_type(path.name),
-                "metrics": metrics,
-            }
-        )
+        name = path.name
+        entries.append({
+            "artifact_name": name,
+            "relative_path": rel,
+            "artifact_type": _map_artifact_type(name, rel),
+            "required": name in required_outputs,
+            "sha256": sha256_hash,
+            "size_bytes": size,
+            "producer": "remote_worker",
+            "source_run_id": run_id,
+            "source_job_id": job_id,
+            "evidence_role": _map_evidence_role(name, rel),
+            "metadata": {"metrics": metrics} if metrics else {},
+        })
+
     for name in ["command_result.json", "metrics_summary.json"]:
         path = output_dir / name
         if path.exists():
-            artifacts.append({"path": name, "artifact_type": _artifact_type(name), "metrics": _extract_metrics(path)})
-    return {"artifacts": artifacts}
+            sha256_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+            size = path.stat().st_size
+            entries.append({
+                "artifact_name": name,
+                "relative_path": name,
+                "artifact_type": _map_artifact_type(name, name),
+                "required": False,
+                "sha256": sha256_hash,
+                "size_bytes": size,
+                "producer": "remote_cli",
+                "source_run_id": run_id,
+                "source_job_id": job_id,
+                "evidence_role": "auxiliary",
+                "metadata": {},
+            })
+
+    # Check completeness
+    found_names = {e["artifact_name"] for e in entries}
+    missing = [r for r in required_outputs if r not in found_names]
+    completeness = "complete" if not missing else "partial"
+
+    manifest = {
+        "schema_version": "0.1",
+        "remote_job_id": job_id,
+        "run_id": run_id,
+        "worker_id": worker_id,
+        "execution_target": "remote_wsl",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "artifacts": entries,
+        "completeness": completeness,
+        "missing_required_artifacts": missing,
+        "warnings": [],
+    }
+
+    manifest_path = output_dir / "artifact_manifest.json"
+    manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+
+    return manifest
+
+
+def _map_artifact_type(filename: str, rel_path: str = "") -> str:
+    lower = filename.lower()
+    if lower.endswith(".npz"):
+        return "psf_npz" if "psf" in lower else "reconstruction_npz"
+    if lower.endswith(".csv"):
+        return "mtf_csv"
+    if lower.endswith((".png", ".jpg", ".jpeg")):
+        return "figure_png" if lower.endswith(".png") else "figure_jpg"
+    if lower.endswith(".json"):
+        if "metrics" in lower:
+            return "metrics_json"
+        if "result" in lower or "spec" in lower:
+            return "result_json"
+        if "manifest" in lower:
+            return "manifest_json"
+        if "trace" in lower:
+            return "trace_json"
+        return "result_json" if "result" in rel_path.lower() else "other"
+    if lower.endswith(".md"):
+        return "report_md"
+    return "other"
+
+
+def _map_evidence_role(filename: str, rel_path: str = "") -> str:
+    lower = filename.lower()
+    if "metrics" in lower:
+        return "primary_metric"
+    if "result" in lower or "spec" in lower:
+        return "execution_result"
+    if lower.endswith(".npz"):
+        if "psf" in lower:
+            return "optical_artifact"
+        return "reconstruction_artifact"
+    if "trace" in lower:
+        return "trace"
+    if lower.endswith(".md"):
+        return "report"
+    return "auxiliary"
 
 
 def _extract_metrics(path: Path) -> dict[str, Any]:
