@@ -517,6 +517,10 @@ def main(argv: list[str] | None = None) -> None:
     ia = sub.add_parser("ingest-remote-artifacts", help="Ingest remote artifacts into ArtifactStore.")
     ia.add_argument("--manifest-path", required=True)
     sub.add_parser("export-remote-artifact-index-report", help="Export remote artifact index report.")
+    diag_grad = sub.add_parser("diagnose-gradient-instability", help="Diagnose GeoLens gradient instability.")
+    diag_grad.add_argument("--source-path", default=None)
+    diag_grad.add_argument("--remote-job-id", default=None)
+    sub.add_parser("export-gradient-instability-report", help="Export gradient instability report.")
     classify_fail = sub.add_parser("classify-failure", help="Classify a failure from result JSON.")
     classify_fail.add_argument("--result-path", required=True)
     rec_rec = sub.add_parser("recommend-recovery", help="Recommend recovery for a failure.")
@@ -1091,6 +1095,13 @@ def main(argv: list[str] | None = None) -> None:
         _ingest_remote_artifacts(args.manifest_path)
     elif args.command == "export-remote-artifact-index-report":
         _export_remote_artifact_index_report()
+    elif args.command == "diagnose-gradient-instability":
+        _diagnose_gradient_instability(
+            getattr(args, "source_path", None),
+            getattr(args, "remote_job_id", None),
+        )
+    elif args.command == "export-gradient-instability-report":
+        _export_gradient_instability_report()
     elif args.command == "classify-failure":
         _classify_failure(args.result_path)
     elif args.command == "recommend-recovery":
@@ -2926,6 +2937,65 @@ def _export_remote_artifact_index_report() -> None:
             f"| {a.artifact_id} | {meta.get('filename', '-')} | "
             f"{meta.get('artifact_type', '-')} | {meta.get('evidence_role', '-')} |"
         )
+    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"Report: {out}")
+
+
+def _diagnose_gradient_instability(source_path: str | None, remote_job_id: str | None) -> None:
+    from optiresearch.analysis.gradient_instability_analyzer import analyze_gradient_instability
+    import json as _json
+    source_paths = [source_path] if source_path else []
+    remote_job_ids = [remote_job_id] if remote_job_id else []
+    diagnosis = analyze_gradient_instability(source_paths=source_paths, remote_job_ids=remote_job_ids)
+    print(_json.dumps({
+        "diagnosis_id": diagnosis.diagnosis_id,
+        "status": diagnosis.status,
+        "source_count": diagnosis.source_count,
+        "severity": diagnosis.severity,
+        "failure_modes": diagnosis.failure_modes,
+        "likely_causes": diagnosis.likely_causes,
+        "recommended_recoveries": diagnosis.recommended_recoveries,
+        "optical_gradient_norm_max": diagnosis.metrics.optical_gradient_norm_max,
+        "accepted_update_count": diagnosis.metrics.accepted_update_count,
+        "rollback_rate": diagnosis.metrics.rollback_rate,
+        "stable_training_succeeded": diagnosis.metrics.stable_training_succeeded,
+    }, indent=2, ensure_ascii=False))
+
+
+def _export_gradient_instability_report() -> None:
+    from optiresearch.analysis.gradient_instability_analyzer import analyze_gradient_instability
+    from pathlib import Path
+    diag = analyze_gradient_instability(
+        source_paths=["workspace/native_geolens_stabilization/geolens_stabilization_1779550632/sweep_results.json"],
+        remote_job_ids=["remote_job_3cd757e87cd95e56"],
+    )
+    out = Path("workspace/reports/gradient_instability_report.md")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "# Gradient Instability Diagnosis Report",
+        f"**Diagnosis ID:** {diag.diagnosis_id}",
+        f"**Status:** {diag.status}",
+        f"**Severity:** {diag.severity}",
+        f"**Sources:** {diag.source_count}",
+        "",
+        "## Failure Modes",
+        *[f"- {m}" for m in diag.failure_modes],
+        "",
+        "## Likely Causes",
+        *[f"- {c}" for c in diag.likely_causes],
+        "",
+        "## Recommended Recoveries",
+        *[f"- {r}" for r in diag.recommended_recoveries],
+        "",
+        "## Metrics",
+        f"- optical_gradient_norm_max: {diag.metrics.optical_gradient_norm_max}",
+        f"- accepted_update_count: {diag.metrics.accepted_update_count}",
+        f"- rollback_rate: {diag.metrics.rollback_rate:.2f}",
+        f"- stable_training_succeeded: {diag.metrics.stable_training_succeeded}",
+        "",
+        "## Claim Implications",
+        *[f"- {c}" for c in diag.claim_implications],
+    ]
     out.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"Report: {out}")
 

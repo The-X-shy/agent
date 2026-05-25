@@ -111,6 +111,8 @@ class SkillRuntimeV2:
             return self._dispatch_lightweight_scientific_hsi(inputs)
         if skill_id == "param_reduction_sweep":
             return self._dispatch_param_reduction_sweep(inputs)
+        if skill_id == "gradient_instability_diagnosis":
+            return self._dispatch_gradient_instability_diagnosis(inputs)
         raise NotImplementedError(f"No runtime dispatch for skill: {skill_id}")
 
     def _dispatch_claim_check(self, inputs: dict[str, Any]) -> dict[str, Any]:
@@ -420,6 +422,37 @@ class SkillRuntimeV2:
                 "improvement_detected": payload.get("improvement_detected"),
                 "synthetic_data": payload.get("synthetic_data", True),
                 "physical_backend": payload.get("physical_backend", False),
+            }
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+
+
+    def _dispatch_gradient_instability_diagnosis(self, inputs: dict[str, Any]) -> dict[str, Any]:
+        try:
+            from optiresearch.analysis.gradient_instability_analyzer import (
+                analyze_gradient_instability,
+            )
+            diagnosis = analyze_gradient_instability(
+                source_paths=inputs.get("source_paths", []),
+                remote_job_ids=inputs.get("remote_job_ids", []),
+            )
+            self._event_bus.publish(AgentEvent.create(
+                "diagnosis_completed", "analyzer",
+                payload={"diagnosis_id": diagnosis.diagnosis_id, "status": diagnosis.status,
+                         "severity": diagnosis.severity},
+            ))
+            return {
+                "diagnosis_id": diagnosis.diagnosis_id,
+                "status": diagnosis.status,
+                "severity": diagnosis.severity,
+                "failure_modes": diagnosis.failure_modes,
+                "likely_causes": diagnosis.likely_causes,
+                "recommended_recoveries": diagnosis.recommended_recoveries,
+                "optical_gradient_norm_max": diagnosis.metrics.optical_gradient_norm_max,
+                "accepted_update_count": diagnosis.metrics.accepted_update_count,
+                "rollback_rate": diagnosis.metrics.rollback_rate,
+                "source_count": diagnosis.source_count,
+                "evidence_level": "diagnostic_evidence",
             }
         except Exception as e:
             return {"status": "failed", "error": str(e)}
