@@ -16,6 +16,7 @@ KNOWN_EVIDENCE_LEVELS = {
     "stable_native_lens_hsi_codesign",
     "rollback_protected_native_lens_hsi",
     "real_hsi_performance", "real_hsi", "real_hsi_validation",
+    "diagnostic_evidence",
 }
 
 KNOWN_RISK_LEVELS = {"low", "medium", "high"}

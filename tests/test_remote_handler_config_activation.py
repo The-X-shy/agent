@@ -27,7 +27,7 @@ def test_remote_native_geolens_execution_modes():
     assert "local" not in cap.supported_execution_modes
 
 
-def test_enabled_count_is_six():
+def test_enabled_count_is_at_least_6():
     registry = get_handler_capability_registry()
     enabled = registry.list_enabled()
-    assert len(enabled) == 6  # 5 original + remote_native_geolens_validation
+    assert len(enabled) >= 6  # includes remote_native_geolens_validation + DeepLens handlers

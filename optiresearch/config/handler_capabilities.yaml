@@ -282,6 +282,183 @@ handlers:
     risk_level: high
     enabled: false
 
+  # ── Phase 54-55: DeepLens Diagnostic Handlers ──
+
+  - handler_id: deeplens_autograd_audit
+    display_name: "DeepLens Autograd Audit"
+    design_type: scientific
+    task_type: autograd_audit
+    supported_execution_modes:
+      - dry_run
+      - local
+    actual_evidence_level: diagnostic_evidence
+    max_claim_ceiling: diagnostic_evidence
+    synthetic_only: false
+    native_backend_required: true
+    physical_backend: true
+    real_data_required: false
+    remote_required: false
+    supports_remote: false
+    requires_remote_validation: false
+    remote_evidence_ceiling: ""
+    local_evidence_ceiling: diagnostic_evidence
+    metrics_supported:
+      - trainable_param_count
+      - params_with_grad
+      - grad_norm_max
+      - graph_connected
+      - psf_requires_grad
+    artifacts_supported:
+      - audit_result.json
+    known_limitations:
+      - "Requires DeepLens GeoLens geometric backend"
+      - "Diagnostic only — does not validate optical design"
+    compatible_design_ids:
+      - deeplens_autograd_audit_design
+    compatible_backend_ids:
+      - deeplens_geolens_geometric
+    default_timeout_sec: 300
+    risk_level: low
+    enabled: true
+
+  - handler_id: deeplens_trainable_parameter_inspection
+    display_name: "Trainable Parameter Inspection"
+    design_type: scientific
+    task_type: trainable_parameter_inspection
+    supported_execution_modes:
+      - dry_run
+      - local
+    actual_evidence_level: diagnostic_evidence
+    max_claim_ceiling: diagnostic_evidence
+    synthetic_only: false
+    native_backend_required: true
+    physical_backend: true
+    real_data_required: false
+    remote_required: false
+    supports_remote: false
+    requires_remote_validation: false
+    remote_evidence_ceiling: ""
+    local_evidence_ceiling: diagnostic_evidence
+    metrics_supported:
+      - parameter_count
+      - trainable_count
+    artifacts_supported:
+      - inspection_result.json
+    known_limitations:
+      - "Requires DeepLens GeoLens geometric backend"
+      - "Surface inspection — does not confirm optical design improvement"
+    compatible_design_ids:
+      - deeplens_surface_freeze_unfreeze_probe_design
+      - trainable_parameter_inspection_design
+    compatible_backend_ids:
+      - deeplens_geolens_geometric
+    default_timeout_sec: 300
+    risk_level: low
+    enabled: true
+
+  - handler_id: deeplens_curriculum_probe
+    display_name: "DeepLens Curriculum Probe"
+    design_type: scientific
+    task_type: curriculum_probe
+    supported_execution_modes:
+      - dry_run
+      - local
+    actual_evidence_level: diagnostic_evidence
+    max_claim_ceiling: diagnostic_evidence
+    synthetic_only: true
+    native_backend_required: false
+    physical_backend: false
+    real_data_required: false
+    remote_required: false
+    supports_remote: false
+    requires_remote_validation: false
+    remote_evidence_ceiling: ""
+    local_evidence_ceiling: diagnostic_evidence
+    metrics_supported:
+      - stages_completed
+      - curriculum_progress
+    artifacts_supported:
+      - curriculum_result.json
+    known_limitations:
+      - "FFT PSF proxy used when DeepLens unavailable"
+      - "Curriculum probe only — does not guarantee stable optical improvement"
+    compatible_design_ids:
+      - deeplens_curriculum_probe_design
+    compatible_backend_ids:
+      - phase_to_fft_proxy
+    default_timeout_sec: 120
+    risk_level: low
+    enabled: true
+
+  - handler_id: deeplens_regularized_probe
+    display_name: "DeepLens Regularized Probe"
+    design_type: scientific
+    task_type: regularized_probe
+    supported_execution_modes:
+      - dry_run
+      - local
+    actual_evidence_level: diagnostic_evidence
+    max_claim_ceiling: diagnostic_evidence
+    synthetic_only: true
+    native_backend_required: false
+    physical_backend: false
+    real_data_required: false
+    remote_required: false
+    supports_remote: false
+    requires_remote_validation: false
+    remote_evidence_ceiling: ""
+    local_evidence_ceiling: diagnostic_evidence
+    metrics_supported:
+      - base_loss
+      - regularized_loss
+      - update_accepted
+    artifacts_supported:
+      - reg_probe_result.json
+    known_limitations:
+      - "FFT PSF proxy used when DeepLens unavailable"
+      - "Regularization probe — not a validated optical design improvement"
+    compatible_design_ids:
+      - deeplens_regularized_probe_design
+    compatible_backend_ids:
+      - phase_to_fft_proxy
+    default_timeout_sec: 120
+    risk_level: low
+    enabled: true
+
+  - handler_id: deeplens_component_first_probe
+    display_name: "Component-First Probe"
+    design_type: probe
+    task_type: component_first_probe
+    supported_execution_modes:
+      - dry_run
+    actual_evidence_level: diagnostic_evidence
+    max_claim_ceiling: diagnostic_evidence
+    synthetic_only: false
+    native_backend_required: true
+    physical_backend: true
+    real_data_required: false
+    remote_required: false
+    supports_remote: false
+    requires_remote_validation: false
+    remote_evidence_ceiling: ""
+    local_evidence_ceiling: needs_followup
+    metrics_supported: []
+    artifacts_supported:
+      - component_probe_result.json
+    known_limitations:
+      - "Requires DeepLens Fresnel/Binary2Phase/Diffractive component backend"
+      - "Returns needs_followup when component backend unavailable"
+    compatible_design_ids:
+      - deeplens_component_first_fresnel_probe_design
+      - deeplens_component_first_binary2phase_probe_design
+      - deeplens_diffractive_candidate_probe_design
+    compatible_backend_ids:
+      - deeplens_fresnel_component
+      - deeplens_binary2phase_component
+    default_timeout_sec: 300
+    risk_level: medium
+    enabled: true
+
   - handler_id: remote_native_geolens_validation
     display_name: "Remote Native GeoLens Validation (WSL)"
     design_type: remote_validation

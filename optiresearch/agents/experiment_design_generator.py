@@ -22,6 +22,19 @@ class ExperimentDesignCandidate:
     spec_payload: dict[str, Any] = field(default_factory=dict)
     expected_evidence_level: str = ""
     expected_failure_modes: list[str] = field(default_factory=list)
+    # Phase 54-55: DeepLens strategy integration
+    source_strategy_id: str = ""
+    deeplens_strategy_id: str = ""
+    strategy_family: str = ""
+    design_origin: str = ""  # diagnosis_reasoner, deeplens_strategy_registry, evidence_strategy_reasoner, manual, fallback
+    required_backend_capability: list[str] = field(default_factory=list)
+    handler_capability_id: str = ""
+    expected_handler_id: str = ""
+    expected_skill_id: str = ""
+    design_caveats: list[str] = field(default_factory=list)
+    claim_boundary_notes: list[str] = field(default_factory=list)
+    probe_only: bool = False
+    scientific_success_claim_allowed: bool = False
     required_skills: list[str] = field(default_factory=list)
     claim_ceiling: str = ""
     estimated_runtime_sec: int = 600
@@ -39,9 +52,139 @@ class ExperimentDesignGenerator:
         constraints: dict[str, Any] | None = None,
     ) -> list[ExperimentDesignCandidate]:
         designs: list[ExperimentDesignCandidate] = []
+        # Phase 55: Dedicated DeepLens strategy mappings
+        dl_designs = self.generate_deeplens_strategy_designs(strategies)
+        designs.extend(dl_designs)
         for s in strategies:
-            designs.extend(self._generate_for_strategy(s))
+            d = self._generate_for_strategy(s)
+            if d:
+                designs.extend(d)
         return self._align_evidence_levels(designs)
+
+    def generate_deeplens_strategy_designs(
+        self,
+        strategies: list[CandidateStrategy],
+    ) -> list[ExperimentDesignCandidate]:
+        """Generate dedicated ExperimentDesignCandidates for DeepLens strategies."""
+        designs: list[ExperimentDesignCandidate] = []
+        dl_families = {
+            "curriculum_learning", "optical_regularization", "staged_optimization",
+            "component_first", "surface_freeze_unfreeze", "parameterization_reduction",
+            "ray_to_wave_progression", "diffractive_probe", "hybrid_probe",
+            "negative_result_report",
+        }
+        for s in strategies:
+            if s.strategy_type not in dl_families:
+                continue
+            d = self._map_deeplens_strategy(s)
+            if d:
+                designs.append(d)
+        return designs
+
+    def _map_deeplens_strategy(self, s: CandidateStrategy) -> ExperimentDesignCandidate | None:
+        sid = s.strategy_id
+        base = dict(
+            source_strategy_id=sid, deeplens_strategy_id=sid,
+            strategy_family=s.strategy_type,
+            design_origin="deeplens_strategy_registry",
+            risk_level=s.risk, required_skills=s.required_skills,
+            claim_ceiling=s.claim_ceiling, probe_only=True,
+            scientific_success_claim_allowed=False,
+        )
+        if sid == "geolens_curriculum_probe":
+            return ExperimentDesignCandidate(
+                design_id="deeplens_curriculum_probe_design",
+                objective="Run staged curriculum probe to avoid direct full-parameter update",
+                backend_id="deeplens_geolens_geometric", task_type="curriculum_probe",
+                expected_evidence_level="diagnostic_evidence",
+                expected_skill_id="deeplens_curriculum_probe",
+                expected_handler_id="deeplens_curriculum_probe",
+                estimated_runtime_sec=120, **base,
+                claim_boundary_notes=["Curriculum probe only — not a validated optical design improvement"],
+            )
+        if sid == "geolens_regularized_probe":
+            return ExperimentDesignCandidate(
+                design_id="deeplens_regularized_probe_design",
+                objective="Add PSF regularization to dampen gradient spikes",
+                backend_id="deeplens_geolens_geometric", task_type="regularized_probe",
+                expected_evidence_level="diagnostic_evidence",
+                expected_skill_id="deeplens_regularized_probe",
+                expected_handler_id="deeplens_regularized_probe",
+                estimated_runtime_sec=120, **base,
+                claim_boundary_notes=["Regularization probe — not a validated optical design improvement"],
+            )
+        if sid == "geolens_surface_freeze_unfreeze_probe":
+            return ExperimentDesignCandidate(
+                design_id="deeplens_surface_freeze_unfreeze_probe_design",
+                objective="Inspect trainable surface subsets and freeze unstable surfaces",
+                backend_id="deeplens_geolens_geometric", task_type="trainable_parameter_inspection",
+                expected_evidence_level="diagnostic_evidence",
+                expected_skill_id="deeplens_trainable_parameter_inspection",
+                expected_handler_id="deeplens_trainable_parameter_inspection",
+                estimated_runtime_sec=300, **base,
+                claim_boundary_notes=["Surface inspection — does not confirm optical design improvement"],
+            )
+        if sid == "component_first_fresnel_probe":
+            return ExperimentDesignCandidate(
+                design_id="deeplens_component_first_fresnel_probe_design",
+                objective="Verify stable differentiable Fresnel component update",
+                backend_id="deeplens_fresnel_component", task_type="component_first_probe",
+                expected_evidence_level="diagnostic_evidence",
+                expected_skill_id="deeplens_component_first_probe",
+                expected_handler_id="deeplens_component_first_probe",
+                spec_payload={"component": "fresnel"},
+                estimated_runtime_sec=300, **base,
+                claim_boundary_notes=["Component probe — not lens-level optical design validation"],
+            )
+        if sid == "component_first_binary2phase_probe":
+            return ExperimentDesignCandidate(
+                design_id="deeplens_component_first_binary2phase_probe_design",
+                objective="Verify differentiable binary2phase component update",
+                backend_id="deeplens_binary2phase_component", task_type="component_first_probe",
+                expected_evidence_level="diagnostic_evidence",
+                expected_skill_id="deeplens_component_first_probe",
+                expected_handler_id="deeplens_component_first_probe",
+                spec_payload={"component": "binary2phase"},
+                estimated_runtime_sec=300, **base,
+            )
+        if sid == "ray_to_wave_progression_probe":
+            return ExperimentDesignCandidate(
+                design_id="deeplens_ray_to_wave_progression_probe_design",
+                objective="Probe geometric path first; coherent wave only if autograd passes",
+                backend_id="deeplens_geolens_geometric", task_type="ray_to_wave_progression_probe",
+                expected_evidence_level="diagnostic_evidence",
+                expected_skill_id="backend_probe",
+                estimated_runtime_sec=600, **base,
+                design_caveats=["Full wave-optics claim requires autograd verification — not yet supported"],
+            )
+        if sid == "diffractive_candidate_probe":
+            return ExperimentDesignCandidate(
+                design_id="deeplens_diffractive_candidate_probe_design",
+                objective="Check diffractive candidate availability and differentiability",
+                backend_id="deeplens_diffractive_candidate", task_type="diffractive_candidate_probe",
+                expected_evidence_level="diagnostic_evidence",
+                expected_skill_id="deeplens_component_first_probe",
+                expected_handler_id="deeplens_component_first_probe",
+                spec_payload={"component": "diffractive_candidate"},
+                estimated_runtime_sec=300, **base,
+            )
+        if sid == "report_geolens_negative_result":
+            return ExperimentDesignCandidate(
+                design_id="deeplens_geolens_negative_result_report_design",
+                objective="Document GeoLensCooke full parameterization gradient instability",
+                backend_id="", task_type="negative_result_report",
+                expected_evidence_level="report_only",
+                expected_skill_id="report_generation",
+                expected_handler_id="report_negative_result_doc",
+                estimated_runtime_sec=60, probe_only=False,
+                source_strategy_id=sid, deeplens_strategy_id=sid,
+                strategy_family=s.strategy_type,
+                design_origin="deeplens_strategy_registry",
+                risk_level=s.risk, required_skills=s.required_skills,
+                claim_ceiling="report_only",
+                claim_boundary_notes=["Report-only — does not support optical improvement claims"],
+            )
+        return None
 
     def _align_evidence_levels(
         self, designs: list[ExperimentDesignCandidate]
