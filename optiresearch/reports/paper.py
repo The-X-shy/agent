@@ -182,22 +182,41 @@ def _claims_markdown(store: SQLiteStore) -> str:
     lines = [
         "# Claim Evidence Table",
         "",
-        "| Claim ID | Status | Claim | Relation | Artifact ID | Trace ID | Metric | Value | Score | Caveats |",
-        "|---|---|---|---|---|---|---|---:|---:|---|",
+        "| Claim ID | Status | Artifact ID | Evidence Role | Artifact Type | SHA256 | Remote Job | Artifact Binding | Claim | Score | Caveats |",
+        "|---|---|---|---|---|---|---|---|---:|---|",
     ]
     for claim in claims:
-        rows = [*_normalize_edges(claim.get("support_edges", [])), *_normalize_edges(claim.get("contradict_edges", []))] or [{}]
-        for edge in rows:
+        rows = [*_normalize_edges(claim.get("support_edges", [])), *_normalize_edges(claim.get("contradict_edges", []))]
+        if not rows:
+            # Show no_artifact_binding row
             lines.append(
-                "| {claim_id} | {status} | {text} | {relation} | {artifact} | {trace} | {metric} | {value} | {score} | {caveats} |".format(
+                "| {claim_id} | {status} | {artifact} | {role} | {atype} | {sha} | {job} | {binding} | {text} | {score} | {caveats} |".format(
                     claim_id=_cell(claim.get("claim_id")),
                     status=_cell(claim.get("status")),
+                    artifact="no_artifact_binding",
+                    role="",
+                    atype="",
+                    sha="",
+                    job="",
+                    binding="no_artifact_binding",
                     text=_cell(claim.get("text")),
-                    relation=_cell(edge.get("relation")),
-                    artifact=_cell(edge.get("artifact_id")),
-                    trace=_cell(edge.get("trace_id")),
-                    metric=_cell(edge.get("metric_name")),
-                    value=_cell(edge.get("metric_value")),
+                    score="",
+                    caveats=_cell("; ".join(claim.get("required_caveats", []))),
+                )
+            )
+        for edge in rows:
+            aid = edge.get("artifact_id", "")
+            lines.append(
+                "| {claim_id} | {status} | {artifact} | {role} | {atype} | {sha} | {job} | {binding} | {text} | {score} | {caveats} |".format(
+                    claim_id=_cell(claim.get("claim_id")),
+                    status=_cell(claim.get("status")),
+                    artifact=_cell(aid or "no_artifact_binding"),
+                    role=_cell(edge.get("evidence_role", "")),
+                    atype=_cell(edge.get("artifact_type", "")),
+                    sha=_cell((edge.get("artifact_sha256", "") or "")[:16]),
+                    job=_cell(edge.get("remote_job_id", "")),
+                    binding="bound" if aid else "no_artifact_binding",
+                    text=_cell(claim.get("text")),
                     score=_cell(edge.get("score")),
                     caveats=_cell("; ".join(claim.get("required_caveats", []))),
                 )

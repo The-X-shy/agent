@@ -307,7 +307,12 @@ def _markdown(execution_id: str, r: dict[str, Any]) -> str:
         "## 11. Final Recommendation",
         r.get("final_recommendation", "-"),
         "",
-        "## 12. Errors",
+        "## 12. Report Cross-Links",
+        f"- **Evidence Tables:** workspace/reports/evidence_claims.md",
+        f"- **Remote Artifact Index:** workspace/reports/remote_artifact_index_report.md",
+        f"- **Artifact Binding Status:** {ex.get('artifact_ingestion_status', 'no_binding')}",
+        "",
+        "## 13. Errors",
         *([f"- {e}" for e in r.get("errors", [])] or ["(none)"]),
     ])
     return "\n".join(lines) + "\n"
