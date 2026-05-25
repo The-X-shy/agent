@@ -20,6 +20,11 @@ class PlanScore:
     score_breakdown: dict[str, float] = field(default_factory=dict)
     recommendation: str = ""
     reason: str = ""
+    # Phase 56: diagnosis-aware scoring metadata
+    diagnosis_score_bonus: float = 0.0
+    diagnosis_factors_used: list[str] = field(default_factory=list)
+    selected_due_to_diagnosis: bool = False
+    scoring_explanation: str = ""
 
 
 @dataclass
@@ -45,22 +50,94 @@ class CandidatePlanEvaluator:
             "novelty": 0.05,
             "risk_penalty": 0.10,
         }
+        self._diagnosis_context: dict[str, Any] = {}
+
+    def set_diagnosis_context(self, diagnosis: dict[str, Any]) -> None:
+        self._diagnosis_context = diagnosis
 
     def evaluate(self, designs: list[ExperimentDesignCandidate]) -> list[PlanScore]:
         scores = []
         for d in designs:
             breakdown = self._score_design(d)
+            # Phase 56: Apply diagnosis-aware bonus
+            diag_bonus = self._apply_diagnosis_bonus(d)
+            breakdown["diagnosis_score_bonus"] = diag_bonus
             total = sum(breakdown.values())
             rec, reason = self._recommend(total, d)
+            diag_factors = self._diagnosis_factors_used(d)
             scores.append(PlanScore(
                 design_id=d.design_id,
                 total_score=round(total, 3),
                 score_breakdown=breakdown,
                 recommendation=rec,
                 reason=reason,
+                diagnosis_score_bonus=diag_bonus,
+                diagnosis_factors_used=diag_factors,
+                scoring_explanation=f"Diagnosis bonus: {diag_bonus:.3f}" if diag_bonus > 0 else "",
             ))
         scores.sort(key=lambda s: s.total_score, reverse=True)
         return scores
+
+    def _apply_diagnosis_bonus(self, d: ExperimentDesignCandidate) -> float:
+        """Apply scoring bonus based on diagnosis failure modes matching DeepLens diagnostic designs."""
+        ctx = self._diagnosis_context
+        if not ctx or ctx.get("status") != "diagnosed":
+            return 0.0
+
+        failure_modes = ctx.get("failure_modes", [])
+        likely_causes = ctx.get("likely_causes", [])
+        bonus = 0.0
+        did = d.design_id
+        family = getattr(d, "strategy_family", "")
+
+        # no_parameter_change → boost autograd audit, parameter inspection, surface freeze
+        if "no_parameter_change" in failure_modes:
+            if any(kw in did for kw in ("autograd_audit", "trainable_parameter", "surface_freeze_unfreeze")):
+                bonus += 0.15
+            if "verify_trainable" in did:
+                bonus += 0.15
+
+        # unstable_training → boost curriculum, regularization, component-first
+        if "unstable_training" in failure_modes:
+            if any(kw in did for kw in ("curriculum_probe", "regularized_probe", "component_first_fresnel")):
+                bonus += 0.12
+            if family in ("curriculum_learning", "optical_regularization", "component_first"):
+                bonus += 0.08
+
+        # gradient_flow_blocked → strong boost for autograd audit, component-first
+        if "gradient_flow_blocked" in likely_causes:
+            if any(kw in did for kw in ("autograd_audit", "autograd_graph_audit")):
+                bonus += 0.18
+            if any(kw in did for kw in ("component_first", "component_level_geolens")):
+                bonus += 0.12
+
+        # Diagnostic information gain: probe_only designs get extra weight
+        if getattr(d, "probe_only", False):
+            bonus += 0.05
+        if d.expected_evidence_level == "diagnostic_evidence":
+            bonus += 0.03
+
+        return round(bonus, 3)
+
+    def _diagnosis_factors_used(self, d: ExperimentDesignCandidate) -> list[str]:
+        ctx = self._diagnosis_context
+        if not ctx:
+            return []
+        factors: list[str] = []
+        did = d.design_id
+        fm = ctx.get("failure_modes", [])
+        lc = ctx.get("likely_causes", [])
+        if "no_parameter_change" in fm and any(kw in did for kw in ("autograd", "trainable", "freeze")):
+            factors.append("no_parameter_change")
+        if "unstable_training" in fm and any(kw in did for kw in ("curriculum", "regularized", "component_first_fresnel")):
+            factors.append("unstable_training")
+        if "gradient_flow_blocked" in lc and "autograd" in did:
+            factors.append("gradient_flow_blocked")
+        if getattr(d, "probe_only", False):
+            factors.append("probe_only")
+        if d.expected_evidence_level == "diagnostic_evidence":
+            factors.append("diagnostic_evidence")
+        return factors
 
     def select_executable_designs(
         self,

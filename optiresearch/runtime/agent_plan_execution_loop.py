@@ -117,6 +117,8 @@ def run_agent_plan_execution(spec: AgentPlanExecutionSpec) -> AgentPlanExecution
     if spec.mode == "remote_opt_in" and spec.allow_remote:
         designs = _ensure_remote_validation_design(designs)
     evaluator = CandidatePlanEvaluator()
+    if diagnosis_context:
+        evaluator.set_diagnosis_context(diagnosis_context)
     scores = evaluator.evaluate(designs)
     selection = evaluator.select_executable_designs(
         scores,
@@ -458,6 +460,9 @@ def run_agent_plan_execution(spec: AgentPlanExecutionSpec) -> AgentPlanExecution
             "total_score": s.total_score,
             "recommendation": s.recommendation,
             "reason": s.reason,
+            "diagnosis_score_bonus": getattr(s, "diagnosis_score_bonus", 0.0),
+            "diagnosis_factors_used": getattr(s, "diagnosis_factors_used", []),
+            "scoring_explanation": getattr(s, "scoring_explanation", ""),
         } for s in scores],
         selected_design=selection.selected_design,
         selected_design_rank=selection.selected_design_rank,
