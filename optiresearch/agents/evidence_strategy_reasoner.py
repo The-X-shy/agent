@@ -274,6 +274,28 @@ class EvidenceStrategyReasoner:
             if not hasattr(s, 'diagnosis_id') or not s.diagnosis_id:
                 pass  # CandidateStrategy is a dataclass without these fields
 
+        # Phase 54: Add DeepLens design strategies from registry
+        try:
+            from optiresearch.optics.deeplens_design_strategy_registry import (
+                get_deeplens_design_strategy_registry,
+            )
+            dl_registry = get_deeplens_design_strategy_registry()
+            dl_strategies = dl_registry.find_for_diagnosis(failure_modes)
+            for ds in dl_strategies:
+                evidence_gain = "medium" if ds.strategy_family != "negative_result_report" else "low"
+                self._strategies.append(CandidateStrategy(
+                    strategy_id=ds.strategy_id,
+                    strategy_type=ds.strategy_family,
+                    rationale=ds.objective,
+                    expected_evidence_gain=evidence_gain,
+                    expected_metric_gain="low",
+                    risk=ds.risk_level, cost=ds.runtime_cost,
+                    required_skills=ds.required_skills,
+                    claim_ceiling=ds.claim_ceiling,
+                ))
+        except Exception:
+            pass
+
         if not self._strategies:
             self._strategies.append(CandidateStrategy(
                 strategy_id="run_probe_only_diagnosis",

@@ -521,6 +521,8 @@ def main(argv: list[str] | None = None) -> None:
     diag_grad.add_argument("--source-path", default=None)
     diag_grad.add_argument("--remote-job-id", default=None)
     sub.add_parser("export-gradient-instability-report", help="Export gradient instability report.")
+    sub.add_parser("list-deeplens-design-strategies", help="List DeepLens design strategies.")
+    sub.add_parser("export-deeplens-design-strategy-report", help="Export DeepLens design strategy report.")
     classify_fail = sub.add_parser("classify-failure", help="Classify a failure from result JSON.")
     classify_fail.add_argument("--result-path", required=True)
     rec_rec = sub.add_parser("recommend-recovery", help="Recommend recovery for a failure.")
@@ -1103,6 +1105,10 @@ def main(argv: list[str] | None = None) -> None:
         )
     elif args.command == "export-gradient-instability-report":
         _export_gradient_instability_report()
+    elif args.command == "list-deeplens-design-strategies":
+        _list_deeplens_design_strategies()
+    elif args.command == "export-deeplens-design-strategy-report":
+        _export_deeplens_design_strategy_report()
     elif args.command == "classify-failure":
         _classify_failure(args.result_path)
     elif args.command == "recommend-recovery":
@@ -2997,6 +3003,40 @@ def _export_gradient_instability_report() -> None:
         "## Claim Implications",
         *[f"- {c}" for c in diag.claim_implications],
     ]
+    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"Report: {out}")
+
+
+def _list_deeplens_design_strategies() -> None:
+    from optiresearch.optics.deeplens_design_strategy_registry import get_deeplens_design_strategy_registry
+    import json as _json
+    registry = get_deeplens_design_strategy_registry()
+    result = [{"strategy_id": s.strategy_id, "strategy_family": s.strategy_family,
+               "evidence_level": s.evidence_level, "claim_ceiling": s.claim_ceiling,
+               "enabled": s.enabled, "compatible_diagnosis": s.compatible_diagnosis_failure_modes}
+              for s in registry.list_all()]
+    print(_json.dumps(result, indent=2, ensure_ascii=False))
+
+
+def _export_deeplens_design_strategy_report() -> None:
+    from optiresearch.optics.deeplens_design_strategy_registry import get_deeplens_design_strategy_registry
+    from pathlib import Path
+    registry = get_deeplens_design_strategy_registry()
+    out = Path("workspace/reports/deeplens_design_strategy_report.md")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    lines = ["# DeepLens Design Strategy Report", ""]
+    families = {}
+    for s in registry.list_all():
+        families.setdefault(s.strategy_family, []).append(s)
+    for fam, strats in sorted(families.items()):
+        lines.extend([f"## {fam}", ""])
+        for s in strats:
+            lines.extend([
+                f"### {s.strategy_id}", f"- **Objective:** {s.objective}",
+                f"- **Evidence Level:** {s.evidence_level}",
+                f"- **Claim Ceiling:** {s.claim_ceiling}",
+                f"- **Enabled:** {s.enabled}", "",
+            ])
     out.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"Report: {out}")
 

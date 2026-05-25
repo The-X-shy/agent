@@ -113,6 +113,16 @@ class SkillRuntimeV2:
             return self._dispatch_param_reduction_sweep(inputs)
         if skill_id == "gradient_instability_diagnosis":
             return self._dispatch_gradient_instability_diagnosis(inputs)
+        if skill_id == "deeplens_autograd_audit":
+            return self._dispatch_deeplens_autograd_audit(inputs)
+        if skill_id == "deeplens_trainable_parameter_inspection":
+            return self._dispatch_deeplens_param_inspection(inputs)
+        if skill_id == "deeplens_curriculum_probe":
+            return self._dispatch_deeplens_curriculum(inputs)
+        if skill_id == "deeplens_regularized_probe":
+            return self._dispatch_deeplens_regularized(inputs)
+        if skill_id == "deeplens_component_first_probe":
+            return self._dispatch_deeplens_component_first(inputs)
         raise NotImplementedError(f"No runtime dispatch for skill: {skill_id}")
 
     def _dispatch_claim_check(self, inputs: dict[str, Any]) -> dict[str, Any]:
@@ -456,6 +466,39 @@ class SkillRuntimeV2:
             }
         except Exception as e:
             return {"status": "failed", "error": str(e)}
+
+
+    def _dispatch_deeplens_autograd_audit(self, inputs: dict[str, Any]) -> dict[str, Any]:
+        from optiresearch.runtime.deeplens_autograd_audit import run_deeplens_autograd_audit
+        result = run_deeplens_autograd_audit(device=inputs.get("device", "cpu"))
+        return {"status": result["status"], "evidence_level": result["evidence_level"],
+                "trainable_param_count": result["trainable_param_count"],
+                "grad_norm_max": result["grad_norm_max"], "diagnosis": result["diagnosis"],
+                "recommended_next_strategy": result["recommended_next_strategy"]}
+
+    def _dispatch_deeplens_param_inspection(self, inputs: dict[str, Any]) -> dict[str, Any]:
+        from optiresearch.runtime.deeplens_trainable_parameter_inspection import inspect_deeplens_trainable_parameters
+        result = inspect_deeplens_trainable_parameters(device=inputs.get("device", "cpu"))
+        return {"status": result["status"], "evidence_level": result["evidence_level"],
+                "parameter_count": result["parameter_count"], "trainable_count": result["trainable_count"],
+                "recommended_strategy": result["recommended_strategy"]}
+
+    def _dispatch_deeplens_curriculum(self, inputs: dict[str, Any]) -> dict[str, Any]:
+        from optiresearch.runtime.deeplens_curriculum_probe import run_deeplens_curriculum_probe
+        result = run_deeplens_curriculum_probe(max_steps=inputs.get("max_steps", 3), device=inputs.get("device", "cpu"))
+        return {"status": result["status"], "evidence_level": result["evidence_level"],
+                "stages_completed": result["stages_completed"], "curriculum_progress": result["curriculum_progress"]}
+
+    def _dispatch_deeplens_regularized(self, inputs: dict[str, Any]) -> dict[str, Any]:
+        from optiresearch.runtime.deeplens_regularized_probe import run_deeplens_regularized_probe
+        result = run_deeplens_regularized_probe(max_steps=inputs.get("max_steps", 3), device=inputs.get("device", "cpu"))
+        return {"status": result["status"], "evidence_level": result["evidence_level"],
+                "base_loss": result["base_loss"], "regularized_loss": result["regularized_loss"],
+                "update_accepted": result["update_accepted"], "reg_terms": result["reg_terms"]}
+
+    def _dispatch_deeplens_component_first(self, inputs: dict[str, Any]) -> dict[str, Any]:
+        return {"status": "needs_followup", "evidence_level": "diagnostic_evidence",
+                "message": "Component-first probe requires DeepLens component backend (fresnel/binary2phase) — not available"}
 
 
 def _hash_inputs(inputs: dict[str, Any]) -> str:
