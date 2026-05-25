@@ -525,9 +525,94 @@ def run_agent_plan_execution(spec: AgentPlanExecutionSpec) -> AgentPlanExecution
     return result
 
 
+def _is_diagnostic_design(d: ExperimentDesignCandidate) -> bool:
+    did = d.design_id
+    return any(kw in did for kw in (
+        "autograd_audit", "trainable_parameter", "curriculum_probe",
+        "regularized_probe", "component_first", "surface_freeze_unfreeze",
+        "verify_trainable", "component_level_geolens",
+    ))
+
+
+def _execute_diagnostic_design(d: ExperimentDesignCandidate) -> dict[str, Any]:
+    did = d.design_id
+    if "autograd_audit" in did or "autograd" in did:
+        from optiresearch.runtime.deeplens_autograd_audit import run_deeplens_autograd_audit
+        result = run_deeplens_autograd_audit(device="cpu")
+        return {
+            "status": "completed" if result["status"] == "succeeded" else result["status"],
+            "outcome": "diagnostic_execution",
+            "design_id": d.design_id, "task_type": d.task_type,
+            "backend_id": d.backend_id, "evidence_level": result["evidence_level"],
+            "metrics": {k: result[k] for k in (
+                "trainable_param_count", "params_with_grad", "grad_norm_max",
+                "graph_connected", "detach_suspected", "psf_requires_grad",
+                "loss_requires_grad",
+            ) if k in result},
+            "artifacts": [], "errors": [],
+            "caveats": ["Diagnostic evidence only — does not confirm optical design improvement"],
+            "diagnosis": result.get("diagnosis", []),
+            "recommended_next_strategy": result.get("recommended_next_strategy", ""),
+        }
+    if "trainable_parameter" in did or "verify_trainable" in did or "surface_freeze" in did:
+        from optiresearch.runtime.deeplens_trainable_parameter_inspection import (
+            inspect_deeplens_trainable_parameters,
+        )
+        result = inspect_deeplens_trainable_parameters(device="cpu")
+        return {
+            "status": "completed" if result["status"] == "succeeded" else result["status"],
+            "outcome": "diagnostic_execution",
+            "design_id": d.design_id, "task_type": d.task_type,
+            "backend_id": d.backend_id, "evidence_level": result["evidence_level"],
+            "metrics": {k: result[k] for k in (
+                "parameter_count", "trainable_count",
+            ) if k in result},
+            "artifacts": [], "errors": [],
+            "caveats": ["Parameter inspection — does not confirm optical design improvement"],
+            "recommended_strategy": result.get("recommended_strategy", ""),
+        }
+    if "curriculum_probe" in did:
+        from optiresearch.runtime.deeplens_curriculum_probe import run_deeplens_curriculum_probe
+        result = run_deeplens_curriculum_probe(max_steps=3, device="cpu")
+        return {
+            "status": "completed" if result["status"] == "succeeded" else result["status"],
+            "outcome": "diagnostic_execution",
+            "design_id": d.design_id, "task_type": d.task_type,
+            "backend_id": d.backend_id, "evidence_level": result["evidence_level"],
+            "metrics": {k: result.get(k) for k in (
+                "stages_completed", "curriculum_progress",
+            )},
+            "artifacts": [], "errors": [],
+            "caveats": ["Curriculum probe only — not a validated optical design improvement"],
+        }
+    if "regularized_probe" in did:
+        from optiresearch.runtime.deeplens_regularized_probe import run_deeplens_regularized_probe
+        result = run_deeplens_regularized_probe(max_steps=3, device="cpu")
+        return {
+            "status": "completed" if result["status"] == "succeeded" else result["status"],
+            "outcome": "diagnostic_execution",
+            "design_id": d.design_id, "task_type": d.task_type,
+            "backend_id": d.backend_id, "evidence_level": result["evidence_level"],
+            "metrics": {k: result.get(k) for k in (
+                "base_loss", "regularized_loss", "update_accepted",
+            )},
+            "artifacts": [], "errors": [],
+            "caveats": ["Regularization probe — not a validated optical design improvement"],
+        }
+    if "component_first" in did or "component_level" in did:
+        return _unsupported_execution_result(
+            d, "COMPONENT_BACKEND_UNAVAILABLE",
+            "Component-first probe requires DeepLens Fresnel/Binary2Phase backend — not available on macOS.",
+        )
+    return _unsupported_execution_result(d, "UNKNOWN_DIAGNOSTIC_DESIGN", f"No handler for {d.design_id}")
+
+
 def _execute_design(d: ExperimentDesignCandidate) -> dict[str, Any]:
     if "report_generation" in d.required_skills or d.design_id == "report_negative_result_doc":
         return _execute_report_design(d)
+
+    if _is_diagnostic_design(d):
+        return _execute_diagnostic_design(d)
 
     if d.design_id == "param_reduction_sweep" or d.spec_payload.get("param_subset"):
         return _execute_param_reduction_sweep(d)
