@@ -69,10 +69,41 @@ def run_agent_plan_execution(spec: AgentPlanExecutionSpec) -> AgentPlanExecution
         payload={"failure_id": classified_failure, "recovery_count": len(recovery_rec.get("recoveries", []))},
     ))
 
-    strategies = EvidenceStrategyReasoner().reason(
-        objective=spec.objective,
-        failure_mode=classified_failure,
-    )[:spec.max_candidate_strategies]
+    # Phase 52-53: Diagnosis-driven planning
+    diagnosis_context: dict[str, Any] = {}
+    if spec.use_gradient_diagnosis:
+        try:
+            from optiresearch.analysis.gradient_instability_analyzer import (
+                analyze_gradient_instability,
+            )
+            source_paths = [spec.diagnosis_source_path] if spec.diagnosis_source_path else []
+            if spec.seed_result_path:
+                source_paths.append(spec.seed_result_path)
+            diag = analyze_gradient_instability(source_paths=source_paths)
+            diagnosis_context = {
+                "diagnosis_id": diag.diagnosis_id,
+                "status": diag.status,
+                "severity": diag.severity,
+                "failure_modes": diag.failure_modes,
+                "likely_causes": diag.likely_causes,
+                "recommended_recoveries": diag.recommended_recoveries,
+                "source_count": diag.source_count,
+            }
+            bus.publish(AgentEvent.create("diagnosis_completed", "analyzer",
+                payload={"diagnosis_id": diag.diagnosis_id, "status": diag.status}))
+        except Exception as e:
+            errors.append(f"Diagnosis failed: {e}")
+
+    if diagnosis_context and diagnosis_context.get("status") == "diagnosed":
+        strategist = EvidenceStrategyReasoner()
+        strategies = strategist.reason_from_diagnosis(
+            diagnosis=diagnosis_context, objective=spec.objective,
+        )[:spec.max_candidate_strategies]
+    else:
+        strategies = EvidenceStrategyReasoner().reason(
+            objective=spec.objective,
+            failure_mode=classified_failure,
+        )[:spec.max_candidate_strategies]
     bus.publish(AgentEvent.create(
         "strategy_recommended",
         "strategy_engine",
@@ -459,6 +490,11 @@ def run_agent_plan_execution(spec: AgentPlanExecutionSpec) -> AgentPlanExecution
             and any(a.get("design_id") == selection.selected_design for a in attempted_designs)
         ),
         fallback_to_report_only=fallback_to_report_only,
+        diagnosis_id=diagnosis_context.get("diagnosis_id", ""),
+        diagnosis_status=diagnosis_context.get("status", ""),
+        diagnosis_failure_modes=diagnosis_context.get("failure_modes", []),
+        diagnosis_used_for_planning=bool(diagnosis_context),
+        diagnosis_strategy_count=len(strategies) if diagnosis_context else 0,
         errors=errors,
     )
 

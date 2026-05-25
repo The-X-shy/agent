@@ -156,6 +156,48 @@ class ExperimentDesignGenerator:
                 estimated_runtime_sec=60,
                 risk_level="low",
             )]
+        elif s.strategy_type == "autograd_audit":
+            return [ExperimentDesignCandidate(
+                design_id=f"{s.strategy_id}_design",
+                objective="Audit autograd graph for gradient breakpoints",
+                backend_id="deeplens_geolens_geometric",
+                task_type="autograd_audit",
+                spec_payload={"diagnostic": "autograd_graph"},
+                expected_evidence_level="diagnostic_evidence",
+                expected_failure_modes=["autograd_break", "no_gradient"],
+                required_skills=["autograd_audit"],
+                claim_ceiling="diagnostic_evidence",
+                estimated_runtime_sec=300,
+                risk_level=s.risk,
+            )]
+        elif s.strategy_type == "parameter_inspection":
+            return [ExperimentDesignCandidate(
+                design_id=f"{s.strategy_id}_design",
+                objective="Probe trainable parameters and verify gradient flow",
+                backend_id="deeplens_geolens_geometric",
+                task_type="backend_probe",
+                spec_payload={"probe_type": "trainable_parameters"},
+                expected_evidence_level="diagnostic_evidence",
+                expected_failure_modes=["gradient_flow_blocked"],
+                required_skills=["backend_probe"],
+                claim_ceiling="diagnostic_evidence",
+                estimated_runtime_sec=300,
+                risk_level=s.risk,
+            )]
+        elif s.strategy_type == "component_inspection":
+            return [ExperimentDesignCandidate(
+                design_id=f"{s.strategy_id}_design",
+                objective="Probe individual GeoLens components for gradient breakpoints",
+                backend_id="deeplens_geolens_geometric",
+                task_type="backend_probe",
+                spec_payload={"probe_type": "component_level", "depth": "deep"},
+                expected_evidence_level="diagnostic_evidence",
+                expected_failure_modes=["deepens_unavailable", "geolens_api_error"],
+                required_skills=["backend_probe"],
+                claim_ceiling="diagnostic_evidence",
+                estimated_runtime_sec=600,
+                risk_level=s.risk,
+            )]
         elif s.strategy_type == "real_data_request":
             return [ExperimentDesignCandidate(
                 design_id=f"{s.strategy_id}_req",

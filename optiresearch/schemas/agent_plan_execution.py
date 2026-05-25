@@ -17,6 +17,9 @@ class AgentPlanExecutionSpec(StrictModel):
     execute_top_k: int = 1
     require_claim_gate: bool = True
     use_llm_planner: bool = False
+    use_gradient_diagnosis: bool = False
+    diagnosis_source_path: Optional[str] = None
+    diagnosis_id: Optional[str] = None
     use_evidence_reasoner: bool = True
     allow_remote: bool = False
     remote_worker_id: Optional[str] = None
@@ -60,4 +63,9 @@ class AgentPlanExecutionResult(StrictModel):
     executed_or_dry_run: str = "dry_run"
     selected_design_executed: bool = False
     fallback_to_report_only: bool = False
+    diagnosis_id: str = ""
+    diagnosis_status: str = ""
+    diagnosis_failure_modes: list[str] = []
+    diagnosis_used_for_planning: bool = False
+    diagnosis_strategy_count: int = 0
     errors: list[str] = []

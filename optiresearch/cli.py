@@ -540,6 +540,7 @@ def main(argv: list[str] | None = None) -> None:
     plan_exec.add_argument("--mode", choices=["dry_run", "local", "remote_opt_in"], default="dry_run")
     plan_exec.add_argument("--execute-top-k", type=int, default=1)
     plan_exec.add_argument("--allow-remote", action="store_true")
+    plan_exec.add_argument("--use-gradient-diagnosis", action="store_true")
     plan_exec.add_argument("--remote-worker-id", default=None)
     hybrid_p = sub.add_parser("hybrid-plan", help="Run hybrid planner.")
     hybrid_p.add_argument("--objective", default="recover from native GeoLens instability")
@@ -3091,6 +3092,8 @@ def _run_agent_plan_execution(args: Any) -> None:
         execute_top_k=args.execute_top_k,
         allow_remote=getattr(args, "allow_remote", False),
         remote_worker_id=getattr(args, "remote_worker_id", None),
+        use_gradient_diagnosis=getattr(args, "use_gradient_diagnosis", False),
+        diagnosis_source_path=getattr(args, "seed_result_path", None),
     )
     result = run_agent_plan_execution(spec)
     print(_json.dumps({
@@ -3114,6 +3117,11 @@ def _run_agent_plan_execution(args: Any) -> None:
         "state_snapshots_count": result.state_snapshots_count,
         "event_log_path": result.event_log_path,
         "report_path": result.report_path,
+        "diagnosis_id": result.diagnosis_id,
+        "diagnosis_status": result.diagnosis_status,
+        "diagnosis_failure_modes": result.diagnosis_failure_modes,
+        "diagnosis_used_for_planning": result.diagnosis_used_for_planning,
+        "diagnosis_strategy_count": result.diagnosis_strategy_count,
         "errors": result.errors,
     }, indent=2, ensure_ascii=False))
 
