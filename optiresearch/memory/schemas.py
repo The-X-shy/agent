@@ -141,12 +141,18 @@ class DesignRule(StrictModel):
 
 class EvidenceEdge(StrictModel):
     artifact_id: str = Field(min_length=1)
-    trace_id: Optional[str]
-    metric_name: Optional[str]
-    metric_value: Optional[Union[float, str]]
-    relation: Literal["supports", "contradicts", "qualifies"]
+    trace_id: Optional[str] = None
+    metric_name: Optional[str] = None
+    metric_value: Optional[Union[float, str]] = None
+    relation: Literal["supports", "contradicts", "qualifies"] = "supports"
     score: float = Field(ge=0.0, le=1.0)
     rationale: str = Field(min_length=1)
+    # Phase 47: artifact metadata for store cross-referencing
+    evidence_role: str = ""
+    artifact_type: str = ""
+    artifact_sha256: str = ""
+    remote_job_id: str = ""
+    artifact_store_source: str = ""
 
 
 class ClaimEvidence(StrictModel):
