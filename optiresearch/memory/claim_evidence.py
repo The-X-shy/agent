@@ -670,3 +670,54 @@ class ClaimEvidenceManager:
 
 def _positive(value: Any) -> bool:
     return isinstance(value, (int, float)) and float(value) > 0.0
+
+
+def bind_artifacts_from_claim_gate_decision(
+    claim_id: str,
+    claim_gate_decision: dict[str, Any],
+    artifact_store: Any = None,
+) -> list[dict[str, Any]]:
+    """Create EvidenceEdge dicts from ClaimGateDecision artifact IDs.
+
+    Returns a list of edge dicts ready for ClaimEvidenceManager.attach_support().
+    """
+    edges: list[dict[str, Any]] = []
+    evidence_ids = claim_gate_decision.get("evidence_artifact_ids", [])
+    if not isinstance(evidence_ids, list):
+        evidence_ids = []
+
+    primary_id = claim_gate_decision.get("primary_metric_artifact_id", "")
+    execution_id = claim_gate_decision.get("execution_result_artifact_id", "")
+
+    def _make_edge(aid: str, role: str) -> dict[str, Any]:
+        edge: dict[str, Any] = {
+            "artifact_id": aid,
+            "evidence_role": role,
+            "relation": "supports",
+            "score": 0.85 if role in ("primary_metric", "execution_result") else 0.7,
+            "rationale": f"Artifact bound from ClaimGateDecision as {role}",
+        }
+        # Enrich from ArtifactStore if available
+        if artifact_store:
+            try:
+                ref = artifact_store.get_artifact(aid)
+                if ref:
+                    meta = getattr(ref, "metadata", {}) or {}
+                    edge["artifact_type"] = meta.get("artifact_type", "")
+                    edge["artifact_sha256"] = getattr(ref, "content_hash", "")
+                    edge["remote_job_id"] = meta.get("remote_job_id", "")
+                    edge["artifact_store_source"] = "ArtifactStore"
+            except Exception:
+                pass
+        return edge
+
+    if primary_id:
+        edges.append(_make_edge(primary_id, "primary_metric"))
+    if execution_id and execution_id != primary_id:
+        edges.append(_make_edge(execution_id, "execution_result"))
+
+    for aid in evidence_ids:
+        if aid not in (primary_id, execution_id):
+            edges.append(_make_edge(aid, "supporting_artifact"))
+
+    return edges

@@ -312,6 +312,42 @@ def run_agent_plan_execution(spec: AgentPlanExecutionSpec) -> AgentPlanExecution
             claim_gate_decision = _run_claim_gate(final_design, execution_result)
             claim_gate_decisions.append(claim_gate_decision)
 
+    # Phase 48: Auto-bind artifact IDs into ClaimEvidence
+    evidence_binding: dict[str, Any] = {}
+    if execution_result and claim_gate_decision and spec.require_claim_gate:
+        try:
+            from optiresearch.memory.claim_evidence import (
+                bind_artifacts_from_claim_gate_decision,
+                ClaimEvidenceManager,
+            )
+            evidence_ids = claim_gate_decision.get("evidence_artifact_ids", [])
+            if evidence_ids:
+                ev_manager = ClaimEvidenceManager()
+                claim_text = claim_gate_decision.get("safe_wording", f"Plan execution {spec.execution_id}")
+                claim = ev_manager.create_claim(claim_text, {
+                    "execution_id": spec.execution_id,
+                    "design_id": execution_result.get("design_id", ""),
+                    "evidence_level": execution_result.get("evidence_level", ""),
+                })
+                edges = bind_artifacts_from_claim_gate_decision(
+                    claim.claim_id, claim_gate_decision,
+                )
+                for edge in edges:
+                    ev_manager.attach_support(
+                        claim.claim_id, edge["artifact_id"],
+                        edge["score"], edge.get("relation", "supports"),
+                    )
+                evidence_binding = {
+                    "claim_id": claim.claim_id,
+                    "evidence_edges_count": len(edges),
+                    "evidence_artifact_ids": evidence_ids,
+                    "evidence_completeness": claim_gate_decision.get("evidence_completeness", ""),
+                }
+                execution_result["claim_id"] = claim.claim_id
+                execution_result["evidence_edges_count"] = len(edges)
+        except Exception as e:
+            errors.append(f"Evidence binding failed: {e}")
+
     memory_updates: list[str] = []
     memory_updated = False
     if execution_result or spec.mode == "dry_run":
