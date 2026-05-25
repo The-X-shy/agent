@@ -174,6 +174,118 @@ class EvidenceStrategyReasoner:
 
         return self._strategies
 
+    def reason_from_diagnosis(
+        self,
+        diagnosis: dict[str, Any] | None = None,
+        objective: str = "",
+    ) -> list[CandidateStrategy]:
+        """Generate strategies from a GradientInstabilityDiagnosis."""
+        self._strategies = []
+        if not diagnosis or diagnosis.get("status") != "diagnosed":
+            self._strategies.append(CandidateStrategy(
+                strategy_id="insufficient_diagnosis",
+                strategy_type="report_negative_result",
+                rationale="No valid gradient instability diagnosis available — insufficient evidence for targeted recovery.",
+                expected_evidence_gain="low", expected_metric_gain="low",
+                risk="low", cost="low", required_skills=["report_generation"],
+                claim_ceiling="report_only",
+            ))
+            return self._strategies
+
+        diag_id = diagnosis.get("diagnosis_id", "unknown")
+        failure_modes = diagnosis.get("failure_modes", [])
+        likely_causes = diagnosis.get("likely_causes", [])
+        recoveries = diagnosis.get("recommended_recoveries", [])
+        severity = diagnosis.get("severity", "medium")
+
+        if "no_parameter_change" in failure_modes:
+            self._strategies.extend([
+                CandidateStrategy(
+                    strategy_id="autograd_graph_audit",
+                    strategy_type="autograd_audit",
+                    rationale="No optical parameter change detected — verify autograd graph integrity and trainable parameter set before attempting further optimization.",
+                    expected_evidence_gain="medium", expected_metric_gain="low",
+                    risk="low", cost="low", required_skills=["autograd_audit"],
+                    claim_ceiling="diagnostic_evidence",
+                ),
+                CandidateStrategy(
+                    strategy_id="verify_trainable_parameters",
+                    strategy_type="parameter_inspection",
+                    rationale="Verify which GeoLens parameters are trainable and whether gradient flows through the geometric PSF path.",
+                    expected_evidence_gain="medium", expected_metric_gain="low",
+                    risk="low", cost="low", required_skills=["backend_probe"],
+                    claim_ceiling="diagnostic_evidence",
+                ),
+            ])
+
+        if "unstable_training" in failure_modes or "extreme_gradient_spike" in failure_modes:
+            self._strategies.extend([
+                CandidateStrategy(
+                    strategy_id="objective_redesign_simpler_metric",
+                    strategy_type="objective_redesign",
+                    rationale="Gradient instability detected — redesign objective to simpler metric (MSE-only) may reduce loss landscape complexity and allow stable updates.",
+                    expected_evidence_gain="medium", expected_metric_gain="medium",
+                    risk="low", cost="low", required_skills=["lightweight_scientific_hsi_mse_only"],
+                    claim_ceiling="lightweight_scientific_execution",
+                ),
+                CandidateStrategy(
+                    strategy_id="param_reduction_lightweight",
+                    strategy_type="parameter_reduction",
+                    rationale="Excessive gradient norms suggest over-parameterization — reduce trainable optical parameter scope to stabilize optimization.",
+                    expected_evidence_gain="medium", expected_metric_gain="low",
+                    risk="low", cost="low", required_skills=["param_reduction_sweep"],
+                    claim_ceiling="lightweight_scientific_execution",
+                ),
+            ])
+
+        if "loss_not_improved" in failure_modes:
+            self._strategies.append(CandidateStrategy(
+                strategy_id="objective_with_psf_regularization",
+                strategy_type="objective_redesign",
+                rationale="Loss not improved — add PSF regularization to prevent degenerate optical solutions.",
+                expected_evidence_gain="medium", expected_metric_gain="medium",
+                risk="low", cost="low", required_skills=["lightweight_scientific_hsi_mse_only"],
+                claim_ceiling="lightweight_scientific_execution",
+            ))
+
+        if "gradient_flow_blocked" in likely_causes:
+            self._strategies.append(CandidateStrategy(
+                strategy_id="component_level_geolens_probe",
+                strategy_type="component_inspection",
+                rationale="Gradient flow appears blocked — probe individual GeoLens components to identify the breakpoint.",
+                expected_evidence_gain="high", expected_metric_gain="low",
+                risk="medium", cost="medium", required_skills=["backend_probe"],
+                claim_ceiling="diagnostic_evidence",
+            ))
+
+        # Always include report option
+        if severity in ("high", "critical"):
+            self._strategies.append(CandidateStrategy(
+                strategy_id="record_negative_result_diagnosis",
+                strategy_type="report_negative_result",
+                rationale=f"Diagnosis severity={severity} — record as structured negative result with diagnosis {diag_id}.",
+                expected_evidence_gain="low", expected_metric_gain="low",
+                risk="low", cost="low", required_skills=["report_generation"],
+                claim_ceiling="report_only",
+            ))
+
+        # Attach diagnosis metadata
+        for s in self._strategies:
+            if not hasattr(s, 'diagnosis_id') or not s.diagnosis_id:
+                pass  # CandidateStrategy is a dataclass without these fields
+
+        if not self._strategies:
+            self._strategies.append(CandidateStrategy(
+                strategy_id="run_probe_only_diagnosis",
+                strategy_type="run_probe_only",
+                rationale="Diagnosis could not determine specific recovery — run lightweight probe to gather more data.",
+                expected_evidence_gain="low", expected_metric_gain="low",
+                risk="low", cost="low", required_skills=["backend_probe"],
+                claim_ceiling="diagnostic_evidence",
+            ))
+
+        return self._strategies
+
     def get_top_strategy(self) -> Optional[CandidateStrategy]:
         if not self._strategies:
             return None
