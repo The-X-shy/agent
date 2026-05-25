@@ -267,6 +267,20 @@ def _markdown(execution_id: str, r: dict[str, Any]) -> str:
             for reason in reasons:
                 lines.append(f"  - {reason}")
 
+    # Phase 46: ArtifactStore Evidence Index
+    artifact_ids = ex.get("artifact_ids", [])
+    if artifact_ids:
+        lines.extend([
+            "",
+            "## 7e. ArtifactStore Evidence Index",
+            f"- **Ingested Count:** {len(artifact_ids)}",
+            f"- **SHA256 Verified:** {ex.get('sha256_verified', '-')}",
+            f"- **Ingestion Status:** {ex.get('artifact_ingestion_status', '-')}",
+        ])
+        evidence_ids = claim.get("evidence_artifact_ids", [])
+        if evidence_ids:
+            lines.append(f"- **Evidence Artifact IDs:** {', '.join(str(a) for a in evidence_ids[:10])}")
+
     lines.extend(["", "## 8. ClaimGate Outcome"])
     if claim:
         lines.extend([

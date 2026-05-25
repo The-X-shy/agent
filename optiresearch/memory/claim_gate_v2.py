@@ -47,6 +47,10 @@ class ClaimGateDecision:
     ceiling_source: str = ""
     limiting_factor: str = ""
     downgrade_reasons: list[str] = field(default_factory=list)
+    # Phase 46: artifact evidence binding
+    evidence_artifact_ids: list[str] = field(default_factory=list)
+    evidence_completeness: str = ""
+    missing_evidence_artifacts: list[str] = field(default_factory=list)
 
 
 class ClaimGateV2:

@@ -41,6 +41,17 @@ class RemoteHandlerResult(StrictModel):
     caveats: list[str] = []
     warnings: list[dict[str, str]] = []
     ingestion: dict[str, Any] = {}
+    # Phase 46: artifact IDs from ArtifactStore
+    artifact_ids: list[str] = []
+    primary_metric_artifact_id: str = ""
+    execution_result_artifact_id: str = ""
+    evidence_artifact_ids: list[str] = []
+    artifact_manifest_path: str = ""
+    artifact_manifest_complete: bool = False
+    artifact_ingestion_status: str = ""
+    missing_required_artifacts: list[str] = []
+    artifact_ingestion_warnings: list[str] = []
+    sha256_verified: bool = False
 
 
 def parse_remote_handler_result(
@@ -139,6 +150,11 @@ def parse_remote_handler_result(
     if not validation_passed:
         evidence_level = "needs_followup"
 
+    # Phase 46: extract artifact IDs from ingestion
+    ingestion_dict = ingestion or {}
+    ingested_ids = ingestion_dict.get("artifact_ids", [])
+    artifact_manifest_path = str(local_dir / "artifact_manifest.json")
+
     return RemoteHandlerResult(
         remote_job_id=remote_job.job_id,
         worker_id=worker_id,
@@ -155,6 +171,16 @@ def parse_remote_handler_result(
         metrics=metrics,
         artifacts=artifacts,
         artifact_return_path=str(local_dir),
+        artifact_ids=ingested_ids if isinstance(ingested_ids, list) else (ingested_ids if isinstance(ingested_ids, list) else []),
+        primary_metric_artifact_id=ingestion_dict.get("primary_metric_artifact_id", ""),
+        execution_result_artifact_id=ingestion_dict.get("execution_result_artifact_id", ""),
+        evidence_artifact_ids=ingested_ids if isinstance(ingested_ids, list) else [],
+        artifact_manifest_path=artifact_manifest_path,
+        artifact_manifest_complete=bool(ingested_ids),
+        artifact_ingestion_status="completed" if ingested_ids else ("manifest_missing" if not Path(artifact_manifest_path).exists() else "partial"),
+        missing_required_artifacts=ingestion_dict.get("missing_required_artifacts", []) if isinstance(ingestion_dict.get("missing_required_artifacts"), list) else [],
+        artifact_ingestion_warnings=ingestion_dict.get("warnings", []) if isinstance(ingestion_dict.get("warnings"), list) else [],
+        sha256_verified=bool(ingested_ids),
         errors=errors,
         caveats=list(remote_job.caveats or []),
         warnings=warnings,
