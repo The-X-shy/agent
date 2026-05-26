@@ -4,13 +4,29 @@ from __future__ import annotations
 from typing import Any
 
 
-def run_deeplens_regularized_probe(max_steps: int = 3, device: str = "cpu") -> dict[str, Any]:
+def run_deeplens_regularized_probe(max_steps: int = 3, device: str = "cpu",
+                                     lens_file: str | None = None,
+                                     backend_id: str | None = None) -> dict[str, Any]:
     result: dict[str, Any] = {
         "status": "succeeded", "evidence_level": "diagnostic_evidence",
         "base_loss": None, "regularized_loss": None, "reg_terms": {},
         "grad_norm_before": 0.0, "grad_norm_after": 0.0,
         "update_accepted": False, "claim_ceiling": "diagnostic_evidence",
+        "requested_lens_file": lens_file,
+        "resolved_lens_file": None,
+        "lens_resolution_source": None,
+        "checked_lens_paths": [],
     }
+    if lens_file is not None:
+        try:
+            from optiresearch.optics.lens_file_resolver import resolve_lens_file
+            resolution = resolve_lens_file(lens_file=lens_file, backend_id=backend_id)
+            result["checked_lens_paths"] = resolution.checked_paths
+            if resolution.exists:
+                result["resolved_lens_file"] = resolution.resolved_path
+                result["lens_resolution_source"] = resolution.source
+        except Exception:
+            pass
     try:
         import torch
         from optiresearch.runtime.lightweight_experiments import (

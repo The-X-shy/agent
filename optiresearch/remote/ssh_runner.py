@@ -162,6 +162,9 @@ class SSHRemoteRunner:
             cwd=shlex.quote(cwd),
             command=shlex.join(command),
         )
+        env_prefix = _build_env_prefix()
+        if env_prefix:
+            remote_command = f"{env_prefix} {remote_command}"
         return [*self._ssh_base(worker), self._target(worker), remote_command]
 
     def _read_remote_job_payload(self, local_job_dir: Path) -> dict[str, Any]:
@@ -243,6 +246,17 @@ class SSHRemoteRunner:
         return f"{worker.username}@{worker.host}"
 
 
+def _build_env_prefix() -> str:
+    """Build an env export prefix for lens resolution on remote workers."""
+    import os
+    parts: list[str] = []
+    for var in ("DEEPLENS_REPO_PATH", "OPTIRESEARCH_COOKE_LENS_FILE"):
+        val = os.getenv(var)
+        if val:
+            parts.append(f"export {var}={shlex.quote(val)}")
+    return " && ".join(parts) if parts else ""
+
+
 def build_job_command(worker: RemoteWorkerSpec, job: RemoteJobSpec) -> list[str]:
     cli_command = {
         "deeplens_source_smoke": "run-deeplens-source-smoke",
@@ -266,7 +280,11 @@ def build_job_command(worker: RemoteWorkerSpec, job: RemoteJobSpec) -> list[str]
         "deeplens_autograd_audit": "run-deeplens-autograd-audit",
         "deeplens_curriculum_probe": "run-deeplens-curriculum-probe",
         "deeplens_regularized_probe": "run-deeplens-regularized-probe",
+        # Phase 59: lens file resolver
+        "resolve_lens_file": "resolve-lens-file",
     }[job.job_type]
+    # Build env prefix for lens resolution on remote workers
+    env_prefix = _build_env_prefix()
     command = [worker.python_executable, "-m", "optiresearch.cli", cli_command]
     args = dict(job.cli_args)
     if job.objective and cli_command in {"run-codesign-loop", "run-hsi-reconstruction", "run-hsi-matrix", "run-autonomous-loop"}:

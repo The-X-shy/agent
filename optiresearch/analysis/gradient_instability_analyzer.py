@@ -76,6 +76,20 @@ def analyze_gradient_instability(
     return diagnosis
 
 
+def _ingest_remote_diagnostic_metrics(sources: list[dict[str, Any]]) -> dict[str, Any]:
+    """Extract remote diagnostic metrics from source data."""
+    diag: dict[str, Any] = {}
+    for s in sources:
+        for key in ("trainable_param_count", "params_with_grad", "graph_connected",
+                     "candidate_update_changes_parameter", "psf_requires_grad",
+                     "loss_requires_grad", "detach_suspected", "grad_norm_max",
+                     "grad_norm_mean", "parameter_count", "trainable_count",
+                     "resolved_lens_file", "lens_resolution_source"):
+            if key in s:
+                diag[key] = s[key]
+    return diag
+
+
 def _extract_metrics(sources: list[dict[str, Any]]) -> GradientInstabilityMetrics:
     configs: list[dict[str, Any]] = []
     for s in sources:
@@ -130,6 +144,15 @@ def _extract_metrics(sources: list[dict[str, Any]]) -> GradientInstabilityMetric
         if c.get("proxy_fallback_used"):
             proxy = True
 
+    # Phase 59: Remote diagnostic metrics
+    remote_diag = _ingest_remote_diagnostic_metrics(sources)
+    if remote_diag:
+        if remote_diag.get("trainable_param_count", 0) > 0 and remote_diag.get("params_with_grad", 0) == 0:
+            if not params_changed:
+                params_changed = False
+        if remote_diag.get("graph_connected") is True and not stable:
+            pass
+
     total_updates = total_accepted + total_rejected
     rollback_rate = total_rollback / max(total_updates, 1)
 
@@ -169,6 +192,34 @@ def _classify_failure_modes(m: GradientInstabilityMetrics) -> list[str]:
     if not modes:
         modes.append("insufficient_metrics")
     return modes
+
+
+def _classify_remote_diagnostic_failure_modes(
+    trainable_param_count: int,
+    params_with_grad: int,
+    graph_connected: bool,
+    candidate_update_changes_parameter: bool,
+) -> list[str]:
+    """Classify failure modes from remote diagnostic metrics."""
+    modes: list[str] = []
+    if trainable_param_count > 0 and params_with_grad == 0:
+        modes.append("gradient_flow_blocked")
+    if params_with_grad > 0 and not candidate_update_changes_parameter:
+        modes.append("optimizer_update_blocked")
+    if graph_connected and not candidate_update_changes_parameter:
+        modes.append("objective_or_update_instability")
+    return modes
+
+
+def _recommend_from_remote_diagnostics(failure_modes: list[str]) -> str:
+    """Recommend strategy based on remote diagnostic failure modes."""
+    if "gradient_flow_blocked" in failure_modes:
+        return "component_first_probe"
+    if "optimizer_update_blocked" in failure_modes:
+        return "surface_freeze_unfreeze"
+    if "objective_or_update_instability" in failure_modes:
+        return "geolens_regularized_probe"
+    return "geolens_curriculum_probe"
 
 
 def _assess_severity(m: GradientInstabilityMetrics, modes: list[str]) -> str:

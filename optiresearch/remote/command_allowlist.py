@@ -186,6 +186,23 @@ ALLOWED_CLI_COMMANDS: dict[str, set[str]] = {
         "--device",
         "--remote-job-id",
     },
+    # Phase 58: remote diagnostic jobs
+    "run-deeplens-trainable-parameter-inspection": {
+        "--lens-file", "--backend-id", "--device", "--max-steps", "--remote-job-id",
+    },
+    "run-deeplens-autograd-audit": {
+        "--lens-file", "--backend-id", "--device", "--remote-job-id",
+    },
+    "run-deeplens-curriculum-probe": {
+        "--lens-file", "--backend-id", "--max-steps", "--device", "--remote-job-id",
+    },
+    "run-deeplens-regularized-probe": {
+        "--lens-file", "--backend-id", "--max-steps", "--device", "--remote-job-id",
+    },
+    # Phase 59: lens file resolver
+    "resolve-lens-file": {
+        "--lens-file", "--backend-id", "--remote-job-id",
+    },
 }
 
 FLAG_OPTIONS = {"--strict-deeplens", "--use-optical-feature-maps", "--strict-native", "--allow-adapter-proxy", "--rollback-on-loss-increase"}

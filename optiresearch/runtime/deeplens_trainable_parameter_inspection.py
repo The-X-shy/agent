@@ -13,15 +13,26 @@ def inspect_deeplens_trainable_parameters(backend_id: str = "deeplens_geolens_ge
         "surface_groups": {}, "top_gradient_parameters": [],
         "zero_gradient_parameters": [], "unstable_gradient_parameters": [],
         "recommended_trainable_subset": [], "recommended_strategy": "",
+        "requested_lens_file": lens_file,
+        "resolved_lens_file": None,
+        "lens_resolution_source": None,
+        "checked_lens_paths": [],
     }
     try:
+        from optiresearch.optics.lens_file_resolver import resolve_lens_file
+        resolution = resolve_lens_file(lens_file=lens_file, backend_id=backend_id)
+        result["checked_lens_paths"] = resolution.checked_paths
+        if not resolution.exists:
+            result["status"] = "unavailable"
+            result["error_code"] = "LENS_FILE_NOT_FOUND"
+            result["diagnosis"] = "lens_file_not_found"
+            return result
+        result["resolved_lens_file"] = resolution.resolved_path
+        result["lens_resolution_source"] = resolution.source
+
         import torch, importlib
         geolens_mod = importlib.import_module("deeplens.geolens")
-        lens_path = _find_lens_file(lens_file)
-        if lens_path is None:
-            result["status"] = "unavailable"
-            return result
-        geolens = geolens_mod.GeoLens(lens_path, device=device)
+        geolens = geolens_mod.GeoLens(resolution.resolved_path, device=device)
         params = list(geolens.parameters())
         result["parameter_count"] = len(params)
         trainable = [p for p in params if p.requires_grad]
@@ -51,13 +62,5 @@ def inspect_deeplens_trainable_parameters(backend_id: str = "deeplens_geolens_ge
             result["recommended_strategy"] = "geolens_curriculum_probe"
     except Exception as e:
         result["status"] = "unavailable"
+        result["error_code"] = str(e)[:200]
     return result
-
-
-def _find_lens_file(name: str) -> str | None:
-    from pathlib import Path
-    for p in [Path(f"/Users/lilin/Desktop/external/DeepLens/datasets/lenses/{name}.json"),
-              Path(f"/mnt/d/external/DeepLens/datasets/lenses/{name}.json")]:
-        if p.exists():
-            return str(p)
-    return None

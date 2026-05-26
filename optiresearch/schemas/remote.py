@@ -27,6 +27,13 @@ RemoteJobType = Literal[
     "deeplens_native_geolens_hsi_codesign",
     "native_geolens_stabilization_sweep",
     "autonomous_loop",
+    # Phase 58: remote diagnostic jobs
+    "deeplens_trainable_parameter_inspection",
+    "deeplens_autograd_audit",
+    "deeplens_curriculum_probe",
+    "deeplens_regularized_probe",
+    # Phase 59: lens file resolver
+    "resolve_lens_file",
 ]
 
 RemoteJobStatus = Literal["pending", "running", "succeeded", "failed", "timeout", "skipped"]

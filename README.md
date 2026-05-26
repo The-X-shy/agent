@@ -424,3 +424,46 @@ Claim boundary:
 - Surface probe success supports component-level native differentiable optimization.
 - Lens-level native optimization requires lens-file load + PSF/image loss backward + parameter change.
 - Native optical-HSI co-design still requires HSI loss to reach an optical parameter.
+
+## Phase 58-59
+
+Remote GeoLens diagnostics with cross-platform lens file resolution.
+
+Commands:
+
+```bash
+# Resolve lens file path
+python -m optiresearch.cli resolve-lens-file \
+  --lens-file auto:cooke --backend-id deeplens_geolens_geometric
+
+# Remote lens resolution
+python -m optiresearch.cli run-remote-resolve-lens-file \
+  --worker-id windows_wsl --lens-file auto:cooke
+
+# Remote trainable parameter inspection
+python -m optiresearch.cli run-remote-deeplens-trainable-parameter-inspection \
+  --worker-id windows_wsl --lens-file auto:cooke --device cpu
+
+# Remote autograd audit
+python -m optiresearch.cli run-remote-deeplens-autograd-audit \
+  --worker-id windows_wsl --lens-file auto:cooke --device cpu
+
+# Remote curriculum probe
+python -m optiresearch.cli run-remote-deeplens-curriculum-probe \
+  --worker-id windows_wsl --max-steps 3 --device cpu
+
+# Remote regularized probe
+python -m optiresearch.cli run-remote-deeplens-regularized-probe \
+  --worker-id windows_wsl --max-steps 3 --device cpu
+
+# Export diagnostic report
+python -m optiresearch.cli export-remote-diagnostic-report \
+  --remote-job-id <remote_job_id>
+```
+
+See `docs/lens_file_resolver.md`, `docs/wsl_lens_file_resolution.md`, `docs/remote_geolens_diagnostics.md`.
+
+Claim boundary:
+- All remote diagnostics capped at `diagnostic_evidence`.
+- No optical improvement claims from diagnostic data.
+- Lens file resolution is infrastructure — no scientific claims.

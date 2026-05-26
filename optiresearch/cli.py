@@ -71,6 +71,11 @@ from optiresearch.runtime.remote_jobs import (
     run_remote_stable_native_lens_hsi_ablation,
     run_remote_deeplens_native_geolens_hsi_codesign,
     run_remote_native_geolens_stabilization_sweep,
+    run_remote_deeplens_trainable_parameter_inspection,
+    run_remote_deeplens_autograd_audit,
+    run_remote_deeplens_curriculum_probe,
+    run_remote_deeplens_regularized_probe,
+    run_remote_resolve_lens_file,
 )
 from optiresearch.reports.remote_execution import export_remote_execution_report
 from optiresearch.reports.native_geolens_hsi_report import export_native_geolens_hsi_report
@@ -481,8 +486,39 @@ def main(argv: list[str] | None = None) -> None:
     remote_geo_sweep.add_argument("--reconstructor", default="differentiable_linear",
                                   choices=["differentiable_linear", "tiny_cnn"])
     remote_geo_sweep.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
+    # Phase 58/59: Remote diagnostic CLI commands
+    remote_tpi = sub.add_parser("run-remote-deeplens-trainable-parameter-inspection",
+                                 help="Run GeoLens trainable parameter inspection on a remote worker.")
+    remote_tpi.add_argument("--worker-id", required=True)
+    remote_tpi.add_argument("--lens-file", default="auto:cooke")
+    remote_tpi.add_argument("--backend-id", default="deeplens_geolens_geometric")
+    remote_tpi.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
+    remote_aa = sub.add_parser("run-remote-deeplens-autograd-audit",
+                                help="Run GeoLens autograd audit on a remote worker.")
+    remote_aa.add_argument("--worker-id", required=True)
+    remote_aa.add_argument("--lens-file", default="auto:cooke")
+    remote_aa.add_argument("--backend-id", default="deeplens_geolens_geometric")
+    remote_aa.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
+    remote_cp = sub.add_parser("run-remote-deeplens-curriculum-probe",
+                                help="Run DeepLens curriculum probe on a remote worker.")
+    remote_cp.add_argument("--worker-id", required=True)
+    remote_cp.add_argument("--max-steps", type=int, default=3)
+    remote_cp.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
+    remote_rp = sub.add_parser("run-remote-deeplens-regularized-probe",
+                                help="Run DeepLens regularized probe on a remote worker.")
+    remote_rp.add_argument("--worker-id", required=True)
+    remote_rp.add_argument("--max-steps", type=int, default=3)
+    remote_rp.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
+    remote_rlf = sub.add_parser("run-remote-resolve-lens-file",
+                                 help="Resolve lens file on a remote worker.")
+    remote_rlf.add_argument("--worker-id", required=True)
+    remote_rlf.add_argument("--lens-file", default="auto:cooke")
+    remote_rlf.add_argument("--backend-id", default=None)
     remote_report = sub.add_parser("export-remote-execution-report", help="Export a remote execution report.")
     remote_report.add_argument("--job-id", required=True)
+    remote_diag_report = sub.add_parser("export-remote-diagnostic-report",
+                                         help="Export a remote diagnostic report with lens resolution.")
+    remote_diag_report.add_argument("--remote-job-id", required=True)
     geolens_hsi_report = sub.add_parser("export-native-geolens-hsi-report", help="Export a native GeoLens HSI report.")
     geolens_hsi_report.add_argument("--run-id", required=True)
     geo_stab_report = sub.add_parser("export-native-geolens-stabilization-report",
@@ -523,6 +559,10 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("export-gradient-instability-report", help="Export gradient instability report.")
     sub.add_parser("list-deeplens-design-strategies", help="List DeepLens design strategies.")
     sub.add_parser("export-deeplens-design-strategy-report", help="Export DeepLens design strategy report.")
+    # Phase 59: Lens file resolver CLI
+    resolve_lens = sub.add_parser("resolve-lens-file", help="Resolve a lens file identifier to a real path.")
+    resolve_lens.add_argument("--lens-file", default="auto:cooke")
+    resolve_lens.add_argument("--backend-id", default=None)
     # Phase 58: Remote diagnostic CLI commands
     for cmd_name in ["run-deeplens-trainable-parameter-inspection", "run-deeplens-autograd-audit",
                       "run-deeplens-curriculum-probe", "run-deeplens-regularized-probe"]:
@@ -1069,6 +1109,10 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "export-remote-execution-report":
         path = export_remote_execution_report(args.job_id)
         print(f"markdown: {path}")
+    elif args.command == "export-remote-diagnostic-report":
+        from optiresearch.reports.remote_diagnostic_report import export_remote_diagnostic_report
+        path = export_remote_diagnostic_report(args.remote_job_id)
+        print(f"markdown: {path}")
     elif args.command == "export-native-geolens-hsi-report":
         path = export_native_geolens_hsi_report(args.run_id)
         print(f"markdown: {path}")
@@ -1117,6 +1161,8 @@ def main(argv: list[str] | None = None) -> None:
         _list_deeplens_design_strategies()
     elif args.command == "export-deeplens-design-strategy-report":
         _export_deeplens_design_strategy_report()
+    elif args.command == "resolve-lens-file":
+        _resolve_lens_file_cmd(args)
     elif args.command == "run-deeplens-trainable-parameter-inspection":
         _run_wsl_diagnostic("trainable_parameter", args)
     elif args.command == "run-deeplens-autograd-audit":
@@ -1156,6 +1202,31 @@ def main(argv: list[str] | None = None) -> None:
             dataset=args.dataset,
             reconstructor=args.reconstructor,
             device=args.device,
+        )
+        _print_remote_payload(payload)
+    elif args.command == "run-remote-deeplens-trainable-parameter-inspection":
+        payload = run_remote_deeplens_trainable_parameter_inspection(
+            args.worker_id, lens_file=args.lens_file, device=args.device,
+        )
+        _print_remote_payload(payload)
+    elif args.command == "run-remote-deeplens-autograd-audit":
+        payload = run_remote_deeplens_autograd_audit(
+            args.worker_id, lens_file=args.lens_file, device=args.device,
+        )
+        _print_remote_payload(payload)
+    elif args.command == "run-remote-deeplens-curriculum-probe":
+        payload = run_remote_deeplens_curriculum_probe(
+            args.worker_id, max_steps=args.max_steps, device=args.device,
+        )
+        _print_remote_payload(payload)
+    elif args.command == "run-remote-deeplens-regularized-probe":
+        payload = run_remote_deeplens_regularized_probe(
+            args.worker_id, max_steps=args.max_steps, device=args.device,
+        )
+        _print_remote_payload(payload)
+    elif args.command == "run-remote-resolve-lens-file":
+        payload = run_remote_resolve_lens_file(
+            args.worker_id, lens_file=args.lens_file, backend_id=args.backend_id,
         )
         _print_remote_payload(payload)
     elif args.command == "list-optical-backends":
@@ -3055,6 +3126,14 @@ def _export_deeplens_design_strategy_report() -> None:
             ])
     out.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"Report: {out}")
+
+
+def _resolve_lens_file_cmd(args: Any) -> None:
+    import json as _json
+    from optiresearch.optics.lens_file_resolver import resolve_lens_file
+
+    result = resolve_lens_file(lens_file=args.lens_file, backend_id=args.backend_id)
+    print(_json.dumps(result.to_dict(), indent=2, default=str))
 
 
 def _run_wsl_diagnostic(diag_type: str, args: Any) -> None:

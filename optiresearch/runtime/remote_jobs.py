@@ -425,6 +425,21 @@ def run_remote_deeplens_regularized_probe(
     ), runner, ingest)
 
 
+def run_remote_resolve_lens_file(
+    worker_id: str,
+    lens_file: str = "auto:cooke",
+    backend_id: str | None = None,
+    runner: Any | None = None,
+    ingest: bool = True,
+) -> dict[str, Any]:
+    return execute_remote_job(worker_id, _job(
+        "resolve_lens_file",
+        "Resolve lens file path on remote worker",
+        {"lens_file": lens_file, "backend_id": backend_id},
+        120, ["resolution_result.json"],
+    ), runner, ingest)
+
+
 def run_remote_native_optimization_inspection(
     worker_id: str,
     runner: Any | None = None,
