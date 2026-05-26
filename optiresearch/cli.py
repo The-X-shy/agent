@@ -523,6 +523,14 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("export-gradient-instability-report", help="Export gradient instability report.")
     sub.add_parser("list-deeplens-design-strategies", help="List DeepLens design strategies.")
     sub.add_parser("export-deeplens-design-strategy-report", help="Export DeepLens design strategy report.")
+    # Phase 58: Remote diagnostic CLI commands
+    for cmd_name in ["run-deeplens-trainable-parameter-inspection", "run-deeplens-autograd-audit",
+                      "run-deeplens-curriculum-probe", "run-deeplens-regularized-probe"]:
+        cmd = sub.add_parser(cmd_name, help=f"Remote diagnostic: {cmd_name}")
+        cmd.add_argument("--lens-file", default="auto:cooke")
+        cmd.add_argument("--device", default="cpu")
+        cmd.add_argument("--max-steps", type=int, default=3)
+        cmd.add_argument("--remote-job-id", default="")
     classify_fail = sub.add_parser("classify-failure", help="Classify a failure from result JSON.")
     classify_fail.add_argument("--result-path", required=True)
     rec_rec = sub.add_parser("recommend-recovery", help="Recommend recovery for a failure.")
@@ -1109,6 +1117,14 @@ def main(argv: list[str] | None = None) -> None:
         _list_deeplens_design_strategies()
     elif args.command == "export-deeplens-design-strategy-report":
         _export_deeplens_design_strategy_report()
+    elif args.command == "run-deeplens-trainable-parameter-inspection":
+        _run_wsl_diagnostic("trainable_parameter", args)
+    elif args.command == "run-deeplens-autograd-audit":
+        _run_wsl_diagnostic("autograd_audit", args)
+    elif args.command == "run-deeplens-curriculum-probe":
+        _run_wsl_diagnostic("curriculum_probe", args)
+    elif args.command == "run-deeplens-regularized-probe":
+        _run_wsl_diagnostic("regularized_probe", args)
     elif args.command == "classify-failure":
         _classify_failure(args.result_path)
     elif args.command == "recommend-recovery":
@@ -3039,6 +3055,39 @@ def _export_deeplens_design_strategy_report() -> None:
             ])
     out.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"Report: {out}")
+
+
+def _run_wsl_diagnostic(diag_type: str, args: Any) -> None:
+    import json as _json
+    from pathlib import Path as _Path
+    result: dict[str, Any] = {"status": "unavailable", "evidence_level": "diagnostic_evidence", "diagnostic_type": diag_type}
+    try:
+        if diag_type == "trainable_parameter":
+            from optiresearch.runtime.deeplens_trainable_parameter_inspection import inspect_deeplens_trainable_parameters
+            result = inspect_deeplens_trainable_parameters(lens_file=args.lens_file, device=args.device)
+        elif diag_type == "autograd_audit":
+            from optiresearch.runtime.deeplens_autograd_audit import run_deeplens_autograd_audit
+            result = run_deeplens_autograd_audit(lens_file=args.lens_file, device=args.device)
+        elif diag_type == "curriculum_probe":
+            from optiresearch.runtime.deeplens_curriculum_probe import run_deeplens_curriculum_probe
+            result = run_deeplens_curriculum_probe(max_steps=args.max_steps, device=args.device)
+        elif diag_type == "regularized_probe":
+            from optiresearch.runtime.deeplens_regularized_probe import run_deeplens_regularized_probe
+            result = run_deeplens_regularized_probe(max_steps=args.max_steps, device=args.device)
+    except Exception as e:
+        result["status"] = "unavailable"
+        result["error"] = str(e)
+    out_dir = _Path("workspace/remote_diagnostics") / (args.remote_job_id or diag_type)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "result.json").write_text(_json.dumps(result, indent=2, default=str), encoding="utf-8")
+    (out_dir / "diagnostic_metrics.json").write_text(_json.dumps({
+        k: result.get(k) for k in ("trainable_param_count", "params_with_grad", "grad_norm_max",
+            "graph_connected", "psf_requires_grad", "loss_requires_grad", "detach_suspected",
+            "parameter_count", "trainable_count", "stages_completed", "curriculum_progress",
+            "base_loss", "regularized_loss", "update_accepted",
+        ) if k in result
+    }, indent=2, default=str), encoding="utf-8")
+    print(_json.dumps({"status": result.get("status"), "evidence_level": result.get("evidence_level")}))
 
 
 def _classify_failure(result_path: str) -> None:

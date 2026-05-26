@@ -365,6 +365,66 @@ def run_remote_native_geolens_stabilization_sweep(
     return execute_remote_job(worker_id, job, runner=runner, ingest=ingest)
 
 
+def run_remote_deeplens_trainable_parameter_inspection(
+    worker_id: str,
+    lens_file: str = "auto:cooke",
+    device: str = "cpu",
+    runner: Any | None = None,
+    ingest: bool = True,
+) -> dict[str, Any]:
+    return execute_remote_job(worker_id, _job(
+        "deeplens_trainable_parameter_inspection",
+        "Inspect GeoLens trainable parameters",
+        {"lens_file": lens_file, "device": device},
+        600, ["inspection_result.json"],
+    ), runner, ingest)
+
+
+def run_remote_deeplens_autograd_audit(
+    worker_id: str,
+    lens_file: str = "auto:cooke",
+    device: str = "cpu",
+    runner: Any | None = None,
+    ingest: bool = True,
+) -> dict[str, Any]:
+    return execute_remote_job(worker_id, _job(
+        "deeplens_autograd_audit",
+        "Audit GeoLens autograd graph",
+        {"lens_file": lens_file, "device": device},
+        600, ["audit_result.json"],
+    ), runner, ingest)
+
+
+def run_remote_deeplens_curriculum_probe(
+    worker_id: str,
+    max_steps: int = 3,
+    device: str = "cpu",
+    runner: Any | None = None,
+    ingest: bool = True,
+) -> dict[str, Any]:
+    return execute_remote_job(worker_id, _job(
+        "deeplens_curriculum_probe",
+        "Run DeepLens curriculum probe",
+        {"max_steps": max_steps, "device": device},
+        300, ["curriculum_result.json"],
+    ), runner, ingest)
+
+
+def run_remote_deeplens_regularized_probe(
+    worker_id: str,
+    max_steps: int = 3,
+    device: str = "cpu",
+    runner: Any | None = None,
+    ingest: bool = True,
+) -> dict[str, Any]:
+    return execute_remote_job(worker_id, _job(
+        "deeplens_regularized_probe",
+        "Run DeepLens regularized probe",
+        {"max_steps": max_steps, "device": device},
+        300, ["reg_probe_result.json"],
+    ), runner, ingest)
+
+
 def run_remote_native_optimization_inspection(
     worker_id: str,
     runner: Any | None = None,
