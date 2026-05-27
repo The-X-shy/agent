@@ -563,6 +563,7 @@ def main(argv: list[str] | None = None) -> None:
     resolve_lens = sub.add_parser("resolve-lens-file", help="Resolve a lens file identifier to a real path.")
     resolve_lens.add_argument("--lens-file", default="auto:cooke")
     resolve_lens.add_argument("--backend-id", default=None)
+    resolve_lens.add_argument("--remote-job-id", default="")
     # Phase 58: Remote diagnostic CLI commands
     for cmd_name in ["run-deeplens-trainable-parameter-inspection", "run-deeplens-autograd-audit",
                       "run-deeplens-curriculum-probe", "run-deeplens-regularized-probe"]:
