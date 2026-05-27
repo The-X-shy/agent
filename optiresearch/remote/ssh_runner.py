@@ -164,7 +164,7 @@ class SSHRemoteRunner:
         )
         env_prefix = _build_env_prefix()
         if env_prefix:
-            remote_command = f"{env_prefix} {remote_command}"
+            remote_command = f"{env_prefix} && {remote_command}"
         return [*self._ssh_base(worker), self._target(worker), remote_command]
 
     def _read_remote_job_payload(self, local_job_dir: Path) -> dict[str, Any]:
