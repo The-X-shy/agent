@@ -3140,6 +3140,7 @@ def _resolve_lens_file_cmd(args: Any) -> None:
     if getattr(args, "remote_job_id", ""):
         out_dir = _Path("workspace/remote_jobs") / args.remote_job_id
         out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "result.json").write_text(_json.dumps(result_dict, indent=2, default=str), encoding="utf-8")
         (out_dir / "remote_job_result.json").write_text(_json.dumps({
             "status": "succeeded",
             "remote_run_id": args.remote_job_id,
@@ -3173,8 +3174,11 @@ def _run_wsl_diagnostic(diag_type: str, args: Any) -> None:
     (out_dir / "result.json").write_text(_json.dumps(result, indent=2, default=str), encoding="utf-8")
     diag_metrics = {
         k: result.get(k) for k in ("trainable_param_count", "params_with_grad", "grad_norm_max",
-            "graph_connected", "psf_requires_grad", "loss_requires_grad", "detach_suspected",
-            "parameter_count", "trainable_count", "stages_completed", "curriculum_progress",
+            "grad_norm_mean", "graph_connected", "psf_requires_grad", "loss_requires_grad",
+            "detach_suspected", "candidate_update_changes_parameter",
+            "parameter_count", "trainable_count", "zero_gradient_parameters",
+            "recommended_trainable_subset", "recommended_strategy",
+            "stages_completed", "curriculum_progress",
             "base_loss", "regularized_loss", "update_accepted",
         ) if k in result
     }
@@ -3182,10 +3186,16 @@ def _run_wsl_diagnostic(diag_type: str, args: Any) -> None:
     if getattr(args, "remote_job_id", ""):
         remote_out = _Path("workspace/remote_jobs") / args.remote_job_id
         remote_out.mkdir(parents=True, exist_ok=True)
+        (remote_out / "result.json").write_text(_json.dumps(result, indent=2, default=str), encoding="utf-8")
+        (remote_out / "diagnostic_metrics.json").write_text(_json.dumps(diag_metrics, indent=2, default=str), encoding="utf-8")
+        lens_fields = {k: result.get(k) for k in (
+            "requested_lens_file", "resolved_lens_file", "lens_resolution_source",
+            "checked_lens_paths", "recommended_next_strategy",
+        ) if k in result}
         (remote_out / "remote_job_result.json").write_text(_json.dumps({
             "status": result.get("status", "succeeded"),
             "remote_run_id": args.remote_job_id,
-            "metrics_summary": {"diagnostic_type": diag_type, **diag_metrics},
+            "metrics_summary": {"diagnostic_type": diag_type, **lens_fields, **diag_metrics},
             "artifact_manifest": {"completeness": "complete", "artifacts": [
                 {"artifact_name": "result.json", "artifact_type": "execution_result"},
                 {"artifact_name": "diagnostic_metrics.json", "artifact_type": "metrics"},
