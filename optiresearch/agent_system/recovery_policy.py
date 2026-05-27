@@ -35,17 +35,25 @@ class RecoveryPolicy:
     def _rank_recoveries(self, fm: FailureMode, context: dict[str, Any]) -> list[dict[str, Any]]:
         rankings: dict[str, int] = {
             "report_negative_result": 10,
-            "switch_backend": 8,
-            "probe_waveoptics_path": 7,
-            "try_alternative_parameterization": 6,
-            "redesign_objective": 5,
-            "request_real_data": 5,
-            "reduce_learning_rate": 4,
-            "enable_trust_region": 4,
-            "reduce_parameter_dimension": 3,
-            "add_accept_tolerance": 3,
-            "switch_optimizer": 2,
+            "report_full_geolens_non_differentiable_path": 10,
+            "component_first_fresnel_probe": 9,
+            "component_first_binary2phase_probe": 9,
+            "diffractive_component_probe": 8,
+            "differentiable_surrogate_psf_parameterization": 7,
+            "surface_parameter_adapter": 7,
+            "switch_backend": 6,
+            "probe_waveoptics_path": 6,
+            "try_alternative_parameterization": 5,
+            "redesign_objective": 4,
+            "request_real_data": 4,
+            "reduce_learning_rate": 3,
+            "enable_trust_region": 3,
+            "reduce_parameter_dimension": 2,
+            "add_accept_tolerance": 2,
+            "switch_optimizer": 1,
             "increase_model_capacity": 1,
+            "full_geolens_direct_update": 0,
+            "repeated_lr_sweep_on_full_geolens": 0,
         }
         ranked = []
         for rec in fm.recommended_recoveries:
@@ -59,6 +67,42 @@ class RecoveryPolicy:
 
     def convert_recovery_to_strategy(self, recovery: str, context: dict[str, Any] | None = None) -> dict[str, Any]:
         strategy_map = {
+            "component_first_fresnel_probe": {
+                "strategy_type": "alternative_parameterization",
+                "action": "probe Fresnel diffractive component with native DeepLens API",
+                "expected_evidence_gain": "medium",
+                "risk": "medium",
+            },
+            "component_first_binary2phase_probe": {
+                "strategy_type": "alternative_parameterization",
+                "action": "probe Binary2Phase component with polynomial order optimization",
+                "expected_evidence_gain": "medium",
+                "risk": "medium",
+            },
+            "diffractive_component_probe": {
+                "strategy_type": "alternative_parameterization",
+                "action": "probe generalized diffractive component with trainable parameters",
+                "expected_evidence_gain": "medium",
+                "risk": "medium",
+            },
+            "differentiable_surrogate_psf_parameterization": {
+                "strategy_type": "alternative_parameterization",
+                "action": "build differentiable surrogate PSF model as optimization proxy",
+                "expected_evidence_gain": "low",
+                "risk": "high",
+            },
+            "surface_parameter_adapter": {
+                "strategy_type": "alternative_parameterization",
+                "action": "wrap GeoLens surface in nn.Module adapter with autograd",
+                "expected_evidence_gain": "low",
+                "risk": "high",
+            },
+            "report_full_geolens_non_differentiable_path": {
+                "strategy_type": "report_negative_result",
+                "action": "document that full GeoLens geometric path is non-differentiable",
+                "expected_evidence_gain": "low",
+                "risk": "low",
+            },
             "try_alternative_parameterization": {
                 "strategy_type": "alternative_parameterization",
                 "action": "run stabilization sweep with DiffractiveLens candidate",
@@ -135,6 +179,12 @@ class RecoveryPolicy:
 
 
 _recovery_explanations: dict[str, str] = {
+    "component_first_fresnel_probe": "Probe the Fresnel diffractive component via native DeepLens API — test if f0 parameter is trainable via autograd",
+    "component_first_binary2phase_probe": "Probe the Binary2Phase component — test polynomial order parameters (order2-order12) with autograd optimization",
+    "diffractive_component_probe": "Probe generalized diffractive component candidates with trainable parameters exposed through standard nn.Module",
+    "differentiable_surrogate_psf_parameterization": "Build a neural surrogate model of GeoLens PSF that is fully differentiable and can serve as an optimization proxy",
+    "surface_parameter_adapter": "Wrap GeoLens surface parameters in a custom nn.Module adapter to expose them through standard parameters() API",
+    "report_full_geolens_non_differentiable_path": "Document the finding that full GeoLens geometric path is non-differentiable as structured negative evidence",
     "try_alternative_parameterization": "Switch to a different optical component parameterization (e.g., DiffractiveLens) that may have a smoother optimization landscape",
     "redesign_objective": "Simplify or change the loss function to reduce gradient sensitivity and improve update stability",
     "switch_backend": "Switch to a different optical backend that may provide more stable gradients",
@@ -146,4 +196,6 @@ _recovery_explanations: dict[str, str] = {
     "enable_trust_region": "Enable trust-region post-step scaling to constrain parameter deltas",
     "add_accept_tolerance": "Allow small loss increases as exploratory updates without rollback",
     "switch_optimizer": "Try a different optimizer that may handle steep landscapes better",
+    "full_geolens_direct_update": "Attempt end-to-end GeoLens parameter update — blocked when autograd is disconnected",
+    "repeated_lr_sweep_on_full_geolens": "Re-run LR sweep on full GeoLens — not recommended when autograd graph is disconnected",
 }

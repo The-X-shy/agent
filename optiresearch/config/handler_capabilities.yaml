@@ -291,6 +291,7 @@ handlers:
     supported_execution_modes:
       - dry_run
       - local
+      - remote_opt_in
     actual_evidence_level: diagnostic_evidence
     max_claim_ceiling: diagnostic_evidence
     synthetic_only: false
@@ -298,9 +299,9 @@ handlers:
     physical_backend: true
     real_data_required: false
     remote_required: false
-    supports_remote: false
+    supports_remote: true
     requires_remote_validation: false
-    remote_evidence_ceiling: ""
+    remote_evidence_ceiling: diagnostic_evidence
     local_evidence_ceiling: diagnostic_evidence
     metrics_supported:
       - trainable_param_count
@@ -328,6 +329,7 @@ handlers:
     supported_execution_modes:
       - dry_run
       - local
+      - remote_opt_in
     actual_evidence_level: diagnostic_evidence
     max_claim_ceiling: diagnostic_evidence
     synthetic_only: false
@@ -335,9 +337,9 @@ handlers:
     physical_backend: true
     real_data_required: false
     remote_required: false
-    supports_remote: false
+    supports_remote: true
     requires_remote_validation: false
-    remote_evidence_ceiling: ""
+    remote_evidence_ceiling: diagnostic_evidence
     local_evidence_ceiling: diagnostic_evidence
     metrics_supported:
       - parameter_count
@@ -363,6 +365,7 @@ handlers:
     supported_execution_modes:
       - dry_run
       - local
+      - remote_opt_in
     actual_evidence_level: diagnostic_evidence
     max_claim_ceiling: diagnostic_evidence
     synthetic_only: true
@@ -370,9 +373,9 @@ handlers:
     physical_backend: false
     real_data_required: false
     remote_required: false
-    supports_remote: false
+    supports_remote: true
     requires_remote_validation: false
-    remote_evidence_ceiling: ""
+    remote_evidence_ceiling: diagnostic_evidence
     local_evidence_ceiling: diagnostic_evidence
     metrics_supported:
       - stages_completed
@@ -397,6 +400,7 @@ handlers:
     supported_execution_modes:
       - dry_run
       - local
+      - remote_opt_in
     actual_evidence_level: diagnostic_evidence
     max_claim_ceiling: diagnostic_evidence
     synthetic_only: true
@@ -404,9 +408,9 @@ handlers:
     physical_backend: false
     real_data_required: false
     remote_required: false
-    supports_remote: false
+    supports_remote: true
     requires_remote_validation: false
-    remote_evidence_ceiling: ""
+    remote_evidence_ceiling: diagnostic_evidence
     local_evidence_ceiling: diagnostic_evidence
     metrics_supported:
       - base_loss
@@ -431,6 +435,7 @@ handlers:
     task_type: component_first_probe
     supported_execution_modes:
       - dry_run
+      - local
     actual_evidence_level: diagnostic_evidence
     max_claim_ceiling: diagnostic_evidence
     synthetic_only: false
@@ -441,7 +446,7 @@ handlers:
     supports_remote: false
     requires_remote_validation: false
     remote_evidence_ceiling: ""
-    local_evidence_ceiling: needs_followup
+    local_evidence_ceiling: native_component_optimization
     metrics_supported: []
     artifacts_supported:
       - component_probe_result.json

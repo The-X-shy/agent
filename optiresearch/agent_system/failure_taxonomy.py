@@ -134,6 +134,81 @@ BUILTIN_FAILURE_MODES: list[FailureMode] = [
         recommended_recoveries=["hyperparameter_sweep", "redesign_objective", "increase_model_capacity"],
         claim_impact="Cannot claim improvement",
     ),
+    # Phase 61: GeoLens autograd diagnostic findings
+    FailureMode(
+        failure_id="no_standard_trainable_parameters",
+        category="autograd_break",
+        description="GeoLens does not expose trainable parameters via standard nn.Module.parameters()",
+        evidence_patterns={
+            "parameter_count": 0,
+            "trainable_param_count": 0,
+            "status": "succeeded",
+        },
+        severity="high",
+        likely_causes=[
+            "GeoLens uses non-standard parameter storage",
+            "PSF computation is not wrapped as nn.Module",
+            "GeoLens surface parameters are not exposed through parameters()",
+        ],
+        recommended_recoveries=[
+            "component_first_fresnel_probe",
+            "component_first_binary2phase_probe",
+            "differentiable_surrogate_psf_parameterization",
+            "surface_parameter_adapter",
+            "report_full_geolens_non_differentiable_path",
+        ],
+        claim_impact="Direct full GeoLens optical optimization claim is NOT supported",
+    ),
+    FailureMode(
+        failure_id="autograd_graph_disconnected",
+        category="autograd_break",
+        description="GeoLens PSF output and loss are not connected through autograd graph",
+        evidence_patterns={
+            "graph_connected": False,
+            "psf_requires_grad": False,
+            "loss_requires_grad": False,
+            "status": "succeeded",
+        },
+        severity="high",
+        likely_causes=[
+            "PSF computation uses non-differentiable operations",
+            "Detach or no_grad context in GeoLens forward",
+            "PSF is computed outside PyTorch autograd",
+        ],
+        recommended_recoveries=[
+            "component_first_fresnel_probe",
+            "component_first_binary2phase_probe",
+            "diffractive_component_probe",
+            "differentiable_surrogate_psf_parameterization",
+            "report_full_geolens_non_differentiable_path",
+        ],
+        claim_impact="Cannot claim differentiable GeoLens optimization",
+    ),
+    FailureMode(
+        failure_id="non_differentiable_geolens_psf_path",
+        category="gradient_instability",
+        description="GeoLens geometric PSF path is confirmed non-differentiable — optimization requires component-level or surrogate route",
+        evidence_patterns={
+            "graph_connected": False,
+            "parameter_count": 0,
+            "status": "succeeded",
+        },
+        severity="critical",
+        likely_causes=[
+            "geolens.psf_geometric uses ray tracing, not differentiable rendering",
+            "No autograd path from PSF output back to lens parameters",
+            "Full GeoLens is designed for analysis, not gradient-based optimization",
+        ],
+        recommended_recoveries=[
+            "component_first_fresnel_probe",
+            "component_first_binary2phase_probe",
+            "diffractive_component_probe",
+            "differentiable_surrogate_psf_parameterization",
+            "surface_parameter_adapter",
+            "report_full_geolens_non_differentiable_path",
+        ],
+        claim_impact="Full GeoLens direct update is BLOCKED; component-level or surrogate path required",
+    ),
 ]
 
 

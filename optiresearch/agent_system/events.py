@@ -34,6 +34,12 @@ EventType = Literal[
     "remote_validation_passed",
     "remote_validation_failed",
     "artifact_ingested",
+    "diagnosis_started",
+    "diagnosis_completed",
+    "diagnosis_failed",
+    "diagnostic_design_selected",
+    "diagnostic_remote_execution_started",
+    "diagnostic_remote_execution_completed",
 ]
 
 SourceModule = Literal[
@@ -48,6 +54,9 @@ SourceModule = Literal[
     "reporter",
     "self_test",
     "benchmark",
+    "analyzer",
+    "diagnosis_engine",
+    "diagnostic_runtime",
 ]
 
 Severity = Literal["info", "warning", "error", "critical"]

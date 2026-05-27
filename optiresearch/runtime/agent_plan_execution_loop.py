@@ -292,21 +292,34 @@ def run_agent_plan_execution(spec: AgentPlanExecutionSpec) -> AgentPlanExecution
                     payload={"design_id": d.design_id, "handler_id": handler_id}))
 
                 try:
-                    remote_result = _execute_remote_design(d, spec.remote_worker_id)
+                    if _is_diagnostic_design(d):
+                        bus.publish(AgentEvent.create(
+                            "diagnostic_remote_execution_started", "diagnostic_runtime",
+                            payload={"design_id": d.design_id, "worker_id": spec.remote_worker_id}))
+                        remote_result = _execute_remote_diagnostic_design(d, spec.remote_worker_id)
+                        bus.publish(AgentEvent.create(
+                            "diagnostic_remote_execution_completed" if remote_result.get("status") == "completed" else "diagnosis_failed",
+                            "diagnostic_runtime",
+                            payload=remote_result,
+                            severity="info" if remote_result.get("status") == "completed" else "warning",
+                        ))
+                    else:
+                        remote_result = _execute_remote_design(d, spec.remote_worker_id)
                     bus.publish(AgentEvent.create(
                         "remote_execution_completed" if remote_result.get("status") == "completed" else "remote_execution_failed",
                         "controller",
                         payload=remote_result,
                         severity="info" if remote_result.get("status") == "completed" else "warning",
                     ))
-                    bus.publish(AgentEvent.create(
-                        "remote_validation_passed" if remote_result.get("remote_validation_passed") else "remote_validation_failed",
-                        "controller",
-                        payload=remote_result,
-                        severity="info" if remote_result.get("remote_validation_passed") else "warning",
-                        related_run_id=remote_result.get("run_id"),
-                        related_job_id=remote_result.get("remote_job_id"),
-                    ))
+                    if not _is_diagnostic_design(d):
+                        bus.publish(AgentEvent.create(
+                            "remote_validation_passed" if remote_result.get("remote_validation_passed") else "remote_validation_failed",
+                            "controller",
+                            payload=remote_result,
+                            severity="info" if remote_result.get("remote_validation_passed") else "warning",
+                            related_run_id=remote_result.get("run_id"),
+                            related_job_id=remote_result.get("remote_job_id"),
+                        ))
                     if remote_result.get("artifacts"):
                         bus.publish(AgentEvent.create(
                             "artifact_ingested",
@@ -528,7 +541,7 @@ def run_agent_plan_execution(spec: AgentPlanExecutionSpec) -> AgentPlanExecution
 def _is_diagnostic_design(d: ExperimentDesignCandidate) -> bool:
     did = d.design_id
     return any(kw in did for kw in (
-        "autograd_audit", "trainable_parameter", "curriculum_probe",
+        "autograd", "trainable_parameter", "curriculum_probe",
         "regularized_probe", "component_first", "surface_freeze_unfreeze",
         "verify_trainable", "component_level_geolens",
     ))
@@ -605,6 +618,81 @@ def _execute_diagnostic_design(d: ExperimentDesignCandidate) -> dict[str, Any]:
             "Component-first probe requires DeepLens Fresnel/Binary2Phase backend — not available on macOS.",
         )
     return _unsupported_execution_result(d, "UNKNOWN_DIAGNOSTIC_DESIGN", f"No handler for {d.design_id}")
+
+
+def _execute_remote_diagnostic_design(d: ExperimentDesignCandidate, worker_id: str) -> dict[str, Any]:
+    """Execute a diagnostic design on a remote WSL worker.
+
+    Maps diagnostic design_id keywords to remote job functions that dispatch
+    via SSH to the WSL worker, then downloads and ingests results.
+    """
+    did = d.design_id
+    from optiresearch.runtime import remote_jobs
+
+    if "autograd" in did:
+        payload = remote_jobs.run_remote_deeplens_autograd_audit(
+            worker_id, lens_file="auto:cooke", device="cpu",
+        )
+    elif "trainable_parameter" in did or "verify_trainable" in did or "surface_freeze" in did:
+        payload = remote_jobs.run_remote_deeplens_trainable_parameter_inspection(
+            worker_id, lens_file="auto:cooke", device="cpu",
+        )
+    elif "curriculum_probe" in did:
+        payload = remote_jobs.run_remote_deeplens_curriculum_probe(
+            worker_id, max_steps=3, device="cpu",
+        )
+    elif "regularized_probe" in did:
+        payload = remote_jobs.run_remote_deeplens_regularized_probe(
+            worker_id, max_steps=3, device="cpu",
+        )
+    else:
+        return _unsupported_execution_result(
+            d, "NO_REMOTE_DIAGNOSTIC_HANDLER",
+            f"No remote diagnostic handler for design: {did}",
+        )
+
+    result = payload["result"]
+    metrics = result.metrics_summary if hasattr(result, "metrics_summary") else {}
+    status = "completed" if result.status == "succeeded" else "failed"
+
+    return {
+        "status": status,
+        "outcome": "remote_diagnostic_execution" if status == "completed" else "remote_diagnostic_failed",
+        "design_id": d.design_id,
+        "task_type": d.task_type if hasattr(d, "task_type") else "diagnostic_probe",
+        "backend_id": d.backend_id if hasattr(d, "backend_id") else "deeplens_geolens_geometric",
+        "evidence_level": "diagnostic_evidence",
+        "handler_id": getattr(d, "handler_id", "") or _handler_id_for_design(d),
+        "execution_target": "remote_wsl",
+        "remote_worker_id": worker_id,
+        "remote_job_id": result.job_id,
+        "remote_validation_passed": False,
+        "execution_fidelity": "deeplens_native_geometric",
+        "proxy_fallback_used": False,
+        "deeplens_native_psf_path": "geolens.psf_geometric",
+        "full_wave_optics": False,
+        "phase_to_fft_proxy_used": False,
+        "diagnostic_type": metrics.get("diagnostic_type", did),
+        "metrics": metrics,
+        "artifacts": [
+            str(Path(result.local_output_dir) / result.job_id / fn)
+            for fn in ("result.json", "diagnostic_metrics.json")
+        ] if result.local_output_dir else [],
+        "artifact_return_path": result.local_output_dir or "",
+        "artifact_ids": [],
+        "evidence_artifact_ids": [],
+        "artifact_manifest_path": "",
+        "artifact_manifest_complete": False,
+        "artifact_ingestion_status": "",
+        "sha256_verified": False,
+        "errors": [],
+        "caveats": [
+            "Diagnostic evidence only — does not confirm optical design improvement",
+            f"Executed on remote WSL worker: {worker_id}",
+        ],
+        "run_id": result.remote_run_id or result.job_id,
+        "error_code": result.error_code,
+    }
 
 
 def _execute_design(d: ExperimentDesignCandidate) -> dict[str, Any]:

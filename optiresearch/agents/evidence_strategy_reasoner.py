@@ -21,6 +21,12 @@ StrategyType = Literal[
     "report_negative_result",
     "optimizer_change",
     "parameter_reduction",
+    "autograd_audit",
+    "parameter_inspection",
+    "component_inspection",
+    "run_probe_only",
+    "component_first",
+    "surrogate_parameterization",
 ]
 
 
@@ -37,6 +43,10 @@ class CandidateStrategy:
     required_backend: str = ""
     proposed_experiment_templates: list[str] = field(default_factory=list)
     claim_ceiling: str = ""
+    blocked_route: str = ""
+    pivot_reason: str = ""
+    required_component_backend: str = ""
+    expected_claim_ceiling: str = ""
 
 
 class EvidenceStrategyReasoner:
@@ -258,6 +268,76 @@ class EvidenceStrategyReasoner:
                 claim_ceiling="diagnostic_evidence",
             ))
 
+        # Phase 61: GeoLens autograd diagnostic findings — pivot to component-level
+        if "no_standard_trainable_parameters" in failure_modes:
+            self._strategies.append(CandidateStrategy(
+                strategy_id="component_first_fresnel_probe",
+                strategy_type="component_first",
+                rationale="GeoLens has no standard trainable parameters — pivot to Fresnel diffractive component which exposes f0 as trainable via nn.Module.",
+                expected_evidence_gain="medium", expected_metric_gain="low",
+                risk="medium", cost="medium", required_skills=["deeplens_component_first_probe"],
+                required_backend="deeplens_fresnel_component",
+                claim_ceiling="diagnostic_evidence",
+                blocked_route="full_geolens_direct_update",
+                pivot_reason="GeoLens does not expose trainable parameters through standard nn.Module.parameters()",
+                required_component_backend="deeplens_fresnel_component",
+                expected_claim_ceiling="native_component_optimization",
+            ))
+
+        if "autograd_graph_disconnected" in failure_modes:
+            self._strategies.extend([
+                CandidateStrategy(
+                    strategy_id="component_first_binary2phase_probe",
+                    strategy_type="component_first",
+                    rationale="GeoLens autograd graph is disconnected — pivot to Binary2Phase component with polynomial order optimization (order2-order12).",
+                    expected_evidence_gain="medium", expected_metric_gain="low",
+                    risk="medium", cost="medium", required_skills=["deeplens_component_first_probe"],
+                    required_backend="deeplens_binary2phase_component",
+                    claim_ceiling="diagnostic_evidence",
+                    blocked_route="full_geolens_direct_update",
+                    pivot_reason="GeoLens PSF and loss are not connected through autograd graph",
+                    required_component_backend="deeplens_binary2phase_component",
+                    expected_claim_ceiling="native_component_optimization",
+                ),
+                CandidateStrategy(
+                    strategy_id="differentiable_surrogate_psf",
+                    strategy_type="surrogate_parameterization",
+                    rationale="GeoLens autograd is disconnected — consider building a differentiable neural surrogate of the PSF.",
+                    expected_evidence_gain="low", expected_metric_gain="low",
+                    risk="high", cost="high", required_skills=["backend_probe"],
+                    claim_ceiling="diagnostic_evidence",
+                    blocked_route="full_geolens_direct_update",
+                    pivot_reason="Surrogate model needed when native autograd is unavailable",
+                ),
+            ])
+
+        if "non_differentiable_geolens_psf_path" in failure_modes:
+            self._strategies.extend([
+                CandidateStrategy(
+                    strategy_id="component_first_fresnel_probe",
+                    strategy_type="component_first",
+                    rationale="Full GeoLens PSF path is confirmed non-differentiable — probe Fresnel component as alternative.",
+                    expected_evidence_gain="medium", expected_metric_gain="low",
+                    risk="medium", cost="medium", required_skills=["deeplens_component_first_probe"],
+                    required_backend="deeplens_fresnel_component",
+                    claim_ceiling="diagnostic_evidence",
+                    blocked_route="full_geolens_direct_update",
+                    pivot_reason="geolens.psf_geometric uses ray tracing, not differentiable rendering",
+                    required_component_backend="deeplens_fresnel_component",
+                    expected_claim_ceiling="native_component_optimization",
+                ),
+                CandidateStrategy(
+                    strategy_id="surface_parameter_adapter",
+                    strategy_type="surrogate_parameterization",
+                    rationale="Wrap GeoLens surface parameters in custom nn.Module adapter for autograd compatibility.",
+                    expected_evidence_gain="low", expected_metric_gain="low",
+                    risk="high", cost="high", required_skills=["backend_probe"],
+                    claim_ceiling="diagnostic_evidence",
+                    blocked_route="full_geolens_direct_update",
+                    pivot_reason="Adapter needed to bridge GeoLens parameters into autograd",
+                ),
+            ])
+
         # Always include report option
         if severity in ("high", "critical"):
             self._strategies.append(CandidateStrategy(
@@ -313,11 +393,16 @@ class EvidenceStrategyReasoner:
             return None
         priority_order = [
             "report_negative_result",
-            "objective_redesign",
+            "component_first",
             "alternative_parameterization",
+            "surrogate_parameterization",
+            "objective_redesign",
             "backend_switch",
             "waveoptics_probe",
             "parameter_reduction",
+            "component_inspection",
+            "autograd_audit",
+            "parameter_inspection",
             "real_data_request",
             "optimizer_change",
         ]

@@ -497,8 +497,46 @@ class SkillRuntimeV2:
                 "update_accepted": result["update_accepted"], "reg_terms": result["reg_terms"]}
 
     def _dispatch_deeplens_component_first(self, inputs: dict[str, Any]) -> dict[str, Any]:
-        return {"status": "needs_followup", "evidence_level": "diagnostic_evidence",
-                "message": "Component-first probe requires DeepLens component backend (fresnel/binary2phase) — not available"}
+        component = inputs.get("component", "fresnel")
+        surface_map = {"fresnel": "Fresnel", "binary2phase": "Binary2Phase", "diffractive": "Fresnel"}
+        surface_class = surface_map.get(component, "Fresnel")
+        try:
+            from optiresearch.schemas.surface_optimization import SurfaceOptimizationProbeSpec
+            from optiresearch.runtime.deeplens_surface_optimization_probe import run_surface_optimization_probe
+            objective = inputs.get("objective", "minimize_phase_variance")
+            spec = SurfaceOptimizationProbeSpec(
+                probe_id=f"component_first_{surface_class.lower()}_{hash(objective) & 0xFFFF:04x}",
+                surface_class=surface_class,
+                objective=objective,
+                device=inputs.get("device", "cpu"),
+                max_steps=inputs.get("max_steps", 3),
+                learning_rate=inputs.get("learning_rate", 1e-4),
+            )
+            result = run_surface_optimization_probe(spec)
+            return {
+                "status": "succeeded" if result.differentiable else "needs_followup",
+                "evidence_level": "diagnostic_evidence",
+                "component_type": surface_class,
+                "parameter_count": len(result.trainable_params),
+                "params_with_grad": len(result.trainable_params) if result.autograd_graph_exists else 0,
+                "grad_norm_max": result.gradient_norm,
+                "parameter_changed": result.parameters_changed,
+                "loss_before": result.loss_before,
+                "loss_after": result.loss_after,
+                "claim_ceiling": "native_component_optimization" if result.parameters_changed else "diagnostic_evidence",
+                "caveats": result.caveats,
+                "errors": [result.error_message] if result.error_message else [],
+                "checked_component": surface_class,
+            }
+        except ImportError as e:
+            return {
+                "status": "needs_followup",
+                "evidence_level": "diagnostic_evidence",
+                "error_code": "DEEPLENS_COMPONENT_API_UNAVAILABLE",
+                "message": f"DeepLens component API not available: {e}",
+                "checked_component_candidates": list(surface_map.values()),
+                "claim_ceiling": "diagnostic_evidence",
+            }
 
 
 def _hash_inputs(inputs: dict[str, Any]) -> str:
