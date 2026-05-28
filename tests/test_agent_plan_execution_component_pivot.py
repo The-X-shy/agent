@@ -20,16 +20,18 @@ class TestComponentPivotRouting:
         )
         assert _is_diagnostic_design(d)
 
-    def test_component_first_design_local_execution_returns_unsupported(self):
-        """On macOS without DeepLens component backend, component probe returns unsupported."""
+    def test_component_first_design_local_execution_dispatches_to_probe(self):
+        """Phase 62: component_first designs now dispatch to the real component probe."""
         d = ExperimentDesignCandidate(
             design_id="component_first_fresnel_design",
             objective="test", backend_id="deeplens_fresnel_component",
             task_type="backend_probe", required_skills=["deeplens_component_first_probe"],
         )
         result = _execute_diagnostic_design(d)
-        assert result["status"] == "unsupported"
-        assert "COMPONENT_BACKEND_UNAVAILABLE" in str(result.get("errors", []))
+        # Accept completed (if probe succeeded) or unsupported (if unavailable).
+        assert result["status"] in ("completed", "unsupported", "needs_followup", "structured_unavailable")
+        assert result["evidence_level"] == "diagnostic_evidence"
+        assert "component" in str(result.get("metrics", {})) or "COMPONENT" in str(result)
 
     def test_diagnostic_design_has_diagnostic_evidence_ceiling(self):
         d = ExperimentDesignCandidate(

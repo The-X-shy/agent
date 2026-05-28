@@ -34,6 +34,9 @@ RemoteJobType = Literal[
     "deeplens_regularized_probe",
     # Phase 59: lens file resolver
     "resolve_lens_file",
+    # Phase 62: component backend validation
+    "deeplens_component_probe",
+    "deeplens_component_discovery",
 ]
 
 RemoteJobStatus = Literal["pending", "running", "succeeded", "failed", "timeout", "skipped"]

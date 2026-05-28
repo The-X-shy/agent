@@ -538,6 +538,21 @@ def run_agent_plan_execution(spec: AgentPlanExecutionSpec) -> AgentPlanExecution
     return result
 
 
+def _extract_component_from_design(d: ExperimentDesignCandidate) -> str:
+    """Extract component name from design spec_payload or design_id."""
+    component = d.spec_payload.get("component", "") if d.spec_payload else ""
+    if component:
+        return component
+    did = d.design_id.lower()
+    if "fresnel" in did:
+        return "fresnel"
+    if "binary2phase" in did:
+        return "binary2phase"
+    if "diffractive" in did:
+        return "diffractive"
+    return "fresnel"
+
+
 def _is_diagnostic_design(d: ExperimentDesignCandidate) -> bool:
     did = d.design_id
     return any(kw in did for kw in (
@@ -613,10 +628,48 @@ def _execute_diagnostic_design(d: ExperimentDesignCandidate) -> dict[str, Any]:
             "caveats": ["Regularization probe — not a validated optical design improvement"],
         }
     if "component_first" in did or "component_level" in did:
-        return _unsupported_execution_result(
-            d, "COMPONENT_BACKEND_UNAVAILABLE",
-            "Component-first probe requires DeepLens Fresnel/Binary2Phase backend — not available on macOS.",
-        )
+        component = _extract_component_from_design(d)
+        try:
+            from optiresearch.schemas.component_probe import ComponentProbeSpec, make_component_probe_id
+            from optiresearch.runtime.deeplens_component_first_probe import run_deeplens_component_probe
+            spec = ComponentProbeSpec(
+                probe_id=make_component_probe_id(component, "parameter_sanity_check"),
+                component=component,
+                objective="parameter_sanity_check",
+                max_steps=5,
+                device="cpu",
+            )
+            result = run_deeplens_component_probe(spec)
+        except Exception as exc:
+            return _unsupported_execution_result(
+                d, "COMPONENT_PROBE_EXECUTION_FAILED",
+                f"Component probe execution failed: {exc}",
+            )
+        return {
+            "status": "completed" if result.status == "succeeded" else result.status,
+            "outcome": "diagnostic_execution",
+            "design_id": d.design_id, "task_type": d.task_type,
+            "backend_id": result.backend_id,
+            "evidence_level": result.evidence_level,
+            "metrics": {
+                "component": result.component,
+                "surface_class": result.surface_class,
+                "differentiable": result.differentiable,
+                "trainable_param_count": result.trainable_param_count,
+                "params_with_grad": result.params_with_grad,
+                "parameters_changed": result.parameters_changed,
+                "gradient_norm": result.gradient_norm,
+                "loss_before": result.loss_before,
+                "loss_after": result.loss_after,
+                "claim_ceiling": result.claim_ceiling,
+                "error_code": result.error_code,
+            },
+            "artifacts": [], "errors": [],
+            "caveats": [
+                "Component probe — not a validated optical design improvement",
+                "Component-level evidence only — does not confirm lens-level optimization",
+            ],
+        }
     return _unsupported_execution_result(d, "UNKNOWN_DIAGNOSTIC_DESIGN", f"No handler for {d.design_id}")
 
 
@@ -644,6 +697,12 @@ def _execute_remote_diagnostic_design(d: ExperimentDesignCandidate, worker_id: s
     elif "regularized_probe" in did:
         payload = remote_jobs.run_remote_deeplens_regularized_probe(
             worker_id, max_steps=3, device="cpu",
+        )
+    elif "component_first" in did or "component_level" in did:
+        component = _extract_component_from_design(d)
+        payload = remote_jobs.run_remote_deeplens_component_probe(
+            worker_id, component=component, objective="parameter_sanity_check",
+            max_steps=5, device="cpu",
         )
     else:
         return _unsupported_execution_result(

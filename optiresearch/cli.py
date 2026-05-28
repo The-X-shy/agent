@@ -76,6 +76,8 @@ from optiresearch.runtime.remote_jobs import (
     run_remote_deeplens_curriculum_probe,
     run_remote_deeplens_regularized_probe,
     run_remote_resolve_lens_file,
+    run_remote_deeplens_component_probe,
+    run_remote_deeplens_component_discovery,
 )
 from optiresearch.reports.remote_execution import export_remote_execution_report
 from optiresearch.reports.native_geolens_hsi_report import export_native_geolens_hsi_report
@@ -514,6 +516,21 @@ def main(argv: list[str] | None = None) -> None:
     remote_rlf.add_argument("--worker-id", required=True)
     remote_rlf.add_argument("--lens-file", default="auto:cooke")
     remote_rlf.add_argument("--backend-id", default=None)
+    # Phase 62: Remote component probe and discovery
+    remote_comp_probe = sub.add_parser("run-remote-deeplens-component-probe",
+                                        help="Run DeepLens component optimization probe on a remote worker.")
+    remote_comp_probe.add_argument("--worker-id", required=True)
+    remote_comp_probe.add_argument("--component", required=True,
+                                    choices=["fresnel", "binary2phase", "diffractive"])
+    remote_comp_probe.add_argument("--objective", default="parameter_sanity_check")
+    remote_comp_probe.add_argument("--max-steps", type=int, default=5)
+    remote_comp_probe.add_argument("--learning-rate", type=float, default=1e-3)
+    remote_comp_probe.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
+    remote_comp_disc = sub.add_parser("run-remote-discover-deeplens-components",
+                                       help="Discover DeepLens component backends on a remote worker.")
+    remote_comp_disc.add_argument("--worker-id", required=True)
+    remote_comp_disc.add_argument("--components", default="fresnel,binary2phase,diffractive")
+    remote_comp_disc.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
     remote_report = sub.add_parser("export-remote-execution-report", help="Export a remote execution report.")
     remote_report.add_argument("--job-id", required=True)
     remote_diag_report = sub.add_parser("export-remote-diagnostic-report",
@@ -524,6 +541,10 @@ def main(argv: list[str] | None = None) -> None:
     geo_stab_report = sub.add_parser("export-native-geolens-stabilization-report",
                                      help="Export a native GeoLens stabilization report.")
     geo_stab_report.add_argument("--sweep-id", required=True)
+    # Phase 62: component probe report
+    comp_probe_report = sub.add_parser("export-component-probe-report",
+                                        help="Export a component probe report.")
+    comp_probe_report.add_argument("--remote-job-id", required=True)
 
     # ===================== Phase 36 CLI =====================
     sub.add_parser("list-agent-events", help="List all agent events from the event bus.")
@@ -572,6 +593,20 @@ def main(argv: list[str] | None = None) -> None:
         cmd.add_argument("--device", default="cpu")
         cmd.add_argument("--max-steps", type=int, default=3)
         cmd.add_argument("--remote-job-id", default="")
+    # Phase 62: component probe CLI commands
+    comp_probe = sub.add_parser("run-deeplens-component-probe",
+                                 help="Run DeepLens component optimization probe (Fresnel/Binary2Phase).")
+    comp_probe.add_argument("--component", required=True,
+                            choices=["fresnel", "binary2phase", "diffractive"])
+    comp_probe.add_argument("--objective", default="parameter_sanity_check")
+    comp_probe.add_argument("--max-steps", type=int, default=5)
+    comp_probe.add_argument("--learning-rate", type=float, default=1e-3)
+    comp_probe.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
+    comp_probe.add_argument("--remote-job-id", default="")
+    comp_disc = sub.add_parser("discover-deeplens-components",
+                                help="Discover importable DeepLens component backends.")
+    comp_disc.add_argument("--components", default="fresnel,binary2phase,diffractive")
+    comp_disc.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
     classify_fail = sub.add_parser("classify-failure", help="Classify a failure from result JSON.")
     classify_fail.add_argument("--result-path", required=True)
     rec_rec = sub.add_parser("recommend-recovery", help="Recommend recovery for a failure.")
@@ -1120,6 +1155,10 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "export-native-geolens-stabilization-report":
         path = _export_native_geolens_stabilization_report(args.sweep_id)
         print(f"markdown: {path}")
+    elif args.command == "export-component-probe-report":
+        from optiresearch.reports.component_probe_report import export_component_probe_report
+        path = export_component_probe_report(args.remote_job_id)
+        print(f"markdown: {path}")
     # ---- Phase 36 handlers ----
     elif args.command == "list-agent-events":
         _list_agent_events()
@@ -1172,6 +1211,10 @@ def main(argv: list[str] | None = None) -> None:
         _run_wsl_diagnostic("curriculum_probe", args)
     elif args.command == "run-deeplens-regularized-probe":
         _run_wsl_diagnostic("regularized_probe", args)
+    elif args.command == "run-deeplens-component-probe":
+        _run_deeplens_component_probe(args)
+    elif args.command == "discover-deeplens-components":
+        _run_deeplens_component_discovery(args)
     elif args.command == "classify-failure":
         _classify_failure(args.result_path)
     elif args.command == "recommend-recovery":
@@ -1228,6 +1271,18 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "run-remote-resolve-lens-file":
         payload = run_remote_resolve_lens_file(
             args.worker_id, lens_file=args.lens_file, backend_id=args.backend_id,
+        )
+        _print_remote_payload(payload)
+    elif args.command == "run-remote-deeplens-component-probe":
+        payload = run_remote_deeplens_component_probe(
+            args.worker_id, component=args.component, objective=args.objective,
+            max_steps=args.max_steps, learning_rate=args.learning_rate,
+            device=args.device,
+        )
+        _print_remote_payload(payload)
+    elif args.command == "run-remote-discover-deeplens-components":
+        payload = run_remote_deeplens_component_discovery(
+            args.worker_id, components=args.components, device=args.device,
         )
         _print_remote_payload(payload)
     elif args.command == "list-optical-backends":
@@ -1979,6 +2034,111 @@ def _run_deeplens_surface_optimization_probe(args: Any) -> None:
                 "optimizer_step_executed": result.metadata.get("optimizer_step_executed"),
             },
         )
+
+
+def _run_deeplens_component_probe(args: Any) -> None:
+    from optiresearch.schemas.component_probe import ComponentProbeSpec, make_component_probe_id
+    from optiresearch.runtime.deeplens_component_first_probe import run_deeplens_component_probe
+    import json as _json
+
+    spec = ComponentProbeSpec(
+        probe_id=make_component_probe_id(args.component, args.objective),
+        component=args.component,
+        objective=args.objective,
+        max_steps=args.max_steps,
+        learning_rate=args.learning_rate,
+        device=args.device,
+        save_artifacts=True,
+    )
+    result = run_deeplens_component_probe(spec)
+    print(_json.dumps(result.model_dump(mode="json"), indent=2, default=str))
+
+    if getattr(args, "remote_job_id", ""):
+        output_dir = Path("workspace/remote_jobs") / args.remote_job_id
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "result.json").write_text(
+            _json.dumps(result.model_dump(mode="json"), indent=2, default=str), encoding="utf-8"
+        )
+        (output_dir / "component_probe_metrics.json").write_text(_json.dumps({
+            "component": result.component,
+            "surface_class": result.surface_class,
+            "status": result.status,
+            "differentiable": result.differentiable,
+            "parameters_changed": result.parameters_changed,
+            "trainable_param_count": result.trainable_param_count,
+            "params_with_grad": result.params_with_grad,
+            "gradient_norm": result.gradient_norm,
+            "loss_before": result.loss_before,
+            "loss_after": result.loss_after,
+            "evidence_level": result.evidence_level,
+            "claim_ceiling": result.claim_ceiling,
+            "error_code": result.error_code,
+        }, indent=2, default=str), encoding="utf-8")
+        (output_dir / "artifact_manifest.json").write_text(_json.dumps({
+            "schema_version": "0.1", "job_id": args.remote_job_id,
+            "completeness": "complete", "artifacts": [
+                {"artifact_name": "result.json", "artifact_type": "execution_result",
+                 "evidence_role": "component_probe_metric"},
+                {"artifact_name": "component_probe_metrics.json",
+                 "artifact_type": "component_probe_metric", "evidence_role": "component_probe_metric"},
+            ],
+        }, indent=2, default=str), encoding="utf-8")
+        export_remote_job_outputs(
+            args.remote_job_id,
+            "deeplens_component_probe",
+            {**result.model_dump(mode="json"), "backend": "deeplens"},
+            [output_dir] if output_dir.exists() else [],
+            {
+                "job_type": "deeplens_component_probe",
+                "backend": "deeplens",
+                "evidence_domain": "deeplens_native_optimization",
+                "native_optimization_level": "component",
+                "component": result.component,
+                "surface_class": result.surface_class,
+                "status": result.status,
+                "differentiable": result.differentiable,
+                "parameters_changed": result.parameters_changed,
+                "gradient_norm": result.gradient_norm,
+            },
+        )
+
+
+def _run_deeplens_component_discovery(args: Any) -> None:
+    from optiresearch.optics.deeplens_component_discovery import discover_deeplens_components
+    import json as _json
+
+    components = [c.strip() for c in (args.components or "fresnel,binary2phase,diffractive").split(",")]
+    results = discover_deeplens_components(components=components, device=args.device)
+    print(_json.dumps({
+        "deeplens_available": results.deeplens_available,
+        "deeplens_version": results.deeplens_version,
+        "component_candidates": results.component_candidates,
+        "available_components": results.available_components,
+        "unavailable_components": results.unavailable_components,
+        "results": [
+            {
+                "component": r.component,
+                "surface_class": r.surface_class,
+                "importable": r.importable,
+                "import_error": r.import_error,
+                "instantiatable": r.instantiatable,
+                "instantiation_error": r.instantiation_error,
+                "has_phase_func": r.has_phase_func,
+                "has_phi": r.has_phi,
+                "has_get_optimizer": r.has_get_optimizer,
+                "has_get_optimizer_params": r.has_get_optimizer_params,
+                "trainable_param_names": r.trainable_param_names,
+                "differentiability_hints": r.differentiability_hints,
+            }
+            for r in results.results
+        ],
+        "diffractive_candidates_found": results.diffractive_candidates_found,
+        "differentiable_candidate_found": results.differentiable_candidate_found,
+        "import_paths_checked": results.import_paths_checked,
+        "constructor_signatures": results.constructor_signatures,
+        "warnings": results.warnings,
+        "errors": results.errors,
+    }, indent=2, default=str))
 
 
 def _run_deeplens_lensfile_optimization_probe(args: Any) -> None:

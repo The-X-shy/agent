@@ -203,6 +203,14 @@ ALLOWED_CLI_COMMANDS: dict[str, set[str]] = {
     "resolve-lens-file": {
         "--lens-file", "--backend-id", "--remote-job-id",
     },
+    # Phase 62: component backend validation
+    "run-deeplens-component-probe": {
+        "--component", "--objective", "--max-steps", "--learning-rate",
+        "--device", "--remote-job-id",
+    },
+    "discover-deeplens-components": {
+        "--components", "--device", "--remote-job-id",
+    },
 }
 
 FLAG_OPTIONS = {"--strict-deeplens", "--use-optical-feature-maps", "--strict-native", "--allow-adapter-proxy", "--rollback-on-loss-increase"}

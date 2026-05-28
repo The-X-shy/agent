@@ -467,3 +467,65 @@ Claim boundary:
 - All remote diagnostics capped at `diagnostic_evidence`.
 - No optical improvement claims from diagnostic data.
 - Lens file resolution is infrastructure — no scientific claims.
+
+## Phase 60-61
+
+GeoLens autograd validation on WSL and component-level recovery pivot.
+
+Key findings:
+- WSL GeoLens: `parameter_count=0`, `trainable_param_count=0`, `graph_connected=false`
+- `full_geolens_direct_update` marked as **blocked route**
+- Pivot strategy: validate individual component backends (Fresnel, Binary2Phase)
+
+Commands:
+```bash
+# Remote trainable parameter inspection
+python -m optiresearch.cli run-remote-deeplens-trainable-parameter-inspection \
+  --worker-id windows_wsl
+
+# Remote autograd audit
+python -m optiresearch.cli run-remote-deeplens-autograd-audit \
+  --worker-id windows_wsl
+
+# Agent plan execution with diagnosis
+python -m optiresearch.cli run-agent-plan-execution \
+  --objective "validate GeoLens autograd" \
+  --mode remote_opt_in --use-gradient-diagnosis \
+  --allow-remote --remote-worker-id windows_wsl --execute-top-k 2
+```
+
+See `docs/non_differentiable_geolens_path_policy.md`, `docs/component_level_pivot.md`.
+
+## Phase 62
+
+Validate DeepLens component backends (Fresnel, Binary2Phase, diffractive candidates)
+on WSL. Component-level probes confirm trainability and differentiability of
+individual surface components.
+
+Commands:
+```bash
+# Component discovery
+python -m optiresearch.cli discover-deeplens-components
+python -m optiresearch.cli run-remote-discover-deeplens-components \
+  --worker-id windows_wsl
+
+# Component probes
+python -m optiresearch.cli run-deeplens-component-probe \
+  --component fresnel --device cpu
+python -m optiresearch.cli run-remote-deeplens-component-probe \
+  --worker-id windows_wsl --component fresnel --device cpu
+
+# Report
+python -m optiresearch.cli export-component-probe-report \
+  --remote-job-id <remote_job_id>
+```
+
+Claim boundaries:
+- Component probes capped at `native_component_optimization`.
+- `full_geolens_direct_update` remains blocked.
+- No HSI improvement claims from component evidence.
+- No lens-level optimization claims from component evidence.
+
+See `docs/component_backend_discovery.md`, `docs/fresnel_component_probe.md`,
+`docs/binary2phase_component_probe.md`, `docs/component_probe_claim_boundaries.md`,
+`docs/wsl_component_backend_validation.md`.

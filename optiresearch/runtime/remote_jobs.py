@@ -440,6 +440,40 @@ def run_remote_resolve_lens_file(
     ), runner, ingest)
 
 
+def run_remote_deeplens_component_probe(
+    worker_id: str,
+    component: str = "fresnel",
+    objective: str = "parameter_sanity_check",
+    max_steps: int = 5,
+    learning_rate: float = 1e-3,
+    device: str = "cpu",
+    runner: Any | None = None,
+    ingest: bool = True,
+) -> dict[str, Any]:
+    return execute_remote_job(worker_id, _job(
+        "deeplens_component_probe",
+        f"DeepLens component probe: {component} / {objective}",
+        {"component": component, "objective": objective,
+         "max_steps": max_steps, "learning_rate": learning_rate, "device": device},
+        600, ["result.json", "component_probe_metrics.json"],
+    ), runner, ingest)
+
+
+def run_remote_deeplens_component_discovery(
+    worker_id: str,
+    components: str = "fresnel,binary2phase,diffractive",
+    device: str = "cpu",
+    runner: Any | None = None,
+    ingest: bool = True,
+) -> dict[str, Any]:
+    return execute_remote_job(worker_id, _job(
+        "deeplens_component_discovery",
+        "Discover DeepLens component backends",
+        {"components": components, "device": device},
+        300, ["discovery_result.json"],
+    ), runner, ingest)
+
+
 def run_remote_native_optimization_inspection(
     worker_id: str,
     runner: Any | None = None,
@@ -544,7 +578,7 @@ def export_remote_job_outputs(
 def _remote_backend_capability_level(job_type: str) -> str:
     if job_type == "deeplens_source_smoke":
         return "source"
-    if job_type == "deeplens_surface_optimization_probe":
+    if job_type in {"deeplens_surface_optimization_probe", "deeplens_component_probe", "deeplens_component_discovery"}:
         return "native_component"
     if job_type == "deeplens_lensfile_optimization_probe":
         return "native_lens"
@@ -570,14 +604,16 @@ def _remote_backend_capability_level(job_type: str) -> str:
 def _remote_realization_level(job_type: str) -> str | None:
     if job_type == "codesign_loop":
         return "adapter_proxy"
-    if job_type in {"deeplens_surface_optimization_probe", "deeplens_lensfile_optimization_probe", "deeplens_native_geolens_hsi_codesign"}:
+    if job_type in {"deeplens_surface_optimization_probe", "deeplens_lensfile_optimization_probe", "deeplens_native_geolens_hsi_codesign", "deeplens_component_probe"}:
         return "native"
     return None
 
 
 def _remote_claim_scope(job_type: str) -> str:
-    if job_type == "deeplens_surface_optimization_probe":
+    if job_type in {"deeplens_surface_optimization_probe", "deeplens_component_probe"}:
         return "DeepLens native differentiable component optimization"
+    if job_type == "deeplens_component_discovery":
+        return "DeepLens component backend discovery"
     if job_type == "deeplens_lensfile_optimization_probe":
         return "DeepLens native differentiable lens optimization"
     if job_type == "native_hsi_codesign":
