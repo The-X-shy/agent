@@ -607,6 +607,7 @@ def main(argv: list[str] | None = None) -> None:
                                 help="Discover importable DeepLens component backends.")
     comp_disc.add_argument("--components", default="fresnel,binary2phase,diffractive")
     comp_disc.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
+    comp_disc.add_argument("--remote-job-id", default="")
     classify_fail = sub.add_parser("classify-failure", help="Classify a failure from result JSON.")
     classify_fail.add_argument("--result-path", required=True)
     rec_rec = sub.add_parser("recommend-recovery", help="Recommend recovery for a failure.")
