@@ -91,7 +91,13 @@ class StableNativeLensHSIResult(StrictModel):
     optical_gradient_norm_mean: Optional[float] = None
     recon_gradient_norm_max: Optional[float] = None
     recon_gradient_norm_mean: Optional[float] = None
+    trainable_param_count: int = 0
+    params_with_grad: int = 0
+    graph_connected: bool = False
+    psf_requires_grad: bool = False
+    loss_requires_grad: bool = False
     optical_parameters_changed: Optional[bool] = None
+    component_parameter_changed: Optional[bool] = None
     optical_parameter_delta_max: Optional[float] = None
     psf_energy_delta: Optional[float] = None
     psf_centroid_delta: Optional[float] = None

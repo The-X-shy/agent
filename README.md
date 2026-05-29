@@ -479,8 +479,12 @@ Claim boundary:
 GeoLens autograd validation on WSL and component-level recovery pivot.
 
 Key findings:
-- WSL GeoLens: `parameter_count=0`, `trainable_param_count=0`, `graph_connected=false`
-- `full_geolens_direct_update` marked as **blocked route**
+- The original WSL finding used `geolens.parameters()`, which is not valid for
+  DeepLens `GeoLens`
+- The corrected route uses `get_optimizer_params()` / `get_optimizer()` and
+  float32 geometric PSF
+- `full_geolens_direct_update` is **conditional**: allowed only after native
+  optimizer audit proves connected gradients and a parameter update
 - Pivot strategy: validate individual component backends (Fresnel, Binary2Phase)
 
 Commands:
@@ -528,7 +532,7 @@ python -m optiresearch.cli export-component-probe-report \
 
 Claim boundaries:
 - Component probes capped at `native_component_optimization`.
-- `full_geolens_direct_update` remains blocked.
+- Component evidence alone does not support `full_geolens_direct_update`.
 - No HSI improvement claims from component evidence.
 - No lens-level optimization claims from component evidence.
 

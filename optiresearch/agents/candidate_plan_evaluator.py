@@ -124,6 +124,17 @@ class CandidatePlanEvaluator:
             bonus += 0.20
         if "full_geolens_direct_update_blocked" in failure_modes and "component_surrogate" in did:
             bonus += 0.10
+        geolens_audit_connected = (
+            ctx.get("graph_connected") is True
+            and ctx.get("psf_requires_grad") is True
+            and ctx.get("loss_requires_grad") is True
+            and int(ctx.get("trainable_param_count") or ctx.get("parameter_count") or 0) > 0
+            and int(ctx.get("params_with_grad") or 0) > 0
+        )
+        if geolens_audit_connected and any(
+            kw in did for kw in ("full_geolens_geometric_direct_update", "remote_native_geolens_validation")
+        ):
+            bonus += 0.20
 
         return round(bonus, 3)
 
@@ -146,6 +157,17 @@ class CandidatePlanEvaluator:
                 factors.append("component_probe_succeeded")
             if "full_geolens_direct_update_blocked" in fm:
                 factors.append("full_geolens_direct_update_blocked")
+        geolens_audit_connected = (
+            ctx.get("graph_connected") is True
+            and ctx.get("psf_requires_grad") is True
+            and ctx.get("loss_requires_grad") is True
+            and int(ctx.get("trainable_param_count") or ctx.get("parameter_count") or 0) > 0
+            and int(ctx.get("params_with_grad") or 0) > 0
+        )
+        if geolens_audit_connected and any(
+            kw in did for kw in ("full_geolens_geometric_direct_update", "remote_native_geolens_validation")
+        ):
+            factors.append("geolens_native_autograd_connected")
         if getattr(d, "probe_only", False):
             factors.append("probe_only")
         if d.expected_evidence_level == "diagnostic_evidence":

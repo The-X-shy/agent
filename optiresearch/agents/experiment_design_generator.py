@@ -378,6 +378,40 @@ class ExperimentDesignGenerator:
                 estimated_runtime_sec=3600,
                 risk_level=s.risk,
             )]
+        elif s.strategy_type == "optimizer_change" and s.strategy_id == "full_geolens_geometric_direct_update":
+            return [ExperimentDesignCandidate(
+                design_id="full_geolens_geometric_direct_update_design",
+                objective="Run a guarded full GeoLens geometric PSF native simulation update",
+                backend_id="deeplens_geolens_geometric",
+                task_type="stable_lens_hsi_codesign",
+                spec_payload={
+                    "candidate": "GeoLensCooke",
+                    "dataset": "synthetic",
+                    "reconstructor": "differentiable_linear",
+                    "max_steps": 3,
+                    "optical_lr": 1e-6,
+                    "optical_grad_clip": 1.0,
+                    "trust_region_enabled": True,
+                    "max_optical_param_delta": 1e-4,
+                    "rollback_on_loss_increase": True,
+                    "device": "cpu",
+                },
+                expected_evidence_level="native_lens_simulation",
+                expected_failure_modes=["gradient_instability", "rollback_all_updates"],
+                source_strategy_id=s.strategy_id,
+                strategy_family=s.strategy_type,
+                design_origin="evidence_strategy_reasoner",
+                required_skills=s.required_skills,
+                claim_ceiling="native_lens_simulation",
+                estimated_runtime_sec=600,
+                risk_level=s.risk,
+                expected_handler_id="deeplens_native_geolens_hsi_codesign",
+                handler_capability_id="deeplens_native_geolens_hsi_codesign",
+                claim_boundary_notes=[
+                    "GeoLens geometric PSF native simulation only — not coherent wave-optics",
+                    "Synthetic HSI only — no real HSI performance claim",
+                ],
+            )]
         elif s.strategy_type == "surrogate_parameterization" and s.strategy_id.startswith("component_surrogate_hsi_codesign"):
             component = "binary2phase" if "binary2phase" in s.strategy_id else "fresnel"
             return [ExperimentDesignCandidate(

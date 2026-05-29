@@ -40,6 +40,7 @@ class RecoveryPolicy:
             "component_first_binary2phase_probe": 9,
             "diffractive_component_probe": 8,
             "differentiable_surrogate_psf_parameterization": 7,
+            "run_native_geolens_optimizer_param_audit": 7,
             "surface_parameter_adapter": 7,
             "switch_backend": 6,
             "probe_waveoptics_path": 6,
@@ -99,8 +100,14 @@ class RecoveryPolicy:
             },
             "report_full_geolens_non_differentiable_path": {
                 "strategy_type": "report_negative_result",
-                "action": "document that full GeoLens geometric path is non-differentiable",
+                "action": "document that full GeoLens geometric path failed the current native optimizer audit",
                 "expected_evidence_gain": "low",
+                "risk": "low",
+            },
+            "run_native_geolens_optimizer_param_audit": {
+                "strategy_type": "autograd_audit",
+                "action": "run GeoLens audit through get_optimizer_params/get_optimizer and float32 geometric PSF",
+                "expected_evidence_gain": "high",
                 "risk": "low",
             },
             "try_alternative_parameterization": {
@@ -184,7 +191,8 @@ _recovery_explanations: dict[str, str] = {
     "diffractive_component_probe": "Probe generalized diffractive component candidates with trainable parameters exposed through standard nn.Module",
     "differentiable_surrogate_psf_parameterization": "Build a neural surrogate model of GeoLens PSF that is fully differentiable and can serve as an optimization proxy",
     "surface_parameter_adapter": "Wrap GeoLens surface parameters in a custom nn.Module adapter to expose them through standard parameters() API",
-    "report_full_geolens_non_differentiable_path": "Document the finding that full GeoLens geometric path is non-differentiable as structured negative evidence",
+    "run_native_geolens_optimizer_param_audit": "Verify GeoLens trainability through DeepLens get_optimizer_params/get_optimizer and float32 geometric PSF",
+    "report_full_geolens_non_differentiable_path": "Document that the current full GeoLens audit failed, with the route remaining conditional on native optimizer API evidence",
     "try_alternative_parameterization": "Switch to a different optical component parameterization (e.g., DiffractiveLens) that may have a smoother optimization landscape",
     "redesign_objective": "Simplify or change the loss function to reduce gradient sensitivity and improve update stability",
     "switch_backend": "Switch to a different optical backend that may provide more stable gradients",
@@ -196,6 +204,6 @@ _recovery_explanations: dict[str, str] = {
     "enable_trust_region": "Enable trust-region post-step scaling to constrain parameter deltas",
     "add_accept_tolerance": "Allow small loss increases as exploratory updates without rollback",
     "switch_optimizer": "Try a different optimizer that may handle steep landscapes better",
-    "full_geolens_direct_update": "Attempt end-to-end GeoLens parameter update — blocked when autograd is disconnected",
+    "full_geolens_direct_update": "Attempt end-to-end GeoLens parameter update only after native optimizer audit confirms connected gradients",
     "repeated_lr_sweep_on_full_geolens": "Re-run LR sweep on full GeoLens — not recommended when autograd graph is disconnected",
 }

@@ -546,28 +546,57 @@ def run_deeplens_geolens_geometric_deep_probe(
                 }],
             )
 
+        from optiresearch.adapters.deeplens_geolens_params import (
+            DEFAULT_GEOLENS_LRS,
+            activate_geolens_trainable_parameters,
+        )
+
         geolens = geolens_mod.GeoLens(lens_path, device=device)
-        points = torch.tensor([[0.0, 0.0]], device=device)
-        wvln = torch.tensor([0.55], device=device)
-        ks = torch.tensor([[0.0, 0.0]], device=device)
-        psf = geolens.psf(points, wvln, ks, model="geometric")
+        param_groups, trainable_params = activate_geolens_trainable_parameters(
+            geolens, lrs=DEFAULT_GEOLENS_LRS
+        )
+        for p in trainable_params:
+            p.grad = None
+
+        points = torch.tensor([[0.0, 0.0, -10000.0]], device=device, dtype=torch.float32)
+        orig_dtype = torch.get_default_dtype()
+        try:
+            torch.set_default_dtype(torch.float32)
+            psf = geolens.psf(points, wvln=0.55, ks=9, model="geometric")
+        finally:
+            torch.set_default_dtype(orig_dtype)
 
         differentiable = bool(psf.requires_grad)
         grad_norm = 0.0
         params_changed = False
+        params_with_grad = 0
+        loss_requires_grad = False
 
         if differentiable:
-            loss = psf.sum()
+            loss = (psf * psf).sum()
+            loss_requires_grad = bool(loss.requires_grad)
+            params_before = [p.detach().clone() for p in trainable_params]
             loss.backward()
-            grad_norms = []
-            try:
-                for p in geolens.parameters():
-                    if p.grad is not None:
-                        grad_norms.append(float(p.grad.norm().item()))
-            except Exception:
-                pass
+            grad_norms = [
+                float(p.grad.detach().norm().cpu().item())
+                for p in trainable_params
+                if p.grad is not None
+            ]
+            params_with_grad = len([gn for gn in grad_norms if gn > 0.0])
             grad_norm = max(grad_norms) if grad_norms else 0.0
-            params_changed = grad_norm > 0.0
+            if grad_norm > 0.0:
+                try:
+                    if callable(getattr(geolens, "get_optimizer", None)):
+                        optimizer = geolens.get_optimizer(lrs=DEFAULT_GEOLENS_LRS, optim_mat=False)
+                    else:
+                        optimizer = torch.optim.SGD(param_groups or trainable_params, lr=1e-6)
+                    optimizer.step()
+                    params_changed = any(
+                        not torch.allclose(before, after.detach(), rtol=0.0, atol=0.0)
+                        for before, after in zip(params_before, trainable_params)
+                    )
+                except Exception:
+                    params_changed = False
 
         elapsed = round(time.perf_counter() - start, 3)
 
@@ -588,6 +617,11 @@ def run_deeplens_geolens_geometric_deep_probe(
                 "differentiable": differentiable,
                 "optical_gradient_norm": grad_norm,
                 "parameters_changed": params_changed,
+                "trainable_param_count": len(trainable_params),
+                "params_with_grad": params_with_grad,
+                "graph_connected": bool(differentiable and loss_requires_grad and params_with_grad > 0),
+                "psf_requires_grad": differentiable,
+                "loss_requires_grad": loss_requires_grad,
                 "deeplens_native_psf_path": "geolens.psf_geometric",
                 "full_wave_optics": False,
                 "phase_to_fft_proxy_used": False,

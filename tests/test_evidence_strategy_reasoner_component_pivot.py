@@ -82,3 +82,25 @@ class TestComponentPivotStrategies:
                 "parameter_inspection", "component_inspection", "run_probe_only",
                 "component_first", "surrogate_parameterization",
             ), f"Unknown strategy_type: {s.strategy_type}"
+
+    def test_geolens_audit_success_allows_native_geometric_direct_update(self):
+        diag = {
+            "status": "diagnosed",
+            "diagnosis_id": "geolens-audit-success",
+            "failure_modes": [],
+            "likely_causes": [],
+            "recommended_recoveries": [],
+            "severity": "medium",
+            "trainable_param_count": 14,
+            "params_with_grad": 14,
+            "psf_requires_grad": True,
+            "loss_requires_grad": True,
+            "graph_connected": True,
+        }
+
+        strategies = self.reasoner.reason_from_diagnosis(diag, "test")
+        direct = [s for s in strategies if s.strategy_id == "full_geolens_geometric_direct_update"]
+
+        assert len(direct) == 1
+        assert direct[0].blocked_route == ""
+        assert direct[0].claim_ceiling == "native_lens_simulation"

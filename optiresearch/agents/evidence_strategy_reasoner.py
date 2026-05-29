@@ -208,6 +208,32 @@ class EvidenceStrategyReasoner:
         recoveries = diagnosis.get("recommended_recoveries", [])
         severity = diagnosis.get("severity", "medium")
 
+        geolens_audit_connected = (
+            diagnosis.get("graph_connected") is True
+            and diagnosis.get("psf_requires_grad") is True
+            and diagnosis.get("loss_requires_grad") is True
+            and int(diagnosis.get("trainable_param_count") or diagnosis.get("parameter_count") or 0) > 0
+            and int(diagnosis.get("params_with_grad") or 0) > 0
+        )
+        if geolens_audit_connected:
+            self._strategies.append(CandidateStrategy(
+                strategy_id="full_geolens_geometric_direct_update",
+                strategy_type="optimizer_change",
+                rationale=(
+                    "GeoLens geometric PSF audit passed through the native DeepLens optimizer API; "
+                    "run a tiny native lens-simulation update with strict claim boundaries."
+                ),
+                expected_evidence_gain="high",
+                expected_metric_gain="medium",
+                risk="medium",
+                cost="medium",
+                required_skills=["deeplens_native_geolens_hsi_codesign"],
+                required_backend="deeplens_geolens_geometric",
+                proposed_experiment_templates=["full_geolens_geometric_direct_update_design"],
+                claim_ceiling="native_lens_simulation",
+                expected_claim_ceiling="native_lens_simulation",
+            ))
+
         if "no_parameter_change" in failure_modes:
             self._strategies.extend([
                 CandidateStrategy(

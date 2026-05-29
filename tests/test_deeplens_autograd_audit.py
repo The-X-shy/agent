@@ -12,3 +12,66 @@ def test_autograd_audit_returns_structured_result():
 def test_autograd_audit_handles_missing_deeplens():
     result = run_deeplens_autograd_audit(lens_file="nonexistent_lens", device="cpu")
     assert result["status"] in ("needs_followup", "unavailable")
+
+
+def test_autograd_audit_uses_geolens_native_optimizer_params(monkeypatch, tmp_path):
+    import importlib
+    import torch
+
+    lens_file = tmp_path / "cooke.json"
+    lens_file.write_text("{}")
+    param = torch.tensor(0.5, requires_grad=False)
+
+    class _FakeGeoLens:
+        def __init__(self, lens_path, device="cpu"):
+            self.lens_path = lens_path
+            self.device = device
+
+        def get_optimizer_params(self, lrs=None, optim_mat=False):
+            param.requires_grad_(True)
+            return [{"params": param, "lr": (lrs or [1e-6])[0]}]
+
+        def get_optimizer(self, lrs=None, optim_mat=False):
+            return torch.optim.SGD(self.get_optimizer_params(lrs=lrs, optim_mat=optim_mat), lr=1e-2)
+
+        def psf(self, points, wvln=0.55, ks=9, model="geometric"):
+            x = torch.linspace(-1.0, 1.0, ks, device=points.device, dtype=points.dtype)
+            grid = x[:, None] ** 2 + x[None, :] ** 2
+            return torch.exp(-grid * (1.0 + param))
+
+    class _FakeModule:
+        GeoLens = _FakeGeoLens
+
+    original_import = importlib.import_module
+
+    def _fake_import(name, package=None):
+        if name == "deeplens.geolens":
+            return _FakeModule()
+        return original_import(name, package=package)
+
+    monkeypatch.setattr(importlib, "import_module", _fake_import)
+    monkeypatch.setattr(
+        "optiresearch.optics.lens_file_resolver.resolve_lens_file",
+        lambda lens_file, backend_id: type(
+            "Resolution",
+            (),
+            {
+                "exists": True,
+                "resolved_path": str(tmp_path / "cooke.json"),
+                "source": "test",
+                "checked_paths": [str(tmp_path / "cooke.json")],
+            },
+        )(),
+    )
+
+    result = run_deeplens_autograd_audit(device="cpu")
+
+    assert result["status"] == "succeeded"
+    assert result["parameter_count"] == 1
+    assert result["trainable_param_count"] == 1
+    assert result["params_with_grad"] == 1
+    assert result["psf_requires_grad"] is True
+    assert result["loss_requires_grad"] is True
+    assert result["graph_connected"] is True
+    assert result["grad_norm_max"] > 0.0
+    assert result["candidate_update_changes_parameter"] is True

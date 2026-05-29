@@ -19,7 +19,7 @@ components. This document defines what claims they can and cannot support.
 | Claim | Why Blocked |
 |-------|------------|
 | `native_lens_optimization` | Component ≠ lens assembly |
-| `full_geolens_direct_update` | Blocked route per Phase 61 |
+| `full_geolens_direct_update` | Not supported by component probe evidence alone |
 | `hsi_improvement` | No HSI reconstruction in component probe |
 | `real_camera_validation` | No physical measurement |
 | `lens_level_psf_improvement` | Component-level only |

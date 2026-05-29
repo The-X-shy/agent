@@ -42,5 +42,5 @@ python -m optiresearch.cli run-agent-plan-execution \
 
 - At least one of Fresnel or Binary2Phase achieves `native_component_optimization`
 - OR all components return structured `needs_followup` with `error_code=DEEPLENS_COMPONENT_API_UNAVAILABLE`
-- `full_geolens_direct_update` is NOT selected by agent loop
+- `full_geolens_direct_update` is not selected from component evidence alone
 - Claim gate caps component claims at `native_component_optimization`

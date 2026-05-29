@@ -138,7 +138,7 @@ BUILTIN_FAILURE_MODES: list[FailureMode] = [
     FailureMode(
         failure_id="no_standard_trainable_parameters",
         category="autograd_break",
-        description="GeoLens does not expose trainable parameters via standard nn.Module.parameters()",
+        description="GeoLens does not expose trainable parameters via standard nn.Module.parameters(); native optimizer API audit is required",
         evidence_patterns={
             "parameter_count": 0,
             "trainable_param_count": 0,
@@ -148,16 +148,17 @@ BUILTIN_FAILURE_MODES: list[FailureMode] = [
         likely_causes=[
             "GeoLens uses non-standard parameter storage",
             "PSF computation is not wrapped as nn.Module",
-            "GeoLens surface parameters are not exposed through parameters()",
+            "GeoLens surface parameters are exposed through get_optimizer_params() rather than parameters()",
         ],
         recommended_recoveries=[
+            "run_native_geolens_optimizer_param_audit",
             "component_first_fresnel_probe",
             "component_first_binary2phase_probe",
             "differentiable_surrogate_psf_parameterization",
             "surface_parameter_adapter",
             "report_full_geolens_non_differentiable_path",
         ],
-        claim_impact="Direct full GeoLens optical optimization claim is NOT supported",
+        claim_impact="Direct full GeoLens optical optimization requires native optimizer API audit evidence",
     ),
     FailureMode(
         failure_id="autograd_graph_disconnected",
@@ -187,7 +188,7 @@ BUILTIN_FAILURE_MODES: list[FailureMode] = [
     FailureMode(
         failure_id="non_differentiable_geolens_psf_path",
         category="gradient_instability",
-        description="GeoLens geometric PSF path is confirmed non-differentiable — optimization requires component-level or surrogate route",
+        description="GeoLens geometric PSF path failed autograd audit; direct update is conditional on a native optimizer API audit passing",
         evidence_patterns={
             "graph_connected": False,
             "parameter_count": 0,
@@ -195,11 +196,13 @@ BUILTIN_FAILURE_MODES: list[FailureMode] = [
         },
         severity="critical",
         likely_causes=[
-            "geolens.psf_geometric uses ray tracing, not differentiable rendering",
-            "No autograd path from PSF output back to lens parameters",
-            "Full GeoLens is designed for analysis, not gradient-based optimization",
+            "Diagnostic used a disconnected or unsupported GeoLens route",
+            "Native optimizer parameters were not activated",
+            "Geometric PSF dtype mismatch blocked autograd",
         ],
         recommended_recoveries=[
+            "run_native_geolens_optimizer_param_audit",
+            "full_geolens_direct_update",
             "component_first_fresnel_probe",
             "component_first_binary2phase_probe",
             "diffractive_component_probe",
@@ -207,7 +210,7 @@ BUILTIN_FAILURE_MODES: list[FailureMode] = [
             "surface_parameter_adapter",
             "report_full_geolens_non_differentiable_path",
         ],
-        claim_impact="Full GeoLens direct update is BLOCKED; component-level or surrogate path required",
+        claim_impact="Full GeoLens direct update is blocked unless a native optimizer audit passes; otherwise use component-level or surrogate path",
     ),
 ]
 

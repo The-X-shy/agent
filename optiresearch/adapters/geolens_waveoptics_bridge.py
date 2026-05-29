@@ -17,6 +17,11 @@ from typing import Any
 import numpy as np
 import torch
 
+from optiresearch.adapters.deeplens_geolens_params import (
+    DEFAULT_GEOLENS_LRS,
+    activate_geolens_trainable_parameters,
+)
+
 
 class GeoLensWaveOpticsBridge:
     """Bridge: GeoLens lens file → native differentiable ray-tracing PSF.
@@ -34,6 +39,7 @@ class GeoLensWaveOpticsBridge:
         self.device = device
         self.geolens: Any = None
         self.optimizer: Any = None
+        self.lens_file: str | None = None
         self.full_wave_optics = False
         self.phase_to_fft_proxy_used = False
         self.deeplens_native_psf_path = "geolens.psf_geometric"
@@ -53,6 +59,7 @@ class GeoLensWaveOpticsBridge:
 
         if lens_file and Path(lens_file).exists():
             self.geolens = GeoLens(lens_file, device=self.device)
+            self.lens_file = str(lens_file)
         else:
             raise FileNotFoundError(f"Lens file not found: {lens_file}")
         return self.geolens
@@ -87,11 +94,15 @@ class GeoLensWaveOpticsBridge:
             raise RuntimeError("No GeoLens loaded. Call build_component() first.")
 
         if points is None:
-            points = torch.tensor([[0.0, 0.0, -10000.0]], device=self.device, dtype=torch.float64)
+            dtype = torch.float32 if model == "geometric" else torch.float64
+            points = torch.tensor([[0.0, 0.0, -10000.0]], device=self.device, dtype=dtype)
 
         orig_dtype = torch.get_default_dtype()
         try:
-            torch.set_default_dtype(torch.float64)
+            if model == "geometric":
+                torch.set_default_dtype(torch.float32)
+            else:
+                torch.set_default_dtype(torch.float64)
             psf = self.geolens.psf(points, wvln=wvln, ks=ks, model=model)
         finally:
             torch.set_default_dtype(orig_dtype)
@@ -115,14 +126,11 @@ class GeoLensWaveOpticsBridge:
     def get_trainable_parameters(self) -> list[Any]:
         if self.geolens is None:
             return []
-        params = []
-        if callable(getattr(self.geolens, "get_optimizer_params", None)):
-            try:
-                pgroups = self.geolens.get_optimizer_params()
-                for g in pgroups:
-                    params.extend(g.get("params", []))
-            except Exception:
-                pass
+        params: list[Any] = []
+        try:
+            _, params = activate_geolens_trainable_parameters(self.geolens, lrs=DEFAULT_GEOLENS_LRS)
+        except Exception:
+            params = []
         if not params:
             for attr_name in dir(self.geolens):
                 if attr_name.startswith("_"):
@@ -137,7 +145,8 @@ class GeoLensWaveOpticsBridge:
             raise RuntimeError("No GeoLens loaded.")
         if callable(getattr(self.geolens, "get_optimizer", None)):
             for args, kwargs in [
-                ((), {"lr": [learning_rate] * 4}),
+                ((), {"lrs": [learning_rate, learning_rate, 0.0, 0.0], "optim_mat": False}),
+                ((), {"lrs": [learning_rate, learning_rate, 0.0, 0.0]}),
                 ((), {"lr": learning_rate}),
                 ((), {}),
             ]:

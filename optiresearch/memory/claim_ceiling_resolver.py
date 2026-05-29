@@ -145,8 +145,28 @@ def resolve_claim_ceiling(
         result.dataset_claim_ceiling = "real_hsi_performance"
         ceilings.append(("real_hsi_performance", "dataset"))
     elif synthetic_data:
-        result.dataset_claim_ceiling = "lightweight_scientific_execution"
-        ceilings.append(("lightweight_scientific_execution", "dataset"))
+        native_simulation_scope = (
+            evidence_level
+            in {
+                "native_lens_simulation",
+                "stable_native_lens_hsi_codesign",
+                "rollback_protected_native_lens_hsi",
+            }
+            or (
+                result.handler_claim_ceiling == "native_lens_simulation"
+                and (
+                    native_backend is True
+                    or physical_backend is True
+                    or "native" in (execution_fidelity or "").lower()
+                )
+            )
+        )
+        result.dataset_claim_ceiling = (
+            "native_lens_simulation"
+            if native_simulation_scope
+            else "lightweight_scientific_execution"
+        )
+        ceilings.append((result.dataset_claim_ceiling, "dataset"))
 
     # 4. Execution fidelity ceiling
     fidelity_ceiling = _fidelity_ceiling(execution_fidelity, full_wave_optics, bool(native_backend))

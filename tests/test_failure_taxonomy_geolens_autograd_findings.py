@@ -34,7 +34,7 @@ class TestGeoLensAutogradFailureModes:
         assert fm.failure_id == "non_differentiable_geolens_psf_path"
         assert fm.category == "gradient_instability"
         assert fm.severity == "critical"
-        assert "Full GeoLens direct update is BLOCKED" in fm.claim_impact
+        assert "blocked unless a native optimizer audit passes" in fm.claim_impact
 
     def test_phase60_autograd_audit_result_matches_all_three(self):
         """The Phase 60 autograd audit result should match multiple failure modes."""

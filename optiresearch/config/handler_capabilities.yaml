@@ -233,10 +233,11 @@ handlers:
     design_type: scientific
     task_type: stable_lens_hsi_codesign
     supported_execution_modes:
+      - dry_run
       - local
     actual_evidence_level: native_lens_simulation
     max_claim_ceiling: native_lens_simulation
-    synthetic_only: false
+    synthetic_only: true
     native_backend_required: true
     physical_backend: true
     real_data_required: false
@@ -250,19 +251,26 @@ handlers:
       - reconstruction_loss_after
       - accepted_update_count
       - optical_gradient_norm_max
+      - trainable_param_count
+      - params_with_grad
+      - graph_connected
+      - psf_requires_grad
+      - loss_requires_grad
     artifacts_supported:
       - result.json
       - spec.json
     known_limitations:
       - "Requires DeepLens installed (deeplens.geolens importable)"
       - "GeoLens geometric PSF — not coherent wave-optics"
+      - "Synthetic HSI data — no real HSI performance claim"
     compatible_design_ids:
       - deeplens_native_geolens_hsi_codesign
+      - full_geolens_geometric_direct_update_design
     compatible_backend_ids:
       - deeplens_geolens_geometric
     default_timeout_sec: 3600
     risk_level: high
-    enabled: false
+    enabled: true
 
   - handler_id: native_geolens_stabilization_sweep
     display_name: "Native GeoLens Stabilization Sweep"

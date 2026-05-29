@@ -81,6 +81,11 @@ def run_stable_native_lens_hsi_codesign(
     except Exception as exc:
         return _unsupported(spec, "OPTIMIZER_UNAVAILABLE", caveats, metadata, str(exc))
 
+    trainable_params = bridge.get_trainable_parameters()
+    trainable_param_count = len(trainable_params)
+    if trainable_param_count == 0:
+        return _unsupported(spec, "NO_NATIVE_TRAINABLE_PARAMETERS", caveats, metadata)
+
     try:
         reconstructor = recon_cls(bands=spec.bands).to(spec.device)
         recon_optimizer = torch.optim.Adam(reconstructor.parameters(), lr=spec.recon_lr)
@@ -103,6 +108,10 @@ def run_stable_native_lens_hsi_codesign(
     recon_grad_norms: list[float] = []
     rollback_trace: list[dict[str, Any]] = []
     trust_region_activated = False
+    params_with_grad = 0
+    psf_requires_grad = False
+    loss_requires_grad = False
+    graph_connected = False
 
     # --- Phase 1: Reconstructor Warmup ---
     initial_psf_raw = _normalize_psf_cube_for_hsi(
@@ -143,13 +152,25 @@ def run_stable_native_lens_hsi_codesign(
             psf_reg = psf_reg + spec.psf_width_reg_weight * abs(psf_width - psf_width_initial)
 
         total_loss = losses["total_loss"] + psf_reg
+        psf_requires_grad = psf_requires_grad or bool(getattr(psf, "requires_grad", False))
+        loss_requires_grad = loss_requires_grad or bool(getattr(total_loss, "requires_grad", False))
 
-        optical_params_before_step = [p.detach().clone() for p in bridge.get_trainable_parameters()]
+        optical_params = bridge.get_trainable_parameters()
+        optical_params_before_step = [p.detach().clone() for p in optical_params]
         loss_before_step = float(total_loss.detach().cpu().item())
 
         total_loss.backward()
+        step_params_with_grad = sum(
+            1
+            for p in optical_params
+            if p.grad is not None and float(p.grad.detach().abs().max().cpu().item()) > 0.0
+        )
+        params_with_grad = max(params_with_grad, step_params_with_grad)
+        graph_connected = graph_connected or (
+            bool(psf_requires_grad) and bool(loss_requires_grad) and step_params_with_grad > 0
+        )
 
-        opt_gn = torch.nn.utils.clip_grad_norm_(bridge.get_trainable_parameters(), spec.optical_grad_clip)
+        opt_gn = torch.nn.utils.clip_grad_norm_(optical_params, spec.optical_grad_clip)
         recon_gn = torch.nn.utils.clip_grad_norm_(reconstructor.parameters(), spec.recon_grad_clip)
         opt_gn = float(opt_gn.detach().cpu().item()) if isinstance(opt_gn, torch.Tensor) else float(opt_gn)
         recon_gn = float(recon_gn.detach().cpu().item()) if isinstance(recon_gn, torch.Tensor) else float(recon_gn)
@@ -163,14 +184,14 @@ def run_stable_native_lens_hsi_codesign(
             if spec.trust_region_enabled:
                 max_delta = 0.0
                 deltas: list[torch.Tensor] = []
-                for p_before, p_after in zip(optical_params_before_step, bridge.get_trainable_parameters()):
+                for p_before, p_after in zip(optical_params_before_step, optical_params):
                     d = (p_after - p_before).abs().max().item()
                     deltas.append(p_after.data - p_before.data)
                     if d > max_delta:
                         max_delta = d
                 if max_delta > spec.max_optical_param_delta:
                     scale = spec.max_optical_param_delta / max_delta
-                    for p_before, p_after, delta in zip(optical_params_before_step, bridge.get_trainable_parameters(), deltas):
+                    for p_before, p_after, delta in zip(optical_params_before_step, optical_params, deltas):
                         p_after.data.copy_(p_before.data + delta * scale)
                     trust_region_activated = True
 
@@ -215,7 +236,7 @@ def run_stable_native_lens_hsi_codesign(
                     if psf_unstable:
                         trace_entry["reason"] = trace_entry.get("reason", "") + (";psf_instability" if trace_entry.get("reason") else "psf_instability")
                         trace_entry["psf_instability_detail"] = psf_instability_reason
-                    for p, saved in zip(bridge.get_trainable_parameters(), optical_params_before_step):
+                    for p, saved in zip(optical_params, optical_params_before_step):
                         p.data.copy_(saved.data)
                     rejected += 1
                     rollbacks += 1
@@ -292,7 +313,13 @@ def run_stable_native_lens_hsi_codesign(
         optical_gradient_norm_mean=sum(opt_grad_norms) / len(opt_grad_norms) if opt_grad_norms else None,
         recon_gradient_norm_max=max(recon_grad_norms) if recon_grad_norms else None,
         recon_gradient_norm_mean=sum(recon_grad_norms) / len(recon_grad_norms) if recon_grad_norms else None,
+        trainable_param_count=trainable_param_count,
+        params_with_grad=params_with_grad,
+        graph_connected=graph_connected,
+        psf_requires_grad=psf_requires_grad,
+        loss_requires_grad=loss_requires_grad,
         optical_parameters_changed=opt_changed,
+        component_parameter_changed=opt_changed,
         psf_energy_delta=psf_energy_after - psf_energy_initial,
         psf_width_delta=psf_width_after - psf_width_initial,
         mse_before=float(losses_before["mse_loss"].detach().cpu().item()),

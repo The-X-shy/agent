@@ -31,6 +31,16 @@ if loss increases beyond a tolerance, parameters are restored from the snapshot.
 3. Remote results show 0 accepted optical updates — environment differences matter
 4. Rollback protects but does not prove optical improvement
 
+## Phase 64 Correction
+
+Full GeoLens geometric PSF training is no longer judged through
+`geolens.parameters()`. The native DeepLens optimizer API exposes trainable
+GeoLens parameters, and the loop now records whether the PSF/loss graph is
+connected to those parameters.
+
+The claim ceiling remains `native_lens_simulation`; this does not validate
+coherent wave-optics, real HSI performance, or camera measurements.
+
 ## Phase 24 Integration
 
 Phase 24 wraps this in `ExperimentControllerV2` with:

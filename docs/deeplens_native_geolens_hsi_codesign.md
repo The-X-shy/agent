@@ -6,6 +6,11 @@ The full native DeepLens GeoLens geometric HSI co-design path uses actual
 `deeplens.geolens` ray-tracing PSF generation for HSI reconstruction co-design,
 as opposed to the FFT-based proxy path.
 
+GeoLens trainable parameters must be discovered through DeepLens
+`get_optimizer_params()` / `get_optimizer()`. `GeoLens` is not a standard
+`torch.nn.Module`, so `geolens.parameters()` is not a valid trainability check.
+The geometric PSF path uses float32 tensors.
+
 ## Entry Point
 
 `run_stable_native_lens_hsi_codesign(spec: StableNativeLensHSISpec)` in
@@ -23,6 +28,9 @@ as opposed to the FFT-based proxy path.
 - Rollback on loss increase
 - PSF energy/width regularization
 - Optical update interval (decouples optical/reconstructor update frequency)
+- Native autograd audit fields:
+  `trainable_param_count`, `params_with_grad`, `graph_connected`,
+  `psf_requires_grad`, `loss_requires_grad`
 
 ## Execution Fidelity
 
