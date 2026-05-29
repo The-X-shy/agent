@@ -160,14 +160,15 @@ def run_stable_native_lens_hsi_codesign(
         loss_before_step = float(total_loss.detach().cpu().item())
 
         total_loss.backward()
-        step_params_with_grad = sum(
+        step_params_with_grad = sum(1 for p in optical_params if p.grad is not None)
+        step_nonzero_grad_params = sum(
             1
             for p in optical_params
             if p.grad is not None and float(p.grad.detach().abs().max().cpu().item()) > 0.0
         )
         params_with_grad = max(params_with_grad, step_params_with_grad)
         graph_connected = graph_connected or (
-            bool(psf_requires_grad) and bool(loss_requires_grad) and step_params_with_grad > 0
+            bool(psf_requires_grad) and bool(loss_requires_grad) and step_nonzero_grad_params > 0
         )
 
         opt_gn = torch.nn.utils.clip_grad_norm_(optical_params, spec.optical_grad_clip)

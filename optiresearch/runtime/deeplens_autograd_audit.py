@@ -20,6 +20,7 @@ def run_deeplens_autograd_audit(backend_id: str = "deeplens_geolens_geometric",
         "evidence_level": "diagnostic_evidence",
         "parameter_count": 0,
         "trainable_param_count": 0, "params_with_grad": 0,
+        "nonzero_grad_param_count": 0,
         "grad_norm_max": 0.0, "grad_norm_mean": 0.0,
         "graph_connected": False,
         "detach_suspected": False, "psf_requires_grad": False,
@@ -70,7 +71,8 @@ def run_deeplens_autograd_audit(backend_id: str = "deeplens_geolens_geometric",
             param_before = [p.detach().clone() for p in trainable]
             loss.backward()
             grad_norms = [float(p.grad.norm().item()) for p in trainable if p.grad is not None]
-            result["params_with_grad"] = len([gn for gn in grad_norms if gn > 0.0])
+            result["params_with_grad"] = len(grad_norms)
+            result["nonzero_grad_param_count"] = len([gn for gn in grad_norms if gn > 0.0])
             result["grad_norm_max"] = max(grad_norms) if grad_norms else 0.0
             result["grad_norm_mean"] = sum(grad_norms) / len(grad_norms) if grad_norms else 0.0
             result["graph_connected"] = result["grad_norm_max"] > 0.0

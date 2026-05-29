@@ -19,7 +19,8 @@ def inspect_deeplens_trainable_parameters(backend_id: str = "deeplens_geolens_ge
     result: dict[str, Any] = {
         "status": "needs_followup", "evidence_level": "diagnostic_evidence",
         "parameter_count": 0, "trainable_count": 0,
-        "params_with_grad": 0, "grad_norm_max": 0.0, "grad_norm_mean": 0.0,
+        "params_with_grad": 0, "nonzero_grad_param_count": 0,
+        "grad_norm_max": 0.0, "grad_norm_mean": 0.0,
         "psf_requires_grad": False, "loss_requires_grad": False,
         "graph_connected": False,
         "surface_groups": {}, "top_gradient_parameters": [],
@@ -69,10 +70,14 @@ def inspect_deeplens_trainable_parameters(backend_id: str = "deeplens_geolens_ge
         if result["loss_requires_grad"]:
             loss.backward()
             grad_norms: list[float] = []
+            nonzero_grad_norms: list[float] = []
             for i, p in enumerate(trainable):
-                gn = float(p.grad.norm().item()) if p.grad is not None else 0.0
-                if gn > 0:
+                has_grad = p.grad is not None
+                gn = float(p.grad.norm().item()) if has_grad else 0.0
+                if has_grad:
                     grad_norms.append(gn)
+                if gn > 0:
+                    nonzero_grad_norms.append(gn)
                 if gn > 1000:
                     result["unstable_gradient_parameters"].append(i)
                 elif gn > 0:
@@ -80,6 +85,7 @@ def inspect_deeplens_trainable_parameters(backend_id: str = "deeplens_geolens_ge
                 else:
                     result["zero_gradient_parameters"].append(i)
             result["params_with_grad"] = len(grad_norms)
+            result["nonzero_grad_param_count"] = len(nonzero_grad_norms)
             result["grad_norm_max"] = max(grad_norms) if grad_norms else 0.0
             result["grad_norm_mean"] = sum(grad_norms) / len(grad_norms) if grad_norms else 0.0
             result["graph_connected"] = result["grad_norm_max"] > 0.0

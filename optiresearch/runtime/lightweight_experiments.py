@@ -570,6 +570,7 @@ def run_deeplens_geolens_geometric_deep_probe(
         grad_norm = 0.0
         params_changed = False
         params_with_grad = 0
+        nonzero_grad_param_count = 0
         loss_requires_grad = False
 
         if differentiable:
@@ -582,7 +583,8 @@ def run_deeplens_geolens_geometric_deep_probe(
                 for p in trainable_params
                 if p.grad is not None
             ]
-            params_with_grad = len([gn for gn in grad_norms if gn > 0.0])
+            params_with_grad = len(grad_norms)
+            nonzero_grad_param_count = len([gn for gn in grad_norms if gn > 0.0])
             grad_norm = max(grad_norms) if grad_norms else 0.0
             if grad_norm > 0.0:
                 try:
@@ -619,7 +621,8 @@ def run_deeplens_geolens_geometric_deep_probe(
                 "parameters_changed": params_changed,
                 "trainable_param_count": len(trainable_params),
                 "params_with_grad": params_with_grad,
-                "graph_connected": bool(differentiable and loss_requires_grad and params_with_grad > 0),
+                "nonzero_grad_param_count": nonzero_grad_param_count,
+                "graph_connected": bool(differentiable and loss_requires_grad and grad_norm > 0.0),
                 "psf_requires_grad": differentiable,
                 "loss_requires_grad": loss_requires_grad,
                 "deeplens_native_psf_path": "geolens.psf_geometric",
