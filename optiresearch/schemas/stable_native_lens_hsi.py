@@ -92,7 +92,9 @@ class StableNativeLensHSIResult(StrictModel):
     recon_gradient_norm_max: Optional[float] = None
     recon_gradient_norm_mean: Optional[float] = None
     trainable_param_count: int = 0
+    parameter_count: int = 0
     params_with_grad: int = 0
+    grad_norm_max: Optional[float] = None
     graph_connected: bool = False
     psf_requires_grad: bool = False
     loss_requires_grad: bool = False

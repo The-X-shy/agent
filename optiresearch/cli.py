@@ -482,6 +482,18 @@ def main(argv: list[str] | None = None) -> None:
     remote_geolens.add_argument("--optical-lr", type=float, default=1e-6)
     remote_geolens.add_argument("--rollback-on-loss-increase", action="store_true", default=True)
     remote_geolens.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
+    remote_clean_geo_hsi = sub.add_parser(
+        "run-remote-native-geolens-geometric-hsi-codesign",
+        help="Run full GeoLens geometric HSI co-design on a remote worker.",
+    )
+    remote_clean_geo_hsi.add_argument("--worker-id", required=True)
+    remote_clean_geo_hsi.add_argument("--lens-file", default="auto:cooke")
+    remote_clean_geo_hsi.add_argument("--dataset", default="synthetic")
+    remote_clean_geo_hsi.add_argument("--reconstructor", default="differentiable_linear",
+                                       choices=["differentiable_linear", "tiny_cnn"])
+    remote_clean_geo_hsi.add_argument("--steps", type=int, default=3)
+    remote_clean_geo_hsi.add_argument("--optical-lr", type=float, default=1e-6)
+    remote_clean_geo_hsi.add_argument("--device", default="cpu")
     remote_geo_sweep = sub.add_parser("run-remote-native-geolens-stabilization-sweep",
                                       help="Run native GeoLens stabilization sweep on a remote worker.")
     remote_geo_sweep.add_argument("--worker-id", required=True)
@@ -691,6 +703,19 @@ def main(argv: list[str] | None = None) -> None:
     geo_hsi.add_argument("--rollback-on-loss-increase", action="store_true", default=True)
     geo_hsi.add_argument("--device", default="cpu")
     geo_hsi.add_argument("--remote-job-id")
+    clean_geo_hsi = sub.add_parser(
+        "run-native-geolens-geometric-hsi-codesign",
+        help="Run full GeoLens geometric HSI co-design end-to-end training.",
+    )
+    clean_geo_hsi.add_argument("--lens-file", default="auto:cooke")
+    clean_geo_hsi.add_argument("--dataset", default="synthetic")
+    clean_geo_hsi.add_argument("--reconstructor", default="differentiable_linear",
+                                choices=["differentiable_linear", "tiny_cnn"])
+    clean_geo_hsi.add_argument("--steps", type=int, default=3,
+                                help="Number of joint training steps (maps to max_steps)")
+    clean_geo_hsi.add_argument("--optical-lr", type=float, default=1e-6)
+    clean_geo_hsi.add_argument("--recon-lr", type=float, default=1e-3)
+    clean_geo_hsi.add_argument("--device", default="cpu")
     geo_sweep = sub.add_parser("run-native-geolens-stabilization-sweep",
                                help="Run native GeoLens stabilization sweep.")
     geo_sweep.add_argument("--lens-file", default="auto:cooke")
@@ -1164,6 +1189,17 @@ def main(argv: list[str] | None = None) -> None:
             device=args.device,
         )
         _print_remote_payload(payload)
+    elif args.command == "run-remote-native-geolens-geometric-hsi-codesign":
+        payload = run_remote_deeplens_native_geolens_hsi_codesign(
+            args.worker_id,
+            lens_file=args.lens_file,
+            dataset=args.dataset,
+            reconstructor=args.reconstructor,
+            max_steps=args.steps,
+            optical_lr=args.optical_lr,
+            device=args.device,
+        )
+        _print_remote_payload(payload)
     elif args.command == "export-remote-execution-report":
         path = export_remote_execution_report(args.job_id)
         print(f"markdown: {path}")
@@ -1328,6 +1364,8 @@ def main(argv: list[str] | None = None) -> None:
         _run_lightweight_backend_probe_cli(args)
     elif args.command == "run-deeplens-native-geolens-hsi-codesign":
         _run_deeplens_native_geolens_hsi(args)
+    elif args.command == "run-native-geolens-geometric-hsi-codesign":
+        _run_native_geolens_geometric_hsi_codesign(args)
     elif args.command == "run-native-geolens-stabilization-sweep":
         _run_native_geolens_stabilization_sweep(args)
     elif args.command == "recommend-next-strategy":
@@ -2965,6 +3003,52 @@ def _run_deeplens_native_geolens_hsi(args: Any) -> None:
         "evidence_level": result.evidence_level,
         "error_code": result.error_code,
         "output_dir": str(output_dir),
+    }))
+
+
+def _run_native_geolens_geometric_hsi_codesign(args: Any) -> None:
+    from optiresearch.runtime.stable_native_lens_hsi_loop import (
+        run_stable_native_lens_hsi_codesign,
+    )
+    from optiresearch.schemas.stable_native_lens_hsi import (
+        StableNativeLensHSISpec, make_stable_lens_id,
+    )
+
+    run_id = make_stable_lens_id("GeoLensCooke", args.reconstructor)
+    spec = StableNativeLensHSISpec(
+        run_id=run_id,
+        candidate="GeoLensCooke",
+        reconstructor=args.reconstructor,
+        dataset=args.dataset,
+        max_steps=args.steps,
+        optical_lr=args.optical_lr,
+        recon_lr=args.recon_lr,
+        device=args.device,
+        full_wave_optics=False,
+        phase_to_fft_proxy_used=False,
+    )
+    result = run_stable_native_lens_hsi_codesign(spec)
+    print(_compact_json({
+        "run_id": run_id,
+        "status": result.status,
+        "parameter_count": result.parameter_count,
+        "trainable_param_count": result.trainable_param_count,
+        "params_with_grad": result.params_with_grad,
+        "grad_norm_max": result.grad_norm_max,
+        "psf_requires_grad": result.psf_requires_grad,
+        "loss_requires_grad": result.loss_requires_grad,
+        "graph_connected": result.graph_connected,
+        "parameter_changed": result.optical_parameters_changed,
+        "mse_before": result.mse_before,
+        "mse_after": result.mse_after,
+        "psnr_before": result.psnr_before,
+        "psnr_after": result.psnr_after,
+        "sam_before": result.sam_before,
+        "sam_after": result.sam_after,
+        "execution_fidelity": "deeplens_native_geometric",
+        "deeplens_native_psf_path": result.deeplens_native_psf_path,
+        "evidence_level": result.evidence_level,
+        "error_code": result.error_code,
     }))
 
 

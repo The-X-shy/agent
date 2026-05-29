@@ -577,6 +577,32 @@ def _execute_diagnostic_design(d: ExperimentDesignCandidate) -> dict[str, Any]:
     if "autograd_audit" in did or "autograd" in did:
         from optiresearch.runtime.deeplens_autograd_audit import run_deeplens_autograd_audit
         result = run_deeplens_autograd_audit(device="cpu")
+        try:
+            from optiresearch.memory.research_memory_v2 import ResearchMemoryV2, ResearchMemoryEntry
+            mem = ResearchMemoryV2()
+            audit_pass = (
+                result.get("status") == "succeeded"
+                and result.get("graph_connected")
+            )
+            mem.add_entry(ResearchMemoryEntry(
+                memory_id=f"geolens_audit_{d.design_id}_{int(time.time())}",
+                memory_type="BackendCapability",
+                content=(
+                    f"GeoLens geometric audit {'PASSED' if audit_pass else 'FAILED'}: "
+                    f"graph_connected={result.get('graph_connected')}, "
+                    f"psf_requires_grad={result.get('psf_requires_grad')}, "
+                    f"loss_requires_grad={result.get('loss_requires_grad')}, "
+                    f"trainable_param_count={result.get('trainable_param_count')}, "
+                    f"grad_norm_max={result.get('grad_norm_max')}"
+                ),
+                tags=["geolens", "geometric", "audit", "autograd",
+                      "passed" if audit_pass else "failed"],
+                source_run_id=d.design_id,
+                confidence=0.85 if audit_pass else 0.75,
+                metadata={"audit_result": result, "design_id": d.design_id},
+            ))
+        except Exception:
+            pass
         return {
             "status": "completed" if result["status"] == "succeeded" else result["status"],
             "outcome": "diagnostic_execution",
@@ -794,11 +820,14 @@ def _execute_design(d: ExperimentDesignCandidate) -> dict[str, Any]:
         and not _deeplens_available()
     ):
         code = "DIFFRACTIVE_LENS_LOCAL_UNAVAILABLE" if d.spec_payload.get("candidate") == "DiffractiveLens" else "DEEPLENS_UNAVAILABLE"
-        return _unsupported_execution_result(
+        unsupported = _unsupported_execution_result(
             d,
             code,
             "DeepLens native GeoLens execution is unavailable in this local environment.",
         )
+        _record_geometric_degradation(d, unsupported)
+        fallback_d = _make_component_surrogate_fallback(d)
+        return _execute_component_surrogate_hsi_design(fallback_d)
 
     try:
         from optiresearch.runtime.experiment_controller_v2 import (
@@ -819,8 +848,26 @@ def _execute_design(d: ExperimentDesignCandidate) -> dict[str, Any]:
             require_deeplens_native=d.backend_id == "deeplens_geolens_geometric",
         )
         result = ctrl.run_local(controller_spec)
+
+        is_geometric_design = (
+            d.backend_id == "deeplens_geolens_geometric"
+            and d.task_type in ("stable_lens_hsi_codesign", "native_lens_simulation_codesign")
+        )
+        if is_geometric_design and result.status in ("unsupported", "skipped", "failed"):
+            _record_geometric_degradation(d, result)
+            fallback_d = _make_component_surrogate_fallback(d)
+            return _execute_component_surrogate_hsi_design(fallback_d)
+
         return _controller_result_to_execution_result(d, result)
     except Exception as e:
+        is_geometric_design = (
+            d.backend_id == "deeplens_geolens_geometric"
+            and d.task_type in ("stable_lens_hsi_codesign", "native_lens_simulation_codesign")
+        )
+        if is_geometric_design:
+            _record_geometric_degradation(d, {"status": "exception", "run_id": d.design_id})
+            fallback_d = _make_component_surrogate_fallback(d)
+            return _execute_component_surrogate_hsi_design(fallback_d)
         return _failed_execution_result(d, "EXECUTION_EXCEPTION", str(e))
 
 
@@ -1292,6 +1339,58 @@ def _failed_execution_result(
     }
 
 
+def _record_geometric_degradation(
+    d: ExperimentDesignCandidate,
+    result: Any,
+) -> None:
+    """Record GeoLens geometric -> component surrogate degradation in memory."""
+    try:
+        from optiresearch.memory.research_memory_v2 import ResearchMemoryV2, ResearchMemoryEntry
+        mem = ResearchMemoryV2()
+        status = result.get("status") if isinstance(result, dict) else getattr(result, "status", "exception")
+        source_run_id = (
+            result.get("run_id") if isinstance(result, dict) else getattr(result, "run_id", None)
+        ) or d.design_id
+        mem.add_entry(ResearchMemoryEntry(
+            memory_id=f"geometric_degradation_{d.design_id}_{int(time.time())}",
+            memory_type="NegativeResult",
+            content=(
+                f"Full GeoLens geometric HSI codesign degraded to component surrogate: "
+                f"design={d.design_id}, status={status}"
+            ),
+            tags=["geolens", "geometric", "degradation", "fallback", "component_surrogate"],
+            source_run_id=source_run_id,
+            confidence=0.9,
+            metadata={
+                "design_id": d.design_id,
+                "backend_id": d.backend_id,
+                "task_type": d.task_type,
+            },
+        ))
+    except Exception:
+        pass
+
+
+def _make_component_surrogate_fallback(
+    d: ExperimentDesignCandidate,
+) -> ExperimentDesignCandidate:
+    """Create a component surrogate fallback design from a failed GeoLens design."""
+    import copy
+    fallback = copy.deepcopy(d)
+    fallback.design_id = f"component_surrogate_fallback_{d.design_id}"
+    fallback.task_type = "component_surrogate_hsi_codesign"
+    fallback.backend_id = "component_surrogate_psf"
+    if fallback.spec_payload is None:
+        fallback.spec_payload = {}
+    fallback.spec_payload["component"] = fallback.spec_payload.get(
+        "component", "fresnel"
+    )
+    fallback.spec_payload["steps"] = fallback.spec_payload.get(
+        "steps", fallback.spec_payload.get("max_steps", 3)
+    )
+    return fallback
+
+
 def _run_claim_gate(d: ExperimentDesignCandidate | None, result: dict[str, Any]) -> dict[str, Any]:
     try:
         from optiresearch.memory.claim_gate_v2 import ClaimGateV2
@@ -1425,6 +1524,13 @@ def _extract_metrics(payload: dict[str, Any]) -> dict[str, Any]:
         "optical_gradient_norm_max",
         "optical_gradient_norm_mean",
         "optical_parameters_changed",
+        "parameter_count",
+        "grad_norm_max",
+        "trainable_param_count",
+        "params_with_grad",
+        "graph_connected",
+        "psf_requires_grad",
+        "loss_requires_grad",
         "stable_training_succeeded",
         "requires_grad",
         "report_generated",

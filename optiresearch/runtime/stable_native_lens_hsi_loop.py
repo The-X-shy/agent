@@ -83,6 +83,7 @@ def run_stable_native_lens_hsi_codesign(
 
     trainable_params = bridge.get_trainable_parameters()
     trainable_param_count = len(trainable_params)
+    parameter_count = sum(p.numel() for p in trainable_params)
     if trainable_param_count == 0:
         return _unsupported(spec, "NO_NATIVE_TRAINABLE_PARAMETERS", caveats, metadata)
 
@@ -315,7 +316,9 @@ def run_stable_native_lens_hsi_codesign(
         recon_gradient_norm_max=max(recon_grad_norms) if recon_grad_norms else None,
         recon_gradient_norm_mean=sum(recon_grad_norms) / len(recon_grad_norms) if recon_grad_norms else None,
         trainable_param_count=trainable_param_count,
+        parameter_count=parameter_count,
         params_with_grad=params_with_grad,
+        grad_norm_max=max(opt_grad_norms) if opt_grad_norms else 0.0,
         graph_connected=graph_connected,
         psf_requires_grad=psf_requires_grad,
         loss_requires_grad=loss_requires_grad,

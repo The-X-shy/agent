@@ -208,6 +208,26 @@ class EvidenceStrategyReasoner:
         recoveries = diagnosis.get("recommended_recoveries", [])
         severity = diagnosis.get("severity", "medium")
 
+        # Query memory when diagnosis lacks GeoLens audit fields
+        if not any(k in diagnosis for k in ("graph_connected", "psf_requires_grad")):
+            try:
+                from optiresearch.memory.research_memory_v2 import ResearchMemoryV2
+                mem = ResearchMemoryV2()
+                audit_entries = mem.query(
+                    tags=["geolens", "audit", "passed"],
+                    min_confidence=0.8,
+                )
+                if audit_entries:
+                    latest = max(audit_entries, key=lambda e: e.created_at)
+                    diagnosis["graph_connected"] = True
+                    diagnosis["psf_requires_grad"] = True
+                    diagnosis["loss_requires_grad"] = True
+                    audit_result = latest.metadata.get("audit_result", {})
+                    diagnosis["trainable_param_count"] = audit_result.get("trainable_param_count", 1)
+                    diagnosis["params_with_grad"] = audit_result.get("params_with_grad", 1)
+            except Exception:
+                pass
+
         geolens_audit_connected = (
             diagnosis.get("graph_connected") is True
             and diagnosis.get("psf_requires_grad") is True

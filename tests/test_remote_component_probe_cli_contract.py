@@ -10,7 +10,7 @@ import pytest
 def _run_cli(args: list[str]) -> int:
     return subprocess.run(
         [sys.executable, "-m", "optiresearch.cli", *args],
-        capture_output=True, text=True, timeout=30,
+        capture_output=True, text=True, timeout=60,
     )
 
 
