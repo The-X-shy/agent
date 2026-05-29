@@ -81,6 +81,7 @@ class TestComponentProbeCLIContract:
             "run-deeplens-component-probe",
             "--component", "fresnel",
             "--device", "cpu",
+            "--max-steps", "2",
             "--remote-job-id", job_id,
         ])
         # The output JSON should be valid regardless of returncode
