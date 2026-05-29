@@ -10,6 +10,7 @@ KNOWN_EVIDENCE_LEVELS = {
     "mock_simulation", "deeplens_integration_smoke",
     "native_component_optimization", "native_hsi_proxy",
     "native_full_reconstruction_proxy", "lightweight_scientific_execution",
+    "component_surrogate_hsi_codesign",
     "synthetic_lightweight_metric_experiment", "synthetic_hsi_simulation",
     "sweep_analysis", "native_lens_simulation",
     "native_waveoptics_simulation", "native_waveoptics",

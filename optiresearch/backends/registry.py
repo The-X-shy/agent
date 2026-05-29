@@ -169,6 +169,26 @@ def _seed_registry() -> None:
                 "synthetic HSI reconstruction baseline",
             ],
         ),
+        OpticalBackend(
+            backend_id="component_surrogate_psf",
+            label="Component Surrogate PSF HSI Co-design",
+            backend_type="proxy",
+            differentiability_level="differentiable_proxy",
+            supports_psf_generation=True,
+            supports_image_simulation=True,
+            supports_hsi_forward=True,
+            supports_native_optimization=True,
+            supports_remote_execution=True,
+            claim_ceiling="component_surrogate_hsi_codesign",
+            known_failure_modes=[
+                "surrogate PSF — not full GeoLens lens-level PSF",
+                "synthetic HSI only — no real camera validation",
+            ],
+            recommended_use_cases=[
+                "component-level surrogate HSI co-design",
+                "gradient flow validation from HSI loss to component parameters",
+            ],
+        ),
     ]
 
     for b in backends:
@@ -282,6 +302,12 @@ _BACKEND_TASK_RULES: dict[str, dict[str, Optional[str]]] = {
     "deeplens_binary2phase_component": {
         "native_optimization_probe": "native_component_optimization",
         "component_optimization": "native_component_optimization",
+        "backend_probe": "deeplens_integration_smoke",
+    },
+    "component_surrogate_psf": {
+        "component_surrogate_hsi_codesign": "component_surrogate_hsi_codesign",
+        "stable_lens_hsi_codesign": "component_surrogate_hsi_codesign",
+        "native_hsi_codesign": "component_surrogate_hsi_codesign",
         "backend_probe": "deeplens_integration_smoke",
     },
     "deeplens_coherent_asm": {

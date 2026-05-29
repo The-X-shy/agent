@@ -116,6 +116,14 @@ class CandidatePlanEvaluator:
             bonus += 0.05
         if d.expected_evidence_level == "diagnostic_evidence":
             bonus += 0.03
+        recoveries = ctx.get("recommended_recoveries", [])
+        if "component_surrogate" in did and any(
+            isinstance(r, str) and r.startswith("component_probe_succeeded:")
+            for r in recoveries
+        ):
+            bonus += 0.20
+        if "full_geolens_direct_update_blocked" in failure_modes and "component_surrogate" in did:
+            bonus += 0.10
 
         return round(bonus, 3)
 
@@ -133,6 +141,11 @@ class CandidatePlanEvaluator:
             factors.append("unstable_training")
         if "gradient_flow_blocked" in lc and "autograd" in did:
             factors.append("gradient_flow_blocked")
+        if "component_surrogate" in did:
+            if any(isinstance(r, str) and r.startswith("component_probe_succeeded:") for r in ctx.get("recommended_recoveries", [])):
+                factors.append("component_probe_succeeded")
+            if "full_geolens_direct_update_blocked" in fm:
+                factors.append("full_geolens_direct_update_blocked")
         if getattr(d, "probe_only", False):
             factors.append("probe_only")
         if d.expected_evidence_level == "diagnostic_evidence":
@@ -255,6 +268,7 @@ class CandidatePlanEvaluator:
 
     def _score_design(self, d: ExperimentDesignCandidate) -> dict[str, float]:
         evidence_map = {"negative_result": 0.3, "lightweight_scientific_execution": 0.4,
+                        "component_surrogate_hsi_codesign": 0.55,
                         "native_lens_simulation": 0.5,
                         "native_waveoptics_simulation": 0.8, "real_hsi": 1.0,
                         "sweep_analysis": 0.4, "requires_user_data": 0.0,
@@ -374,6 +388,8 @@ def _is_local_supported_design(design: ExperimentDesignCandidate) -> bool:
         return True
     if design.design_id == "backend_switch_waveoptics_coherent":
         return True
+    if "component_surrogate" in design.design_id or design.task_type == "component_surrogate_hsi_codesign":
+        return True
     if _is_lightweight_scientific_design(design):
         return True
     if not design.backend_id:
@@ -414,6 +430,8 @@ def _is_report_only_design(design: ExperimentDesignCandidate) -> bool:
 def _is_lightweight_scientific_design(design: ExperimentDesignCandidate) -> bool:
     """Check if this design can be handled by a lightweight scientific handler."""
     if design.design_id in ("objective_redesign_simpler_metric_mse_only", "param_reduction_sweep"):
+        return True
+    if "component_surrogate" in design.design_id or design.task_type == "component_surrogate_hsi_codesign":
         return True
     if design.spec_payload.get("param_subset"):
         return True

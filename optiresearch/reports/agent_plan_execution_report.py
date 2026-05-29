@@ -140,6 +140,33 @@ def _markdown(execution_id: str, r: dict[str, Any]) -> str:
             "- Lightweight scientific execution — claim ceiling: synthetic_lightweight_metric_experiment",
         ])
 
+    if ex.get("evidence_level") == "component_surrogate_hsi_codesign":
+        m = ex.get("metrics", {})
+        lines.extend([
+            "",
+            "## 7a. Component Surrogate HSI Co-design",
+            f"- **Component:** {m.get('component_type', '-')}",
+            f"- **Reconstruction Loss Before:** {m.get('reconstruction_loss_before', '-')}",
+            f"- **Reconstruction Loss After:** {m.get('reconstruction_loss_after', '-')}",
+            f"- **MSE Before:** {m.get('mse_before', '-')}",
+            f"- **MSE After:** {m.get('mse_after', '-')}",
+            f"- **PSNR Before:** {m.get('psnr_before', '-')}",
+            f"- **PSNR After:** {m.get('psnr_after', '-')}",
+            f"- **SAM Before:** {m.get('sam_before', '-')}",
+            f"- **SAM After:** {m.get('sam_after', '-')}",
+            f"- **component_grad_norm_max:** {m.get('component_grad_norm_max', '-')}",
+            f"- **component_parameter_changed:** {m.get('component_parameter_changed', '-')}",
+            f"- **psf_requires_grad:** {m.get('psf_requires_grad', '-')}",
+            f"- **loss_requires_grad:** {m.get('loss_requires_grad', '-')}",
+            "",
+            "### What Not To Claim",
+            "- full GeoLens lens-level optimization",
+            "- native physical lens optimization",
+            "- real HSI performance",
+            "- real camera validation",
+            "- full wave-optics co-design",
+        ])
+
     if ex.get("execution_target") == "remote_wsl":
         remote_result = ex.get("remote_handler_result") or ex
         lines.extend([

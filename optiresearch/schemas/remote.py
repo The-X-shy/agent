@@ -37,6 +37,8 @@ RemoteJobType = Literal[
     # Phase 62: component backend validation
     "deeplens_component_probe",
     "deeplens_component_discovery",
+    # Phase 63: component surrogate PSF HSI co-design
+    "component_surrogate_hsi_codesign",
 ]
 
 RemoteJobStatus = Literal["pending", "running", "succeeded", "failed", "timeout", "skipped"]

@@ -16,9 +16,11 @@ from optiresearch.backends.registry import (
 )
 
 
-def test_registry_contains_8_backends():
+def test_registry_contains_core_backends():
     backends = list_backends()
-    assert len(backends) == 8
+    ids = {b.backend_id for b in backends}
+    assert len(backends) >= 9
+    assert "component_surrogate_psf" in ids
 
 
 def test_all_backends_have_claim_ceiling():
@@ -116,3 +118,10 @@ def test_fresnel_component_failure_modes():
     b = get_backend("deeplens_fresnel_component")
     assert b is not None
     assert any("FFT proxy" in fm for fm in b.known_failure_modes)
+
+
+def test_component_surrogate_psf_claim_ceiling():
+    b = get_backend("component_surrogate_psf")
+    assert b is not None
+    assert b.claim_ceiling == "component_surrogate_hsi_codesign"
+    assert b.supports_hsi_forward is True

@@ -474,6 +474,23 @@ def run_remote_deeplens_component_discovery(
     ), runner, ingest)
 
 
+def run_remote_component_surrogate_hsi_codesign(
+    worker_id: str,
+    component: str = "fresnel",
+    dataset: str = "synthetic",
+    steps: int = 3,
+    device: str = "cpu",
+    runner: Any | None = None,
+    ingest: bool = True,
+) -> dict[str, Any]:
+    return execute_remote_job(worker_id, _job(
+        "component_surrogate_hsi_codesign",
+        f"Component surrogate HSI co-design: {component} / {dataset}",
+        {"component": component, "dataset": dataset, "steps": steps, "device": device},
+        600, ["result.json", "metrics.json", "psf_artifact.npz", "artifact_manifest.json", "report.md"],
+    ), runner, ingest)
+
+
 def run_remote_native_optimization_inspection(
     worker_id: str,
     runner: Any | None = None,
@@ -580,6 +597,8 @@ def _remote_backend_capability_level(job_type: str) -> str:
         return "source"
     if job_type in {"deeplens_surface_optimization_probe", "deeplens_component_probe", "deeplens_component_discovery"}:
         return "native_component"
+    if job_type == "component_surrogate_hsi_codesign":
+        return "component_surrogate"
     if job_type == "deeplens_lensfile_optimization_probe":
         return "native_lens"
     if job_type == "native_hsi_codesign":
@@ -606,6 +625,8 @@ def _remote_realization_level(job_type: str) -> str | None:
         return "adapter_proxy"
     if job_type in {"deeplens_surface_optimization_probe", "deeplens_lensfile_optimization_probe", "deeplens_native_geolens_hsi_codesign", "deeplens_component_probe"}:
         return "native"
+    if job_type == "component_surrogate_hsi_codesign":
+        return "component_surrogate"
     return None
 
 
@@ -614,6 +635,8 @@ def _remote_claim_scope(job_type: str) -> str:
         return "DeepLens native differentiable component optimization"
     if job_type == "deeplens_component_discovery":
         return "DeepLens component backend discovery"
+    if job_type == "component_surrogate_hsi_codesign":
+        return "Component-level surrogate PSF HSI co-design"
     if job_type == "deeplens_lensfile_optimization_probe":
         return "DeepLens native differentiable lens optimization"
     if job_type == "native_hsi_codesign":

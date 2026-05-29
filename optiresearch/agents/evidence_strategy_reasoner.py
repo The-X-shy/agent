@@ -311,6 +311,52 @@ class EvidenceStrategyReasoner:
                 ),
             ])
 
+        probes_succeeded = set()
+        for recovery in recoveries:
+            if isinstance(recovery, str) and recovery.startswith("component_probe_succeeded:"):
+                probes_succeeded.add(recovery.split(":", 1)[1])
+        geolens_blocked = (
+            "full_geolens_direct_update_blocked" in failure_modes
+            or any(s.blocked_route == "full_geolens_direct_update" for s in self._strategies)
+        )
+        if geolens_blocked and ("fresnel" in probes_succeeded or "binary2phase" in probes_succeeded):
+            if "fresnel" in probes_succeeded:
+                self._strategies.append(CandidateStrategy(
+                    strategy_id="component_surrogate_hsi_codesign_fresnel",
+                    strategy_type="surrogate_parameterization",
+                    rationale="Full GeoLens direct update is blocked, and Fresnel component probing succeeded; wire the component into a differentiable surrogate PSF HSI loop.",
+                    expected_evidence_gain="high",
+                    expected_metric_gain="medium",
+                    risk="low",
+                    cost="low",
+                    required_skills=["component_surrogate_hsi_codesign"],
+                    required_backend="component_surrogate_psf",
+                    proposed_experiment_templates=["component_surrogate_fresnel_hsi_codesign_design"],
+                    claim_ceiling="component_surrogate_hsi_codesign",
+                    blocked_route="full_geolens_direct_update",
+                    pivot_reason="Component probe succeeded while full GeoLens direct update remains blocked",
+                    required_component_backend="deeplens_fresnel_component",
+                    expected_claim_ceiling="component_surrogate_hsi_codesign",
+                ))
+            if "binary2phase" in probes_succeeded:
+                self._strategies.append(CandidateStrategy(
+                    strategy_id="component_surrogate_hsi_codesign_binary2phase",
+                    strategy_type="surrogate_parameterization",
+                    rationale="Full GeoLens direct update is blocked, and Binary2Phase component probing succeeded; wire polynomial phase parameters into a differentiable surrogate PSF HSI loop.",
+                    expected_evidence_gain="high",
+                    expected_metric_gain="medium",
+                    risk="low",
+                    cost="low",
+                    required_skills=["component_surrogate_hsi_codesign"],
+                    required_backend="component_surrogate_psf",
+                    proposed_experiment_templates=["component_surrogate_binary2phase_hsi_codesign_design"],
+                    claim_ceiling="component_surrogate_hsi_codesign",
+                    blocked_route="full_geolens_direct_update",
+                    pivot_reason="Component probe succeeded while full GeoLens direct update remains blocked",
+                    required_component_backend="deeplens_binary2phase_component",
+                    expected_claim_ceiling="component_surrogate_hsi_codesign",
+                ))
+
         if "non_differentiable_geolens_psf_path" in failure_modes:
             self._strategies.extend([
                 CandidateStrategy(

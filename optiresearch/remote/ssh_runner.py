@@ -285,6 +285,7 @@ def build_job_command(worker: RemoteWorkerSpec, job: RemoteJobSpec) -> list[str]
         # Phase 62: component backend validation
         "deeplens_component_probe": "run-deeplens-component-probe",
         "deeplens_component_discovery": "discover-deeplens-components",
+        "component_surrogate_hsi_codesign": "run-component-surrogate-hsi-codesign",
     }[job.job_type]
     # Build env prefix for lens resolution on remote workers
     env_prefix = _build_env_prefix()

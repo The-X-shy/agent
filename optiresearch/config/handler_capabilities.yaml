@@ -90,6 +90,53 @@ handlers:
     risk_level: low
     enabled: true
 
+  - handler_id: component_surrogate_hsi_codesign
+    display_name: "Component Surrogate HSI Co-design"
+    design_type: scientific
+    task_type: component_surrogate_hsi_codesign
+    supported_execution_modes:
+      - dry_run
+      - local
+      - remote_opt_in
+    actual_evidence_level: component_surrogate_hsi_codesign
+    max_claim_ceiling: component_surrogate_hsi_codesign
+    synthetic_only: true
+    native_backend_required: false
+    physical_backend: false
+    real_data_required: false
+    remote_required: false
+    supports_remote: true
+    requires_remote_validation: false
+    remote_evidence_ceiling: component_surrogate_hsi_codesign
+    local_evidence_ceiling: component_surrogate_hsi_codesign
+    metrics_supported:
+      - reconstruction_loss
+      - mse
+      - psnr
+      - sam
+      - component_grad_norm
+      - parameter_changed
+    artifacts_supported:
+      - result.json
+      - metrics.json
+      - psf_artifact.npz
+      - artifact_manifest.json
+      - report.md
+    known_limitations:
+      - surrogate_psf_not_full_geolens
+      - synthetic_hsi_only
+      - no_real_camera_validation
+    compatible_design_ids:
+      - component_surrogate_hsi_codesign
+      - component_surrogate_fresnel_hsi_codesign_design
+      - component_surrogate_binary2phase_hsi_codesign_design
+      - component_surrogate_diffractive_candidate_hsi_codesign_design
+    compatible_backend_ids:
+      - component_surrogate_psf
+    default_timeout_sec: 300
+    risk_level: low
+    enabled: true
+
   - handler_id: backend_switch_waveoptics_coherent
     display_name: "Backend Switch — WaveOptics Coherent ASM Probe"
     design_type: probe

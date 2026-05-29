@@ -78,10 +78,12 @@ from optiresearch.runtime.remote_jobs import (
     run_remote_resolve_lens_file,
     run_remote_deeplens_component_probe,
     run_remote_deeplens_component_discovery,
+    run_remote_component_surrogate_hsi_codesign,
 )
 from optiresearch.reports.remote_execution import export_remote_execution_report
 from optiresearch.reports.native_geolens_hsi_report import export_native_geolens_hsi_report
 from optiresearch.reports.native_geolens_stabilization_report import export_native_geolens_stabilization_report
+from optiresearch.reports.component_surrogate_hsi_report import export_component_surrogate_hsi_report
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -531,6 +533,14 @@ def main(argv: list[str] | None = None) -> None:
     remote_comp_disc.add_argument("--worker-id", required=True)
     remote_comp_disc.add_argument("--components", default="fresnel,binary2phase,diffractive")
     remote_comp_disc.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
+    remote_comp_sur = sub.add_parser("run-remote-component-surrogate-hsi-codesign",
+                                      help="Run component surrogate HSI co-design on a remote worker.")
+    remote_comp_sur.add_argument("--worker-id", required=True)
+    remote_comp_sur.add_argument("--component", required=True,
+                                 choices=["fresnel", "binary2phase", "diffractive_candidate"])
+    remote_comp_sur.add_argument("--dataset", choices=["synthetic"], default="synthetic")
+    remote_comp_sur.add_argument("--steps", type=int, default=3)
+    remote_comp_sur.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
     remote_report = sub.add_parser("export-remote-execution-report", help="Export a remote execution report.")
     remote_report.add_argument("--job-id", required=True)
     remote_diag_report = sub.add_parser("export-remote-diagnostic-report",
@@ -608,6 +618,17 @@ def main(argv: list[str] | None = None) -> None:
     comp_disc.add_argument("--components", default="fresnel,binary2phase,diffractive")
     comp_disc.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
     comp_disc.add_argument("--remote-job-id", default="")
+    comp_sur = sub.add_parser("run-component-surrogate-hsi-codesign",
+                              help="Run component surrogate PSF HSI co-design.")
+    comp_sur.add_argument("--component", required=True,
+                          choices=["fresnel", "binary2phase", "diffractive_candidate"])
+    comp_sur.add_argument("--dataset", choices=["synthetic"], default="synthetic")
+    comp_sur.add_argument("--steps", type=int, default=3)
+    comp_sur.add_argument("--device", choices=["cpu", "cuda", "mps"], default="cpu")
+    comp_sur.add_argument("--remote-job-id", default="")
+    comp_sur_report = sub.add_parser("export-component-surrogate-hsi-report",
+                                      help="Export a component surrogate HSI co-design report.")
+    comp_sur_report.add_argument("--run-id", required=True)
     classify_fail = sub.add_parser("classify-failure", help="Classify a failure from result JSON.")
     classify_fail.add_argument("--result-path", required=True)
     rec_rec = sub.add_parser("recommend-recovery", help="Recommend recovery for a failure.")
@@ -1160,6 +1181,9 @@ def main(argv: list[str] | None = None) -> None:
         from optiresearch.reports.component_probe_report import export_component_probe_report
         path = export_component_probe_report(args.remote_job_id)
         print(f"markdown: {path}")
+    elif args.command == "export-component-surrogate-hsi-report":
+        path = export_component_surrogate_hsi_report(args.run_id)
+        print(f"markdown: {path}")
     # ---- Phase 36 handlers ----
     elif args.command == "list-agent-events":
         _list_agent_events()
@@ -1216,6 +1240,8 @@ def main(argv: list[str] | None = None) -> None:
         _run_deeplens_component_probe(args)
     elif args.command == "discover-deeplens-components":
         _run_deeplens_component_discovery(args)
+    elif args.command == "run-component-surrogate-hsi-codesign":
+        _run_component_surrogate_hsi_codesign(args)
     elif args.command == "classify-failure":
         _classify_failure(args.result_path)
     elif args.command == "recommend-recovery":
@@ -1284,6 +1310,12 @@ def main(argv: list[str] | None = None) -> None:
     elif args.command == "run-remote-discover-deeplens-components":
         payload = run_remote_deeplens_component_discovery(
             args.worker_id, components=args.components, device=args.device,
+        )
+        _print_remote_payload(payload)
+    elif args.command == "run-remote-component-surrogate-hsi-codesign":
+        payload = run_remote_component_surrogate_hsi_codesign(
+            args.worker_id, component=args.component, dataset=args.dataset,
+            steps=args.steps, device=args.device,
         )
         _print_remote_payload(payload)
     elif args.command == "list-optical-backends":
@@ -2142,6 +2174,66 @@ def _run_deeplens_component_discovery(args: Any) -> None:
     }, indent=2, default=str))
 
 
+def _run_component_surrogate_hsi_codesign(args: Any) -> None:
+    from optiresearch.runtime.component_surrogate_hsi_codesign import (
+        run_component_surrogate_hsi_codesign,
+    )
+    from optiresearch.schemas.component_surrogate_psf import (
+        ComponentSurrogateHSICoDesignSpec,
+    )
+
+    spec = ComponentSurrogateHSICoDesignSpec(
+        component_type=args.component,
+        dataset=args.dataset,
+        steps=args.steps,
+        device=args.device,
+        band_count=4,
+        image_size=16,
+        psf_size=9,
+        batch_size=1,
+    )
+    result = run_component_surrogate_hsi_codesign(spec)
+    print(_compact_json(result.model_dump(mode="json")))
+
+    if getattr(args, "remote_job_id", ""):
+        out_dir = Path("workspace/component_surrogate_hsi") / result.run_id
+        export_remote_job_outputs(
+            args.remote_job_id,
+            "component_surrogate_hsi_codesign",
+            {
+                **result.model_dump(mode="json"),
+                "backend": "component_surrogate_psf",
+                "objective": "Component surrogate HSI co-design",
+                "fallback_used": False,
+                "synthetic_data": True,
+                "physical_backend": False,
+                "native_backend": False,
+                "phase_to_fft_proxy_used": True,
+            },
+            [out_dir] if out_dir.exists() else [],
+            {
+                "job_type": "component_surrogate_hsi_codesign",
+                "backend": "component_surrogate_psf",
+                "component": result.component_type,
+                "status": result.status,
+                "evidence_level": result.evidence_level,
+                "claim_ceiling": result.claim_ceiling,
+                "reconstruction_loss_before": result.reconstruction_loss_before,
+                "reconstruction_loss_after": result.reconstruction_loss_after,
+                "mse_before": result.mse_before,
+                "mse_after": result.mse_after,
+                "psnr_before": result.psnr_before,
+                "psnr_after": result.psnr_after,
+                "sam_before": result.sam_before,
+                "sam_after": result.sam_after,
+                "component_grad_norm_max": result.component_grad_norm_max,
+                "component_parameter_changed": result.component_parameter_changed,
+                "psf_requires_grad": result.psf_requires_grad,
+                "loss_requires_grad": result.loss_requires_grad,
+            },
+        )
+
+
 def _run_deeplens_lensfile_optimization_probe(args: Any) -> None:
     from optiresearch.runtime.deeplens_lensfile_optimization_probe import run_lensfile_optimization_probe
 
@@ -2487,7 +2579,10 @@ def _add_remote_worker(args: Any) -> None:
 
 def _print_remote_payload(payload: dict[str, Any]) -> None:
     result = payload["result"]
-    print(_compact_json(result.model_dump(mode="json")))
+    if hasattr(result, "model_dump"):
+        print(_compact_json(result.model_dump(mode="json")))
+    else:
+        print(_compact_json(result))
     ingestion = payload.get("ingestion")
     if ingestion:
         print(f"ingestion: {Path(result.local_output_dir) / 'ingestion_summary.json'}")

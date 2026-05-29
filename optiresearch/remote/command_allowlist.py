@@ -211,6 +211,9 @@ ALLOWED_CLI_COMMANDS: dict[str, set[str]] = {
     "discover-deeplens-components": {
         "--components", "--device", "--remote-job-id",
     },
+    "run-component-surrogate-hsi-codesign": {
+        "--component", "--dataset", "--steps", "--device", "--remote-job-id",
+    },
 }
 
 FLAG_OPTIONS = {"--strict-deeplens", "--use-optical-feature-maps", "--strict-native", "--allow-adapter-proxy", "--rollback-on-loss-increase"}

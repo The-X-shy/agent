@@ -26,6 +26,7 @@ def _evidence_rank(level: str) -> int:
         "mock_simulation": 2,
         "deeplens_integration_smoke": 3,
         "native_component_optimization": 4,
+        "component_surrogate_hsi_codesign": 5,
         "native_hsi_proxy": 5,
         "native_full_reconstruction_proxy": 6,
         "lightweight_scientific_execution": 7,
@@ -238,6 +239,8 @@ def _fidelity_ceiling(
     fidelity_lower = execution_fidelity.lower()
     if "lightweight" in fidelity_lower or "proxy" in fidelity_lower:
         return "lightweight_scientific_execution"
+    if "component_surrogate" in fidelity_lower:
+        return "component_surrogate_hsi_codesign"
     if "deeplens_native" in fidelity_lower or "native_geometric" in fidelity_lower:
         if full_wave_optics:
             return "native_waveoptics_simulation"

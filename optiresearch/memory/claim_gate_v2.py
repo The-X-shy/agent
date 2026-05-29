@@ -27,6 +27,7 @@ ViolationType = Literal[
     "synthetic_metric_as_real_hsi",
     "evidence_level_overestimated",
     "handler_capability_exceeded",
+    "component_surrogate_as_full_geolens",
 ]
 
 
@@ -416,6 +417,23 @@ class ClaimGateV2:
                 )
             )
 
+        # 14. component surrogate cannot be promoted to full GeoLens/lens claims.
+        if result.get("evidence_level") == "component_surrogate_hsi_codesign" and (
+            "full geolens" in claim_lower
+            or "lens-level" in claim_lower
+            or "lens level" in claim_lower
+            or "native physical lens" in claim_lower
+            or "real camera validation" in claim_lower
+            or "full wave-optics" in claim_lower
+            or "full wave optics" in claim_lower
+        ):
+            violations.append(
+                (
+                    "component_surrogate_as_full_geolens",
+                    "Component surrogate HSI evidence cannot support full GeoLens, lens-level physical, real camera, or full wave-optics claims",
+                )
+            )
+
         return violations
 
     def _compute_max_allowed_claim(self, backend_id: str) -> str:
@@ -445,6 +463,7 @@ class ClaimGateV2:
             "synthetic_metric_as_real_hsi",
             "evidence_level_overestimated",
             "handler_capability_exceeded",
+            "component_surrogate_as_full_geolens",
         }
         qualified: set[ViolationType] = {
             "differentiable_as_improves",
@@ -549,6 +568,10 @@ class ClaimGateV2:
                 "Reduce claim scope to match handler max claim ceiling",
                 "Use a higher-capability handler or backend",
             ],
+            "component_surrogate_as_full_geolens": [
+                "Run a full GeoLens differentiable PSF path with trainable lens parameters",
+                "Validate on real HSI/camera data for real performance claims",
+            ],
         }
         return evidence.get(violation_type, [])
 
@@ -599,6 +622,10 @@ class ClaimGateV2:
             "handler_capability_exceeded": [
                 "This claim exceeds the handler's maximum evidence ceiling",
             ],
+            "component_surrogate_as_full_geolens": [
+                "Evidence is component-level surrogate HSI only",
+                "Full GeoLens, physical lens, real camera, and full wave-optics claims remain unsupported",
+            ],
         }
         return caveats.get(violation_type, [])
 
@@ -640,6 +667,7 @@ def _evidence_rank(level: str) -> int:
         "mock_simulation": 2,
         "deeplens_integration_smoke": 3,
         "native_component_optimization": 4,
+        "component_surrogate_hsi_codesign": 5,
         "native_hsi_proxy": 5,
         "native_full_reconstruction_proxy": 6,
         "lightweight_scientific_execution": 7,
@@ -662,6 +690,8 @@ def _evidence_rank_from_claim(claim_lower: str) -> int:
         return 9
     if any(t in claim_lower for t in ("native lens", "native deeplens", "native simulation")):
         return 8
+    if "component surrogate" in claim_lower or "surrogate psf" in claim_lower:
+        return 5
     if any(t in claim_lower for t in ("synthetic", "lightweight", "mse-only")):
         return 7
     if "report" in claim_lower or "negative result" in claim_lower:

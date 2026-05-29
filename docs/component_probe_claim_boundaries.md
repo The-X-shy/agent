@@ -24,6 +24,20 @@ components. This document defines what claims they can and cannot support.
 | `real_camera_validation` | No physical measurement |
 | `lens_level_psf_improvement` | Component-level only |
 
+## Follow-on Surrogate HSI Claims
+
+Phase 63 adds `component_surrogate_hsi_codesign`, which is separate from the
+Phase 62 component probe. It can support synthetic HSI gradient-flow and metric
+change claims, but only through a surrogate PSF.
+
+It still cannot support:
+
+- full GeoLens lens-level optimization
+- native physical lens optimization
+- real HSI performance
+- real camera validation
+- full wave-optics co-design
+
 ## Claim Ceiling
 
 The **claim ceiling** for component probes is capped at `native_component_optimization`.

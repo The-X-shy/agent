@@ -18,6 +18,9 @@ This document defines the policy for handling this situation.
 ### Allowed
 - **Component-level probes** — Fresnel, Binary2Phase, and other surface
   components are independently validated for differentiability.
+- **Component surrogate HSI co-design** — validated component parameter
+  semantics may be wired into a differentiable surrogate PSF and synthetic HSI
+  reconstruction loop.
 
 ### Conditional
 - **GeoLens curriculum probe** — diagnostic only; cannot produce optimization
@@ -34,9 +37,14 @@ the full pipeline. Until DeepLens provides a differentiable PSF path through
 GeoLens, lens-level optimization must rely on component-level strategies or
 await upstream API changes.
 
+Component surrogate HSI co-design is allowed because it does not execute
+`full_geolens_direct_update` and does not claim full GeoLens success.
+
 ## Evidence
 
 - Phase 60: GeoLens `parameter_count=0` confirmed via `inspect_deeplens_trainable_parameters()`
 - Phase 60: GeoLens `graph_connected=false` confirmed via `run_deeplens_autograd_audit()`
 - Phase 60: GeoLens `psf_requires_grad=false` confirmed via PSF tensor inspection
 - Phase 62: Component backends validated independently
+- Phase 63: Component surrogate PSF HSI loop validates gradient flow to
+  component parameters under synthetic HSI loss

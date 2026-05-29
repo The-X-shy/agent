@@ -378,6 +378,37 @@ class ExperimentDesignGenerator:
                 estimated_runtime_sec=3600,
                 risk_level=s.risk,
             )]
+        elif s.strategy_type == "surrogate_parameterization" and s.strategy_id.startswith("component_surrogate_hsi_codesign"):
+            component = "binary2phase" if "binary2phase" in s.strategy_id else "fresnel"
+            return [ExperimentDesignCandidate(
+                design_id=f"component_surrogate_{component}_hsi_codesign_design",
+                objective=f"Run {component} component surrogate PSF through synthetic HSI reconstruction loss",
+                backend_id="component_surrogate_psf",
+                task_type="component_surrogate_hsi_codesign",
+                spec_payload={
+                    "component": component,
+                    "dataset": "synthetic",
+                    "steps": 3,
+                    "bands": 4,
+                    "image_size": 16,
+                    "psf_size": 9,
+                },
+                expected_evidence_level="component_surrogate_hsi_codesign",
+                expected_failure_modes=["surrogate_graph_disconnected"],
+                source_strategy_id=s.strategy_id,
+                strategy_family=s.strategy_type,
+                design_origin="evidence_strategy_reasoner",
+                required_skills=s.required_skills,
+                claim_ceiling="component_surrogate_hsi_codesign",
+                estimated_runtime_sec=300,
+                risk_level=s.risk,
+                expected_handler_id="component_surrogate_hsi_codesign",
+                handler_capability_id="component_surrogate_hsi_codesign",
+                claim_boundary_notes=[
+                    "Component surrogate HSI co-design only — not full GeoLens lens-level optimization",
+                    "Synthetic HSI only — no real HSI performance claim",
+                ],
+            )]
         return []
 
     def export(self, designs: list[ExperimentDesignCandidate],
@@ -421,6 +452,7 @@ def _evidence_rank(level: str) -> int:
         "mock_simulation": 2,
         "deeplens_integration_smoke": 3,
         "native_component_optimization": 4,
+        "component_surrogate_hsi_codesign": 5,
         "native_hsi_proxy": 5,
         "native_full_reconstruction_proxy": 6,
         "lightweight_scientific_execution": 7,

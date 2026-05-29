@@ -71,6 +71,16 @@ def run_agent_plan_execution(spec: AgentPlanExecutionSpec) -> AgentPlanExecution
 
     # Phase 52-53: Diagnosis-driven planning
     diagnosis_context: dict[str, Any] = {}
+    if seed_result.get("status") == "diagnosed" and isinstance(seed_result.get("failure_modes"), list):
+        diagnosis_context = {
+            "diagnosis_id": seed_result.get("diagnosis_id", "seed_diagnosis"),
+            "status": seed_result.get("status", "diagnosed"),
+            "severity": seed_result.get("severity", "medium"),
+            "failure_modes": seed_result.get("failure_modes", []),
+            "likely_causes": seed_result.get("likely_causes", []),
+            "recommended_recoveries": seed_result.get("recommended_recoveries", []),
+            "source_count": seed_result.get("source_count", 1),
+        }
     if spec.use_gradient_diagnosis:
         try:
             from optiresearch.analysis.gradient_instability_analyzer import (
@@ -758,6 +768,9 @@ def _execute_design(d: ExperimentDesignCandidate) -> dict[str, Any]:
     if "report_generation" in d.required_skills or d.design_id == "report_negative_result_doc":
         return _execute_report_design(d)
 
+    if "component_surrogate" in d.design_id or d.task_type == "component_surrogate_hsi_codesign":
+        return _execute_component_surrogate_hsi_design(d)
+
     if _is_diagnostic_design(d):
         return _execute_diagnostic_design(d)
 
@@ -858,6 +871,77 @@ def _execute_lightweight_scientific_design(d: ExperimentDesignCandidate) -> dict
         bands=d.spec_payload.get("bands", 4),
     )
     return _lightweight_result_to_execution_result(d, result)
+
+
+def _execute_component_surrogate_hsi_design(d: ExperimentDesignCandidate) -> dict[str, Any]:
+    from optiresearch.runtime.component_surrogate_hsi_codesign import (
+        run_component_surrogate_hsi_codesign,
+    )
+    from optiresearch.schemas.component_surrogate_psf import (
+        ComponentSurrogateHSICoDesignSpec,
+    )
+
+    payload = d.spec_payload or {}
+    component = payload.get("component", _extract_component_from_design(d))
+    spec = ComponentSurrogateHSICoDesignSpec(
+        component_type=component,
+        dataset=payload.get("dataset", "synthetic"),
+        steps=int(payload.get("steps", 3)),
+        band_count=int(payload.get("bands", 4)),
+        image_size=int(payload.get("image_size", 16)),
+        psf_size=int(payload.get("psf_size", 9)),
+        batch_size=int(payload.get("batch_size", 1)),
+        device=payload.get("device", "cpu"),
+    )
+    result = run_component_surrogate_hsi_codesign(spec)
+    completed = result.status == "succeeded"
+    metrics = {
+        "component_type": result.component_type,
+        "reconstruction_loss_before": result.reconstruction_loss_before,
+        "reconstruction_loss_after": result.reconstruction_loss_after,
+        "mse_before": result.mse_before,
+        "mse_after": result.mse_after,
+        "psnr_before": result.psnr_before,
+        "psnr_after": result.psnr_after,
+        "sam_before": result.sam_before,
+        "sam_after": result.sam_after,
+        "component_grad_norm_max": result.component_grad_norm_max,
+        "component_parameter_changed": result.component_parameter_changed,
+        "psf_requires_grad": result.psf_requires_grad,
+        "loss_requires_grad": result.loss_requires_grad,
+        "synthetic_data": True,
+        "physical_backend": False,
+    }
+    return {
+        "status": "completed" if completed else result.status,
+        "outcome": result.evidence_level if completed else "structured_unsupported",
+        "design_id": d.design_id,
+        "task_type": d.task_type,
+        "backend_id": "component_surrogate_psf",
+        "evidence_level": result.evidence_level,
+        "backend_evidence_level": result.evidence_level,
+        "metrics": metrics,
+        "artifacts": list(result.artifacts),
+        "errors": [{"type": e, "message": e} for e in result.errors],
+        "caveats": [
+            "Component surrogate PSF — not full GeoLens PSF",
+            "Synthetic HSI data — no real HSI performance claim",
+            "Component-level update — not lens-level physical validation",
+        ],
+        "run_id": result.run_id,
+        "handler_id": "component_surrogate_hsi_codesign",
+        "metadata": result.metadata,
+        "handler_claim_ceiling": "component_surrogate_hsi_codesign",
+        "design_backend_claim_ceiling": _get_backend_claim_ceiling("component_surrogate_psf"),
+        "dataset_claim_ceiling": "lightweight_scientific_execution",
+        "execution_fidelity_claim_ceiling": "component_surrogate_hsi_codesign",
+        "synthetic_data": True,
+        "physical_backend": False,
+        "native_backend": False,
+        "full_wave_optics": False,
+        "phase_to_fft_proxy_used": True,
+        "claim_ceiling": result.claim_ceiling,
+    }
 
 
 def _lightweight_result_to_execution_result(
@@ -1212,7 +1296,9 @@ def _run_claim_gate(d: ExperimentDesignCandidate | None, result: dict[str, Any])
     try:
         from optiresearch.memory.claim_gate_v2 import ClaimGateV2
         gate = ClaimGateV2()
-        if result.get("evidence_level") == "lightweight_scientific_execution":
+        if result.get("evidence_level") == "component_surrogate_hsi_codesign":
+            claim_text = f"Component surrogate HSI co-design completed for {result.get('design_id', 'design')}"
+        elif result.get("evidence_level") == "lightweight_scientific_execution":
             claim_text = f"Lightweight scientific HSI co-design completed with MSE-only objective for {result.get('design_id', 'design')}"
         elif result.get("evidence_level") == "report_only":
             claim_text = "The negative result is documented"
@@ -1312,6 +1398,8 @@ def _skill_id_for_design(d: ExperimentDesignCandidate) -> str:
         return "report_generation"
     if d.design_id == "param_reduction_sweep" or d.spec_payload.get("param_subset"):
         return "param_reduction_sweep"
+    if "component_surrogate" in d.design_id or d.task_type == "component_surrogate_hsi_codesign":
+        return "component_surrogate_hsi_codesign"
     if _is_lightweight_scientific_design(d):
         return "lightweight_scientific_hsi_mse_only"
     if d.design_id == "backend_switch_waveoptics_coherent":

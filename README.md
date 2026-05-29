@@ -64,6 +64,8 @@ Phase 43 激活 `remote_native_geolens_validation` handler（enabled），将 re
 
 Phase 44 完成 remote handler 端到端验收链路：`remote_native_geolens_validation` 在 `remote_opt_in + --allow-remote` 下优先选择；执行前校验 `RemoteWorkerRegistry` requirements、allowlist、runtime 与 artifact return path；SkillRuntimeV2 解析 `RemoteHandlerResult`，防止 fallback 或缺字段伪装 native；AgentPlanExecutionLoop 将 remote result 接入 ClaimGate、Memory、StateStore、EventBus 和 AgentPlanExecutionReport；CLI 补齐 `--allow-remote` 与 `--remote-worker-id`。
 
+Phase 63 增加 component surrogate PSF HSI co-design：基于 Phase 62 已验证的 Fresnel / Binary2Phase component 参数语义，构造可微 surrogate PSF，接入 synthetic HSI forward 与 reconstruction loss，使 component parameters 能从 HSI loss 反传并更新。Claim ceiling 为 `component_surrogate_hsi_codesign`，不声明 full GeoLens lens-level optimization、real HSI performance 或 full wave-optics co-design。
+
 ## 安装
 
 ```bash
@@ -106,6 +108,10 @@ python -m optiresearch.cli check-remote-worker --worker-id windows_wsl
 python -m optiresearch.cli run-remote-deeplens-source-smoke --worker-id windows_wsl
 python -m optiresearch.cli run-agent-plan-execution --objective "recover from native GeoLens optical update instability" --seed-result-path workspace/native_geolens_stabilization/geolens_stabilization_1779550632/sweep_results.json --mode local --execute-top-k 1
 python -m optiresearch.cli export-agent-plan-execution-report --execution-id <execution_id>
+python -m optiresearch.cli run-component-surrogate-hsi-codesign --component fresnel --dataset synthetic --steps 3 --device cpu
+python -m optiresearch.cli run-component-surrogate-hsi-codesign --component binary2phase --dataset synthetic --steps 3 --device cpu
+python -m optiresearch.cli run-remote-component-surrogate-hsi-codesign --worker-id windows_wsl --component fresnel --dataset synthetic --steps 3 --device cpu
+python -m optiresearch.cli export-component-surrogate-hsi-report --run-id <run_id>
 python -m pytest
 ```
 
