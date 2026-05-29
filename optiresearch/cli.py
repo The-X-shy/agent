@@ -3021,6 +3021,7 @@ def _run_native_geolens_geometric_hsi_codesign(args: Any) -> None:
         reconstructor=args.reconstructor,
         dataset=args.dataset,
         max_steps=args.steps,
+        optical_warmup_steps=min(3, max(1, args.steps // 3)),
         optical_lr=args.optical_lr,
         recon_lr=args.recon_lr,
         device=args.device,
