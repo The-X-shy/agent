@@ -1,4 +1,8 @@
-from optiresearch.runtime.remote_jobs import _extract_metrics, run_remote_deeplens_source_smoke
+from optiresearch.runtime.remote_jobs import (
+    _extract_metrics,
+    export_remote_job_outputs,
+    run_remote_deeplens_source_smoke,
+)
 from optiresearch.schemas.remote import RemoteJobResult, RemoteWorkerSpec
 
 
@@ -55,3 +59,20 @@ def test_extract_metrics_ignores_json_arrays(tmp_path):
     path.write_text('[{"score": 1.0}]', encoding="utf-8")
 
     assert _extract_metrics(path) == {}
+
+
+def test_export_remote_job_outputs_skips_own_output_dir(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    output_dir = tmp_path / "workspace" / "remote_jobs" / "remote_job_self"
+    output_dir.mkdir(parents=True)
+    (output_dir / "result.json").write_text('{"status": "succeeded"}', encoding="utf-8")
+
+    export_remote_job_outputs(
+        "remote_job_self",
+        "deeplens_component_probe",
+        {"status": "succeeded", "run_id": "remote_job_self"},
+        [output_dir],
+        {"status": "succeeded"},
+    )
+
+    assert not (output_dir / "outputs" / "remote_job_self").exists()

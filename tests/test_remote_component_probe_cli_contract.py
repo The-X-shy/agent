@@ -84,9 +84,7 @@ class TestComponentProbeCLIContract:
             "--max-steps", "2",
             "--remote-job-id", job_id,
         ])
-        # The output JSON should be valid regardless of returncode
-        # (returncode may be non-zero due to output dir nesting issues,
-        #  which is a pre-existing export_remote_job_outputs quirk)
+        # The output JSON should be valid regardless of returncode.
         assert "component" in result.stdout or "component" in result.stderr
 
 

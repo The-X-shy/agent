@@ -543,8 +543,12 @@ def export_remote_job_outputs(
 
     copied_root = output_dir / "outputs"
     copied_root.mkdir(parents=True, exist_ok=True)
+    output_resolved = output_dir.resolve()
     for source_dir in source_dirs:
         if source_dir.exists():
+            source_resolved = source_dir.resolve()
+            if source_resolved == output_resolved:
+                continue
             dest = copied_root / source_dir.name
             if dest.exists():
                 shutil.rmtree(dest)
