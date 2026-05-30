@@ -634,13 +634,15 @@ def export_remote_job_outputs(
         "claim_scope": _remote_claim_scope(job_type),
     }
     metrics.update(metrics_summary or {})
-    (output_dir / "metrics_summary.json").write_text(
-        json.dumps(metrics, indent=2, ensure_ascii=False, default=str), encoding="utf-8"
-    )
+    metrics_json = json.dumps(metrics, indent=2, ensure_ascii=False, default=str)
+    (output_dir / "metrics_summary.json").write_text(metrics_json, encoding="utf-8")
+    # Phase 69: dual-write metrics.json for contract compatibility
+    (output_dir / "metrics.json").write_text(metrics_json, encoding="utf-8")
     manifest = _build_artifact_manifest(
         output_dir, copied_root,
         job_id=remote_job_id,
         run_id=result.get("run_id", ""),
+        expected_outputs=result.get("expected_outputs"),
     )
     # Already written inside _build_artifact_manifest
     remote_job_result = {
@@ -726,13 +728,18 @@ def _remote_claim_scope(job_type: str) -> str:
 
 
 def _build_artifact_manifest(
-    output_dir: Path, copied_root: Path, job_id: str = "", run_id: str = "", worker_id: str = ""
+    output_dir: Path, copied_root: Path, job_id: str = "", run_id: str = "", worker_id: str = "",
+    expected_outputs: list[str] | None = None,
 ) -> dict[str, Any]:
     import hashlib
     from datetime import datetime, timezone
 
     entries: list[dict[str, Any]] = []
-    required_outputs = {"result.json", "spec.json"}
+    # Use expected_outputs if provided, otherwise fall back to the original hardcoded set
+    if expected_outputs is not None:
+        required_outputs = set(expected_outputs)
+    else:
+        required_outputs = {"result.json", "spec.json"}
 
     for path in sorted(copied_root.rglob("*")):
         if not path.is_file():
@@ -756,7 +763,7 @@ def _build_artifact_manifest(
             "metadata": {"metrics": metrics} if metrics else {},
         })
 
-    for name in ["command_result.json", "metrics_summary.json"]:
+    for name in ["command_result.json", "metrics_summary.json", "metrics.json"]:
         path = output_dir / name
         if path.exists():
             sha256_hash = hashlib.sha256(path.read_bytes()).hexdigest()

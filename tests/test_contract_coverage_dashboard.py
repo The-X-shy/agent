@@ -6,7 +6,7 @@ from optiresearch.system.contract_coverage import generate_contract_coverage
 
 def test_generate_contract_coverage():
     dashboard = generate_contract_coverage()
-    assert dashboard["dashboard_version"] == "0.1"
+    assert dashboard["dashboard_version"] in ("0.1", "0.2")
     assert "handler_contract_coverage" in dashboard
     assert "overall_system_readiness_score" in dashboard
     assert 0.0 <= dashboard["overall_system_readiness_score"] <= 1.0

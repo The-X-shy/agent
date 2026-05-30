@@ -26,3 +26,5 @@ class RemoteExecutionContract(StrictModel):
     result_parser: str = ""
     failure_parser: str = ""
     retry_policy: dict[str, Any] = {}
+    is_known_gap: bool = False
+    reason: str = ""

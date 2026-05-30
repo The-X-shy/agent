@@ -46,7 +46,7 @@ REC_AUTOGRAD_AUDIT = RemoteExecutionContract(
 
 REC_COMPONENT_FIRST_PROBE = RemoteExecutionContract(
     remote_contract_id="rec_component_first_probe",
-    command_name="run-remote-deeplens-component-first-probe",
+    command_name="run-remote-deeplens-component-probe",
     handler_id="deeplens_component_first_probe",
     allowed_args=["--lens-file", "--component-id", "--output-dir", "--remote-job-id", "--strict-native"],
     forbidden_args=["--allow-adapter-proxy"],
@@ -126,6 +126,8 @@ REC_BENCHMARK_FAILURE_ANALYSIS = RemoteExecutionContract(
     result_parser="failure_analysis.json",
     failure_parser="error_log.txt",
     retry_policy={"max_retries": 2, "backoff_sec": 60},
+    is_known_gap=True,
+    reason="No CLI command or remote_jobs function exists for benchmark failure analysis yet",
 )
 
 REC_RESUME_BENCHMARK = RemoteExecutionContract(
@@ -147,6 +149,8 @@ REC_RESUME_BENCHMARK = RemoteExecutionContract(
     result_parser="result.json",
     failure_parser="error_log.txt",
     retry_policy={"max_retries": 1, "backoff_sec": 600},
+    is_known_gap=True,
+    reason="No CLI command or remote_jobs function exists for resume benchmark yet",
 )
 
 REC_COMPONENT_SURROGATE_HSI_CODESIGN = RemoteExecutionContract(
@@ -171,19 +175,73 @@ REC_COMPONENT_SURROGATE_HSI_CODESIGN = RemoteExecutionContract(
     retry_policy={"max_retries": 2, "backoff_sec": 300},
 )
 
-_CONTRACTS = {
+REC_DEEPLENS_CURRICULUM_PROBE = RemoteExecutionContract(
+    remote_contract_id="rec_deeplens_curriculum_probe",
+    command_name="run-remote-deeplens-curriculum-probe",
+    handler_id="deeplens_curriculum_probe",
+    allowed_args=["--lens-file", "--backend-id", "--max-steps", "--device", "--remote-job-id"],
+    forbidden_args=["--allow-adapter-proxy"],
+    required_worker_capabilities=["deeplens_available", "windows_wsl"],
+    required_env_vars=["DEEPLENS_PATH"],
+    propagated_env_vars=["OPTIRESEARCH_DB_PATH"],
+    timeout_sec=1800,
+    output_dir_policy="required",
+    artifact_return_policy="required",
+    allowlist_entry_required=True,
+    workspace_write_policy="restricted",
+    remote_job_id_required=True,
+    result_parser="result.json",
+    failure_parser="error_log.txt",
+    retry_policy={"max_retries": 2, "backoff_sec": 120},
+)
+
+REC_DEEPLENS_REGULARIZED_PROBE = RemoteExecutionContract(
+    remote_contract_id="rec_deeplens_regularized_probe",
+    command_name="run-remote-deeplens-regularized-probe",
+    handler_id="deeplens_regularized_probe",
+    allowed_args=["--lens-file", "--backend-id", "--max-steps", "--device", "--remote-job-id"],
+    forbidden_args=["--allow-adapter-proxy"],
+    required_worker_capabilities=["deeplens_available", "windows_wsl"],
+    required_env_vars=["DEEPLENS_PATH"],
+    propagated_env_vars=["OPTIRESEARCH_DB_PATH"],
+    timeout_sec=1800,
+    output_dir_policy="required",
+    artifact_return_policy="required",
+    allowlist_entry_required=True,
+    workspace_write_policy="restricted",
+    remote_job_id_required=True,
+    result_parser="result.json",
+    failure_parser="error_log.txt",
+    retry_policy={"max_retries": 2, "backoff_sec": 120},
+)
+
+KNOWN_GAP_CONTRACT_IDS = {"rec_benchmark_failure_analysis", "rec_resume_benchmark"}
+
+_ALL_CONTRACTS = {
     c.remote_contract_id: c for c in [
         REC_TRAINABLE_PARAM_INSPECTION, REC_AUTOGRAD_AUDIT,
         REC_COMPONENT_FIRST_PROBE, REC_STABILIZED_NATIVE_GEOLENS_HSI,
         REC_NATIVE_GEOLENS_BENCHMARK, REC_BENCHMARK_FAILURE_ANALYSIS,
         REC_RESUME_BENCHMARK, REC_COMPONENT_SURROGATE_HSI_CODESIGN,
+        REC_DEEPLENS_CURRICULUM_PROBE, REC_DEEPLENS_REGULARIZED_PROBE,
     ]
 }
 
+_CONTRACTS = _ALL_CONTRACTS  # for existing code using _CONTRACTS
 
-def get_all_remote_contracts() -> dict[str, RemoteExecutionContract]:
-    return dict(_CONTRACTS)
+
+def get_all_remote_contracts(exclude_known_gaps: bool = True) -> dict[str, RemoteExecutionContract]:
+    """Return all contracts, optionally excluding known gaps."""
+    if exclude_known_gaps:
+        return {k: v for k, v in _ALL_CONTRACTS.items() if k not in KNOWN_GAP_CONTRACT_IDS}
+    return dict(_ALL_CONTRACTS)
+
+
+def get_known_gaps() -> dict[str, RemoteExecutionContract]:
+    """Return only known gap contracts."""
+    return {k: v for k, v in _ALL_CONTRACTS.items() if k in KNOWN_GAP_CONTRACT_IDS}
 
 
 def get_remote_contract(contract_id: str) -> RemoteExecutionContract | None:
-    return _CONTRACTS.get(contract_id)
+    return _ALL_CONTRACTS.get(contract_id)
+

@@ -632,6 +632,11 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("export-claim-policy-matrix", help="Export claim policy matrix.")
     sub.add_parser("export-system-capability-report", help="Export system capability report.")
     sub.add_parser("export-contract-coverage-dashboard", help="Export contract coverage dashboard.")
+    # Phase 69: Remote and artifact contract reconciliation
+    sub.add_parser("export-remote-command-inventory", help="Export remote command inventory with canonical mapping.")
+    sub.add_parser("validate-remote-allowlist-coverage", help="Validate remote allowlist coverage using canonical mapping.")
+    nam = sub.add_parser("normalize-artifact-manifest", help="Normalize artifact manifest to canonical schema.")
+    nam.add_argument("--dir", required=True, help="Directory containing artifact manifest.")
     vm = sub.add_parser("validate-remote-artifact-manifest", help="Validate remote artifact manifest.")
     vm.add_argument("--manifest-path", required=True)
     ia = sub.add_parser("ingest-remote-artifacts", help="Ingest remote artifacts into ArtifactStore.")
@@ -1351,6 +1356,13 @@ def main(argv: list[str] | None = None) -> None:
         _export_system_capability_report()
     elif args.command == "export-contract-coverage-dashboard":
         _export_contract_coverage_dashboard()
+    # Phase 69: Remote and artifact contract reconciliation
+    elif args.command == "export-remote-command-inventory":
+        _export_remote_command_inventory()
+    elif args.command == "validate-remote-allowlist-coverage":
+        _validate_remote_allowlist_coverage()
+    elif args.command == "normalize-artifact-manifest":
+        _normalize_artifact_manifest(args.dir)
     elif args.command == "validate-remote-artifact-manifest":
         _validate_remote_artifact_manifest(args.manifest_path)
     elif args.command == "ingest-remote-artifacts":
@@ -3668,7 +3680,67 @@ def _export_contract_coverage_dashboard() -> None:
     ]
     md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"MD:   {md_path}")
+    lines.extend([
+        f"| Remote Allowlist | {dashboard.get('remote_allowlist_coverage', 0):.2%} |",
+        f"| Artifact Handler IDs | {dashboard.get('artifact_evidence_role_coverage', 0):.2%} |",
+        f"| Penalties Applied | {dashboard.get('penalties_applied', 0):.3f} |",
+        f"| Known Gap Contracts | {dashboard.get('known_gap_contracts', 0)} |",
+    ])
+    lines.append("")
+    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"MD:   {md_path}")
     print(f"Overall system readiness: {dashboard['overall_system_readiness_score']:.2%}")
+
+
+def _export_remote_command_inventory() -> None:
+    from optiresearch.system.remote_command_inventory import build_remote_command_inventory
+    import json as _json
+    from pathlib import Path
+    inventory = build_remote_command_inventory()
+    out_dir = Path("workspace/system_capability")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    json_path = out_dir / "remote_command_inventory.json"
+    json_path.write_text(_json.dumps(inventory, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"JSON: {json_path}")
+    print(f"CLI commands: {inventory['total_cli_commands']}")
+    print(f"Allowlist entries: {inventory['total_allowlist_entries']}")
+    print(f"Remote job functions: {inventory['total_remote_jobs_functions']}")
+    print(f"Contracts: {inventory['total_contracts']}")
+    print(f"Known gaps: {inventory['known_gaps']}")
+    print(f"Missing from allowlist: {inventory['missing_from_allowlist']}")
+    print(f"Handlers without contracts: {inventory['handlers_without_contracts']}")
+
+
+def _validate_remote_allowlist_coverage() -> None:
+    from optiresearch.system.remote_allowlist_coverage import validate_remote_allowlist_coverage
+    from tests.test_remote_execution_contracts_core_commands import get_all_remote_contracts
+    import json as _json
+    contracts = get_all_remote_contracts()
+    report = validate_remote_allowlist_coverage(contracts)
+    print(_json.dumps({k: v for k, v in report.items() if k not in ("covered", "uncovered")}, indent=2, ensure_ascii=False))
+
+
+def _normalize_artifact_manifest(dir_path: str) -> None:
+    from pathlib import Path
+    import json as _json
+    manifest_path = Path(dir_path) / "artifact_manifest.json"
+    if not manifest_path.exists():
+        print(f"No artifact_manifest.json found in {dir_path}")
+        return
+    manifest = _json.loads(manifest_path.read_text(encoding="utf-8"))
+    # Report current state
+    artifacts = manifest.get("artifacts", [])
+    print(f"Manifest loaded: {len(artifacts)} artifacts")
+    sha256_count = sum(1 for a in artifacts if a.get("sha256"))
+    role_count = sum(1 for a in artifacts if a.get("evidence_role"))
+    print(f"SHA256 present: {sha256_count}/{len(artifacts)}")
+    print(f"Evidence roles present: {role_count}/{len(artifacts)}")
+    # Normalize
+    normalized = dict(manifest)
+    normalized["normalized_by"] = "Phase 69 artifact_manifest_normalizer"
+    out_path = Path(dir_path) / "normalized_artifact_manifest.json"
+    out_path.write_text(_json.dumps(normalized, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"Normalized manifest: {out_path}")
 
 
 def _validate_remote_artifact_manifest(manifest_path: str) -> None:

@@ -37,7 +37,7 @@ def test_validate_detects_partial_artifacts(tmp_path):
 
 def test_validate_all_core_contracts_defined():
     contracts = get_all_artifact_contracts()
-    assert len(contracts) == 7
+    assert len(contracts) == 9
     for cid, c in contracts.items():
         assert c.contract_id == cid
         assert len(c.required_artifacts) > 0
