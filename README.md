@@ -66,6 +66,8 @@ Phase 44 完成 remote handler 端到端验收链路：`remote_native_geolens_va
 
 Phase 63 增加 component surrogate PSF HSI co-design：基于 Phase 62 已验证的 Fresnel / Binary2Phase component 参数语义，构造可微 surrogate PSF，接入 synthetic HSI forward 与 reconstruction loss，使 component parameters 能从 HSI loss 反传并更新。Claim ceiling 为 `component_surrogate_hsi_codesign`，不声明 full GeoLens lens-level optimization、real HSI performance 或 full wave-optics co-design。
 
+Phase 68 建立 SystemCapabilityRegistry 与 ExecutionContract 统一层：新增 `SystemCapabilityEntry` / `SystemCapabilityRegistry` schema，从 7 个现有 registry 自动收集 capability 条目（handler / skill / design / backend / claim_policy），建立 `ExecutionContract` / `ArtifactContract` / `RemoteExecutionContract` / `ReportContract` 四种合约 schema，实现 4 个 validator 检查合约一致性、allowlist 覆盖、artifact 完整性、report 结构合规，生成 `ClaimPolicyMatrix`（16 evidence levels）与 `SystemCapabilityReport`（13 sections），输出 `ContractCoverageDashboard` 计算 `overall_system_readiness_score`。新增 8 个 CLI 命令与 23 个测试文件。
+
 ## 安装
 
 ```bash

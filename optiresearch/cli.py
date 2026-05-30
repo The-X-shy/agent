@@ -619,6 +619,19 @@ def main(argv: list[str] | None = None) -> None:
     resolve_cc.add_argument("--execution-fidelity", default="lightweight_proxy")
     sub.add_parser("validate-handler-capabilities", help="Validate handler capabilities config.")
     sub.add_parser("export-handler-capability-config-report", help="Export handler capability config diagnostics report.")
+    # Phase 68: System Capability Registry and Execution Contracts
+    sub.add_parser("build-system-capability-registry", help="Build SystemCapabilityRegistry from all existing configs.")
+    sub.add_parser("validate-execution-contracts", help="Validate execution contracts against the registry.")
+    sub.add_parser("validate-remote-execution-contracts", help="Validate remote execution contracts.")
+    vac = sub.add_parser("validate-artifact-contract", help="Validate artifact contract for a run directory.")
+    vac.add_argument("--run-dir", required=True)
+    vac.add_argument("--contract-id", required=True)
+    vrc = sub.add_parser("validate-report-contract", help="Validate report contract.")
+    vrc.add_argument("--report-path", required=True)
+    vrc.add_argument("--contract-id", required=True)
+    sub.add_parser("export-claim-policy-matrix", help="Export claim policy matrix.")
+    sub.add_parser("export-system-capability-report", help="Export system capability report.")
+    sub.add_parser("export-contract-coverage-dashboard", help="Export contract coverage dashboard.")
     vm = sub.add_parser("validate-remote-artifact-manifest", help="Validate remote artifact manifest.")
     vm.add_argument("--manifest-path", required=True)
     ia = sub.add_parser("ingest-remote-artifacts", help="Ingest remote artifacts into ArtifactStore.")
@@ -1321,6 +1334,23 @@ def main(argv: list[str] | None = None) -> None:
         _validate_handler_capabilities()
     elif args.command == "export-handler-capability-config-report":
         _export_handler_capability_config_report()
+    # Phase 68: System Capability Registry and Execution Contracts
+    elif args.command == "build-system-capability-registry":
+        _build_system_capability_registry()
+    elif args.command == "validate-execution-contracts":
+        _validate_execution_contracts()
+    elif args.command == "validate-remote-execution-contracts":
+        _validate_remote_execution_contracts()
+    elif args.command == "validate-artifact-contract":
+        _validate_artifact_contract(args.run_dir, args.contract_id)
+    elif args.command == "validate-report-contract":
+        _validate_report_contract(args.report_path, args.contract_id)
+    elif args.command == "export-claim-policy-matrix":
+        _export_claim_policy_matrix()
+    elif args.command == "export-system-capability-report":
+        _export_system_capability_report()
+    elif args.command == "export-contract-coverage-dashboard":
+        _export_contract_coverage_dashboard()
     elif args.command == "validate-remote-artifact-manifest":
         _validate_remote_artifact_manifest(args.manifest_path)
     elif args.command == "ingest-remote-artifacts":
@@ -3504,6 +3534,141 @@ def _export_handler_capability_config_report() -> None:
     md_path, json_path = export_handler_capability_config_report()
     print(f"MD report:  {md_path}")
     print(f"JSON report: {json_path}")
+
+
+def _build_system_capability_registry() -> None:
+    from optiresearch.system.capability_registry import build_system_capability_registry
+    import json as _json
+    from pathlib import Path
+    registry = build_system_capability_registry()
+    out_dir = Path("workspace/system_capability")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    json_path = out_dir / "system_capability_registry.json"
+    json_path.write_text(registry.model_dump_json(indent=2), encoding="utf-8")
+    print(f"JSON: {json_path}")
+    # Markdown summary
+    md_path = out_dir / "system_capability_registry.md"
+    lines = [
+        "# System Capability Registry", "",
+        f"**Version:** {registry.registry_version}",
+        f"**Generated At:** {registry.generated_at}",
+        f"**Total Entries:** {len(registry.entries)}",
+    ]
+    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"MD:   {md_path}")
+    print(f"Total capabilities: {len(registry.entries)}")
+
+
+def _validate_execution_contracts() -> None:
+    from optiresearch.system.execution_contract_validator import validate_execution_contracts
+    from tests.test_core_handler_execution_contracts import get_all_contracts
+    import json as _json
+    contracts = get_all_contracts()
+    report = validate_execution_contracts(contracts)
+    print(_json.dumps({k: v for k, v in report.items() if k != "results"}, indent=2, ensure_ascii=False))
+    if report["validation_status"] != "passed":
+        print(f"Issues found: {report['total_issues']}")
+
+
+def _validate_remote_execution_contracts() -> None:
+    from optiresearch.system.remote_execution_contract_validator import validate_remote_execution_contracts
+    from tests.test_remote_execution_contracts_core_commands import get_all_remote_contracts
+    import json as _json
+    contracts = get_all_remote_contracts()
+    report = validate_remote_execution_contracts(contracts)
+    print(_json.dumps({k: v for k, v in report.items() if k != "results"}, indent=2, ensure_ascii=False))
+    if report["unsafe_args_detected"]:
+        print(f"UNSAFE ARGS DETECTED: {report['unsafe_args_detected']}")
+
+
+def _validate_artifact_contract(run_dir: str, contract_id: str) -> None:
+    from optiresearch.system.artifact_contract_validator import validate_artifact_contract_for_run
+    from tests.test_core_artifact_contracts import get_artifact_contract
+    import json as _json
+    contract = get_artifact_contract(contract_id)
+    if contract is None:
+        print(f"Unknown contract_id: {contract_id}")
+        return
+    result = validate_artifact_contract_for_run(run_dir, contract)
+    print(_json.dumps(result, indent=2, ensure_ascii=False))
+
+
+def _validate_report_contract(report_path: str, contract_id: str) -> None:
+    from optiresearch.system.report_contract_validator import validate_report_contract
+    from tests.test_core_report_contracts import get_report_contract
+    import json as _json
+    contract = get_report_contract(contract_id)
+    if contract is None:
+        print(f"Unknown contract_id: {contract_id}")
+        return
+    result = validate_report_contract(report_path, contract)
+    print(_json.dumps(result, indent=2, ensure_ascii=False))
+
+
+def _export_claim_policy_matrix() -> None:
+    from optiresearch.system.claim_policy_matrix import generate_claim_policy_matrix
+    import json as _json
+    import csv
+    from pathlib import Path
+    matrix = generate_claim_policy_matrix()
+    out_dir = Path("workspace/system_capability")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    # JSON
+    json_path = out_dir / "claim_policy_matrix.json"
+    json_path.write_text(_json.dumps(matrix, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"JSON: {json_path}")
+    # CSV
+    csv_path = out_dir / "claim_policy_matrix.csv"
+    if matrix["rows"]:
+        with csv_path.open("w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=matrix["rows"][0].keys())
+            w.writeheader()
+            w.writerows(matrix["rows"])
+        print(f"CSV:  {csv_path}")
+    # MD
+    md_path = out_dir / "claim_policy_matrix.md"
+    lines = ["# Claim Policy Matrix", "", f"**Evidence levels covered:** {matrix['evidence_levels_covered']}", ""]
+    lines.append("| evidence_level | rank | supported_claims | blocked_claims |")
+    lines.append("|---|---|---|---|")
+    for row in matrix["rows"]:
+        lines.append(f"| {row['evidence_level']} | {row['rank']} | {', '.join(row['supported_claims'][:2])}... | {', '.join(row['blocked_claims'][:2])}... |")
+    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"MD:   {md_path}")
+
+
+def _export_system_capability_report() -> None:
+    from optiresearch.reports.system_capability_report import export_system_capability_report
+    md_path = export_system_capability_report()
+    print(f"Report: {md_path}")
+
+
+def _export_contract_coverage_dashboard() -> None:
+    from optiresearch.system.contract_coverage import generate_contract_coverage
+    import json as _json
+    from pathlib import Path
+    dashboard = generate_contract_coverage()
+    out_dir = Path("workspace/system_capability")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    json_path = out_dir / "contract_coverage.json"
+    json_path.write_text(_json.dumps(dashboard, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"JSON: {json_path}")
+    md_path = out_dir / "contract_coverage.md"
+    lines = [
+        "# Contract Coverage Dashboard", "",
+        f"**Overall Readiness Score:** {dashboard['overall_system_readiness_score']:.2%}",
+        "",
+        "| Metric | Coverage |",
+        "|---|---|",
+        f"| Handler Contracts | {dashboard['handler_contract_coverage']:.2%} |",
+        f"| Design Mapping | {dashboard['design_mapping_coverage']:.2%} |",
+        f"| Remote Contracts | {dashboard['remote_contract_coverage']:.2%} |",
+        f"| Artifact Contracts | {dashboard['artifact_contract_coverage']:.2%} |",
+        f"| Report Contracts | {dashboard['report_contract_coverage']:.2%} |",
+        f"| Claim Policy | {dashboard['claim_policy_coverage']:.2%} |",
+    ]
+    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"MD:   {md_path}")
+    print(f"Overall system readiness: {dashboard['overall_system_readiness_score']:.2%}")
 
 
 def _validate_remote_artifact_manifest(manifest_path: str) -> None:
