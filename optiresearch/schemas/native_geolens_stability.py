@@ -24,6 +24,7 @@ class NativeGeoLensStabilitySpec(StableNativeLensHSISpec):
     seed: int = Field(default=42, ge=0)
     optimizer_name: str = Field(default="adam")
     spectral_angle_weight: float = Field(default=0.2, ge=0.0, le=10.0)
+    optical_grad_clip: float = Field(default=1.0, gt=0.0, le=10000.0)
     enable_rollback_policy: bool = Field(default=True)
     rollback_max_grad_norm: float = Field(default=5000.0, gt=0.0)
     rollback_sam_tolerance: float = Field(default=0.0, ge=0.0)
