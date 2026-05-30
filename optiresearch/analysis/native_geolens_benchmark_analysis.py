@@ -204,25 +204,56 @@ def compute_tradeoff_labels(
     return labels
 
 
+def compute_full_grid_improvement_rates(
+    results: list[Any],
+) -> dict[str, float]:
+    """Compute improvement rates across ALL configs (full grid)."""
+    total = len(results)
+    if total == 0:
+        return {"all_metrics_improved_rate_full_grid": 0.0}
+
+    all_ok = sum(
+        1 for r in results
+        if getattr(r, "mse_improved", False)
+        and getattr(r, "psnr_improved", False)
+        and getattr(r, "sam_improved", False)
+    )
+    return {"all_metrics_improved_rate_full_grid": all_ok / total,
+            "all_metrics_improved_count_full_grid": all_ok}
+
+
 def aggregate_config_results(
     results: list[Any],
     benchmark_id: str = "",
 ) -> dict[str, Any]:
-    """Aggregate all config results into a benchmark summary dict."""
-    # Ensure results are dicts or objects with attributes
+    """Aggregate all config results into a benchmark summary dict.
+
+    Produces both completed-only and full-grid statistics.
+    """
     obj_results = results
     total = len(results)
     completed = [r for r in results if getattr(r, "status", "") == "succeeded"]
-    failed = [r for r in results if getattr(r, "status", "") not in ("succeeded",)]
+    unsupported = [r for r in results if getattr(r, "status", "") == "unsupported"]
+    failed = [r for r in results if getattr(r, "status", "") == "failed"]
 
-    rates = compute_improvement_rates(obj_results)
+    # Completed-only rates
+    rates_completed = compute_improvement_rates(obj_results)
     stats = compute_metric_statistics(obj_results)
     rollback = compute_rollback_statistics(obj_results)
 
+    # Full-grid rates
+    rates_full = compute_full_grid_improvement_rates(obj_results)
+
+    completion_rate = len(completed) / total if total > 0 else 0.0
     seeds = sorted({getattr(r, "seed", -1) for r in results if getattr(r, "seed", -1) >= 0})
     best = identify_best_config(obj_results)
     robust = identify_robust_config_family(obj_results)
-    rec, wording = generate_claim_recommendation(rates, len(seeds))
+
+    # Claim recommendation considers completion coverage
+    rec, wording = _generate_claim_recommendation_with_coverage(
+        rates_completed, rates_full, completion_rate, len(seeds),
+        len(unsupported), len(failed),
+    )
 
     blocked = [
         "real HSI performance validation",
@@ -231,18 +262,25 @@ def aggregate_config_results(
         "production-ready lens design",
         "guaranteed monotonic improvement across all metrics",
     ]
+    if completion_rate < 0.8:
+        blocked.append("full-grid reproducibility claim (completion < 80%)")
+    if rates_full.get("all_metrics_improved_rate_full_grid", 0) < 0.5:
+        blocked.append("full-grid all-metrics improvement claim")
 
     return {
         "benchmark_id": benchmark_id,
         "config_count": total,
         "completed_count": len(completed),
+        "unsupported_count": len(unsupported),
         "failed_count": len(failed),
+        "completion_rate": completion_rate,
         "seed_count": len(seeds),
-        "all_metrics_improved_count": rates.get("all_metrics_improved_count", 0),
-        "all_metrics_improved_rate": rates["all_metrics_improved_rate"],
-        "mse_improved_rate": rates["mse_improved_rate"],
-        "psnr_improved_rate": rates["psnr_improved_rate"],
-        "sam_improved_rate": rates["sam_improved_rate"],
+        "all_metrics_improved_count": rates_completed.get("all_metrics_improved_count", 0),
+        "all_metrics_improved_rate": rates_completed["all_metrics_improved_rate"],
+        "all_metrics_improved_rate_full_grid": rates_full["all_metrics_improved_rate_full_grid"],
+        "mse_improved_rate": rates_completed["mse_improved_rate"],
+        "psnr_improved_rate": rates_completed["psnr_improved_rate"],
+        "sam_improved_rate": rates_completed["sam_improved_rate"],
         "mean_mse_delta": stats.get("mean_mse_delta"),
         "std_mse_delta": stats.get("std_mse_delta"),
         "mean_psnr_delta": stats.get("mean_psnr_delta"),
@@ -257,3 +295,51 @@ def aggregate_config_results(
         "safe_wording": wording,
         "blocked_claims": blocked,
     }
+
+
+def _generate_claim_recommendation_with_coverage(
+    rates_completed: dict[str, float],
+    rates_full: dict[str, float],
+    completion_rate: float,
+    seed_count: int,
+    unsupported_count: int,
+    failed_count: int,
+) -> tuple[str, str]:
+    """Generate claim recommendation accounting for completion coverage."""
+    all_rate_completed = rates_completed.get("all_metrics_improved_rate", 0.0)
+    all_rate_full = rates_full.get("all_metrics_improved_rate_full_grid", 0.0)
+
+    if seed_count < 3:
+        return (
+            "insufficient_reproducibility",
+            f"Insufficient seeds ({seed_count}) for reproducibility claim.",
+        )
+
+    if completion_rate < 0.8:
+        qualifier = f"among completed configurations ({int(completion_rate * 100)}% of grid)"
+        if unsupported_count > 0:
+            qualifier += f"; {unsupported_count} configs did not improve metrics"
+        if all_rate_completed >= 0.8:
+            return (
+                "completed_configs_only",
+                f"Native GeoLens geometric synthetic HSI optimization shows "
+                f"reproducible multi-metric improvement {qualifier}. "
+                f"Full-grid reproducibility ({all_rate_full:.0%}) is limited by "
+                f"non-improving configs. Results do not extend to real HSI or wave-optics.",
+            )
+        return (
+            "limited_evidence",
+            f"Improvement is limited {qualifier}. Further stabilization needed.",
+        )
+
+    if all_rate_full >= 0.5 and all_rate_completed >= 0.8:
+        return (
+            "reproducible_synthetic_stability",
+            f"Native GeoLens geometric synthetic HSI optimization shows "
+            f"reproducible multi-metric improvement (full-grid: {all_rate_full:.0%}, "
+            f"completed: {all_rate_completed:.0%}) across {seed_count} seeds. "
+            f"Reproducibility demonstrated within tested benchmark. "
+            f"Results do not extend to real HSI or wave-optics.",
+        )
+
+    return generate_claim_recommendation(rates_completed, seed_count)

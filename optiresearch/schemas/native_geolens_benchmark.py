@@ -38,6 +38,7 @@ class NativeGeoLensBenchmarkConfigResult(StrictModel):
     grad_clip_norm: float
     status: str
     evidence_level: Optional[str] = None
+    error_code: Optional[str] = None
     parameter_count: int = 0
     trainable_param_count: int = 0
     graph_connected: bool = False
@@ -73,10 +74,13 @@ class NativeGeoLensBenchmarkSummary(StrictModel):
     benchmark_id: str
     config_count: int = 0
     completed_count: int = 0
+    unsupported_count: int = 0
     failed_count: int = 0
+    completion_rate: float = 0.0
     seed_count: int = 0
     all_metrics_improved_count: int = 0
     all_metrics_improved_rate: float = 0.0
+    all_metrics_improved_rate_full_grid: float = 0.0
     mse_improved_rate: float = 0.0
     psnr_improved_rate: float = 0.0
     sam_improved_rate: float = 0.0

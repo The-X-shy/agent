@@ -9,6 +9,7 @@ per-config results into a statistical summary.
 from __future__ import annotations
 
 import csv
+import gc
 import itertools
 import json
 import time
@@ -55,10 +56,21 @@ def run_native_geolens_stability_benchmark(
 
     for i, (seed, steps, sa_weight, grad_clip) in enumerate(configs):
         config_id = f"cfg_{i:03d}_s{seed}_t{steps}_w{sa_weight}_c{int(grad_clip)}"
+        gc.collect()
         result = _run_single_config(
             config_id, seed, steps, sa_weight, grad_clip, spec,
             run_stabilized_native_geolens_hsi_loop,
         )
+        # Retry transient failures (Python exceptions) up to 2 times
+        retries = 0
+        while result.status == "failed" and retries < 2:
+            gc.collect()
+            result = _run_single_config(
+                config_id, seed, steps, sa_weight, grad_clip, spec,
+                run_stabilized_native_geolens_hsi_loop,
+                retry_count=retries + 1,
+            )
+            retries += 1
         config_results.append(result)
 
     # Aggregate
@@ -68,10 +80,13 @@ def run_native_geolens_stability_benchmark(
         benchmark_id=benchmark_id,
         config_count=summary_dict["config_count"],
         completed_count=summary_dict["completed_count"],
+        unsupported_count=summary_dict["unsupported_count"],
         failed_count=summary_dict["failed_count"],
+        completion_rate=summary_dict["completion_rate"],
         seed_count=summary_dict["seed_count"],
         all_metrics_improved_count=summary_dict["all_metrics_improved_count"],
         all_metrics_improved_rate=summary_dict["all_metrics_improved_rate"],
+        all_metrics_improved_rate_full_grid=summary_dict["all_metrics_improved_rate_full_grid"],
         mse_improved_rate=summary_dict["mse_improved_rate"],
         psnr_improved_rate=summary_dict["psnr_improved_rate"],
         sam_improved_rate=summary_dict["sam_improved_rate"],
@@ -107,6 +122,7 @@ def _run_single_config(
     grad_clip: float,
     bench_spec: NativeGeoLensBenchmarkSpec,
     loop_fn: Any,
+    retry_count: int = 0,
 ) -> NativeGeoLensBenchmarkConfigResult:
     """Run a single config, catching all errors."""
     errors: list[str] = []
@@ -155,6 +171,7 @@ def _run_single_config(
         grad_clip_norm=grad_clip,
         status=result.status,
         evidence_level=result.evidence_level,
+        error_code=result.error_code,
         parameter_count=result.parameter_count,
         trainable_param_count=result.trainable_param_count,
         graph_connected=result.graph_connected,
@@ -237,10 +254,14 @@ def _benchmark_report_md(summary: dict[str, Any]) -> str:
         "",
         "## 1. Summary",
         "",
-        f"- Configs: {summary['config_count']} ({summary['completed_count']} completed, {summary['failed_count']} failed)",
+        f"- Configs: {summary['config_count']} "
+        f"({summary['completed_count']} completed, "
+        f"{summary.get('unsupported_count', 0)} unsupported, "
+        f"{summary['failed_count']} failed)",
+        f"- Completion rate: {summary.get('completion_rate', 0):.1%}",
         f"- Seeds: {summary['seed_count']}",
         "",
-        "## 2. Improvement Rates",
+        "## 2. Improvement Rates (Completed Configs)",
         "",
         f"| Metric | Rate |",
         f"|--------|------|",
@@ -248,6 +269,12 @@ def _benchmark_report_md(summary: dict[str, Any]) -> str:
         f"| MSE improved | {summary['mse_improved_rate']:.1%} |",
         f"| PSNR improved | {summary['psnr_improved_rate']:.1%} |",
         f"| SAM improved | {summary['sam_improved_rate']:.1%} |",
+        "",
+        "## 2b. Full-Grid Improvement Rate",
+        "",
+        f"| Metric | Rate |",
+        f"|--------|------|",
+        f"| All metrics improved (full grid) | {summary.get('all_metrics_improved_rate_full_grid', 0):.1%} |",
         "",
         "## 3. Metric Statistics",
         "",
