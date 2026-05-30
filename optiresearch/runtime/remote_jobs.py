@@ -365,6 +365,37 @@ def run_remote_native_geolens_stabilization_sweep(
     return execute_remote_job(worker_id, job, runner=runner, ingest=ingest)
 
 
+def run_remote_stabilized_native_geolens_hsi(
+    worker_id: str,
+    lens_file: str = "auto:cooke",
+    dataset: str = "synthetic",
+    reconstructor: str = "differentiable_linear",
+    max_steps: int = 10,
+    spectral_angle_weight: float = 0.2,
+    optical_lr: float = 1e-6,
+    device: str = "cpu",
+    runner: Any | None = None,
+    ingest: bool = True,
+) -> dict[str, Any]:
+    job = _job(
+        "stabilized_native_geolens_hsi",
+        objective=f"Stabilized native GeoLens HSI co-design: {lens_file} / {reconstructor} "
+                  f"(spectral_weight={spectral_angle_weight})",
+        cli_args={
+            "lens_file": lens_file,
+            "dataset": dataset,
+            "reconstructor": reconstructor,
+            "max_steps": max_steps,
+            "spectral_angle_weight": spectral_angle_weight,
+            "optical_lr": optical_lr,
+            "device": device,
+        },
+        timeout_seconds=3600,
+        expected_outputs=["result.json", "spec.json"],
+    )
+    return execute_remote_job(worker_id, job, runner=runner, ingest=ingest)
+
+
 def run_remote_deeplens_trainable_parameter_inspection(
     worker_id: str,
     lens_file: str = "auto:cooke",
@@ -621,13 +652,15 @@ def _remote_backend_capability_level(job_type: str) -> str:
         return "native_lens"
     if job_type == "native_geolens_stabilization_sweep":
         return "native_lens"
+    if job_type == "stabilized_native_geolens_hsi":
+        return "native_lens"
     return "adapter_proxy"
 
 
 def _remote_realization_level(job_type: str) -> str | None:
     if job_type == "codesign_loop":
         return "adapter_proxy"
-    if job_type in {"deeplens_surface_optimization_probe", "deeplens_lensfile_optimization_probe", "deeplens_native_geolens_hsi_codesign", "deeplens_component_probe"}:
+    if job_type in {"deeplens_surface_optimization_probe", "deeplens_lensfile_optimization_probe", "deeplens_native_geolens_hsi_codesign", "deeplens_component_probe", "stabilized_native_geolens_hsi"}:
         return "native"
     if job_type == "component_surrogate_hsi_codesign":
         return "component_surrogate"

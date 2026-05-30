@@ -186,6 +186,17 @@ ALLOWED_CLI_COMMANDS: dict[str, set[str]] = {
         "--device",
         "--remote-job-id",
     },
+    "run-stabilized-native-geolens-hsi": {
+        "--lens-file",
+        "--dataset",
+        "--reconstructor",
+        "--steps",
+        "--spectral-angle-weight",
+        "--grad-clip-norm",
+        "--optical-lr",
+        "--device",
+        "--remote-job-id",
+    },
     # Phase 58: remote diagnostic jobs
     "run-deeplens-trainable-parameter-inspection": {
         "--lens-file", "--backend-id", "--device", "--max-steps", "--remote-job-id",

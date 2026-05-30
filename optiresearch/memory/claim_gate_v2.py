@@ -28,6 +28,7 @@ ViolationType = Literal[
     "evidence_level_overestimated",
     "handler_capability_exceeded",
     "component_surrogate_as_full_geolens",
+    "sam_degradation_despite_mse_improvement",
 ]
 
 
@@ -434,6 +435,32 @@ class ClaimGateV2:
                 )
             )
 
+        # 15. SAM degradation despite MSE improvement (Phase 65)
+        payload = result if isinstance(result, dict) else {}
+        sam_before = payload.get("sam_before")
+        sam_after = payload.get("sam_after")
+        mse_before = payload.get("mse_before")
+        mse_after = payload.get("mse_after")
+        if (
+            sam_before is not None
+            and sam_after is not None
+            and mse_before is not None
+            and mse_after is not None
+            and sam_after > sam_before
+            and mse_after < mse_before
+            and ("stable multi-metric" in claim_lower
+                 or "all metrics improv" in claim_lower
+                 or "full spectral stabil" in claim_lower
+                 or "guaranteed monotonic" in claim_lower)
+        ):
+            violations.append(
+                (
+                    "sam_degradation_despite_mse_improvement",
+                    "MSE improved but spectral angle (SAM) degraded — "
+                    "multi-metric stability not yet demonstrated",
+                )
+            )
+
         return violations
 
     def _compute_max_allowed_claim(self, backend_id: str) -> str:
@@ -470,6 +497,7 @@ class ClaimGateV2:
             "rollback_protection_as_improvement",
             "unsupported_path_as_supported",
             "evidence_level_overestimated",
+            "sam_degradation_despite_mse_improvement",
         }
         if violation_type in fatal:
             return "unsupported"
@@ -572,6 +600,11 @@ class ClaimGateV2:
                 "Run a full GeoLens differentiable PSF path with trainable lens parameters",
                 "Validate on real HSI/camera data for real performance claims",
             ],
+            "sam_degradation_despite_mse_improvement": [
+                "Increase spectral_angle_weight in loss function",
+                "Enable multi-metric rollback with SAM gate",
+                "Run stability sweep to find spectral weight that balances MSE and SAM",
+            ],
         }
         return evidence.get(violation_type, [])
 
@@ -625,6 +658,11 @@ class ClaimGateV2:
             "component_surrogate_as_full_geolens": [
                 "Evidence is component-level surrogate HSI only",
                 "Full GeoLens, physical lens, real camera, and full wave-optics claims remain unsupported",
+            ],
+            "sam_degradation_despite_mse_improvement": [
+                "MSE improved but spectral angle (SAM) degraded — multi-metric stability not yet demonstrated",
+                "Consider increasing spectral_angle_weight in the loss function",
+                "Do not claim full multi-metric improvement unless SAM is also stable or improving",
             ],
         }
         return caveats.get(violation_type, [])

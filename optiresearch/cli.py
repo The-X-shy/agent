@@ -71,6 +71,7 @@ from optiresearch.runtime.remote_jobs import (
     run_remote_stable_native_lens_hsi_ablation,
     run_remote_deeplens_native_geolens_hsi_codesign,
     run_remote_native_geolens_stabilization_sweep,
+    run_remote_stabilized_native_geolens_hsi,
     run_remote_deeplens_trainable_parameter_inspection,
     run_remote_deeplens_autograd_audit,
     run_remote_deeplens_curriculum_probe,
@@ -494,6 +495,20 @@ def main(argv: list[str] | None = None) -> None:
     remote_clean_geo_hsi.add_argument("--steps", type=int, default=3)
     remote_clean_geo_hsi.add_argument("--optical-lr", type=float, default=1e-6)
     remote_clean_geo_hsi.add_argument("--device", default="cpu")
+    remote_stab_hsi = sub.add_parser(
+        "run-remote-stabilized-native-geolens-hsi",
+        help="Run stabilized native GeoLens HSI co-design on a remote worker.",
+    )
+    remote_stab_hsi.add_argument("--worker-id", required=True)
+    remote_stab_hsi.add_argument("--lens-file", default="auto:cooke")
+    remote_stab_hsi.add_argument("--dataset", default="synthetic")
+    remote_stab_hsi.add_argument("--reconstructor", default="differentiable_linear",
+                                  choices=["differentiable_linear", "tiny_cnn"])
+    remote_stab_hsi.add_argument("--steps", type=int, default=10)
+    remote_stab_hsi.add_argument("--spectral-angle-weight", type=float, default=0.2)
+    remote_stab_hsi.add_argument("--grad-clip-norm", type=float, default=1000.0)
+    remote_stab_hsi.add_argument("--optical-lr", type=float, default=1e-6)
+    remote_stab_hsi.add_argument("--device", default="cpu")
     remote_geo_sweep = sub.add_parser("run-remote-native-geolens-stabilization-sweep",
                                       help="Run native GeoLens stabilization sweep on a remote worker.")
     remote_geo_sweep.add_argument("--worker-id", required=True)
@@ -716,6 +731,19 @@ def main(argv: list[str] | None = None) -> None:
     clean_geo_hsi.add_argument("--optical-lr", type=float, default=1e-6)
     clean_geo_hsi.add_argument("--recon-lr", type=float, default=1e-3)
     clean_geo_hsi.add_argument("--device", default="cpu")
+    stab_hsi = sub.add_parser(
+        "run-stabilized-native-geolens-hsi",
+        help="Run stabilized native GeoLens HSI co-design with multi-objective loss and rollback.",
+    )
+    stab_hsi.add_argument("--lens-file", default="auto:cooke")
+    stab_hsi.add_argument("--dataset", default="synthetic")
+    stab_hsi.add_argument("--reconstructor", default="differentiable_linear",
+                          choices=["differentiable_linear", "tiny_cnn"])
+    stab_hsi.add_argument("--steps", type=int, default=10)
+    stab_hsi.add_argument("--spectral-angle-weight", type=float, default=0.2)
+    stab_hsi.add_argument("--grad-clip-norm", type=float, default=1000.0)
+    stab_hsi.add_argument("--optical-lr", type=float, default=1e-6)
+    stab_hsi.add_argument("--device", default="cpu")
     geo_sweep = sub.add_parser("run-native-geolens-stabilization-sweep",
                                help="Run native GeoLens stabilization sweep.")
     geo_sweep.add_argument("--lens-file", default="auto:cooke")
@@ -1200,6 +1228,18 @@ def main(argv: list[str] | None = None) -> None:
             device=args.device,
         )
         _print_remote_payload(payload)
+    elif args.command == "run-remote-stabilized-native-geolens-hsi":
+        payload = run_remote_stabilized_native_geolens_hsi(
+            args.worker_id,
+            lens_file=args.lens_file,
+            dataset=args.dataset,
+            reconstructor=args.reconstructor,
+            max_steps=args.steps,
+            spectral_angle_weight=args.spectral_angle_weight,
+            optical_lr=args.optical_lr,
+            device=args.device,
+        )
+        _print_remote_payload(payload)
     elif args.command == "export-remote-execution-report":
         path = export_remote_execution_report(args.job_id)
         print(f"markdown: {path}")
@@ -1366,6 +1406,8 @@ def main(argv: list[str] | None = None) -> None:
         _run_deeplens_native_geolens_hsi(args)
     elif args.command == "run-native-geolens-geometric-hsi-codesign":
         _run_native_geolens_geometric_hsi_codesign(args)
+    elif args.command == "run-stabilized-native-geolens-hsi":
+        _run_stabilized_native_geolens_hsi(args)
     elif args.command == "run-native-geolens-stabilization-sweep":
         _run_native_geolens_stabilization_sweep(args)
     elif args.command == "recommend-next-strategy":
@@ -3048,6 +3090,62 @@ def _run_native_geolens_geometric_hsi_codesign(args: Any) -> None:
         "sam_after": result.sam_after,
         "execution_fidelity": "deeplens_native_geometric",
         "deeplens_native_psf_path": result.deeplens_native_psf_path,
+        "evidence_level": result.evidence_level,
+        "error_code": result.error_code,
+    }))
+
+
+def _run_stabilized_native_geolens_hsi(args: Any) -> None:
+    from optiresearch.runtime.stable_native_lens_hsi_loop import (
+        run_stabilized_native_geolens_hsi_loop,
+    )
+    from optiresearch.schemas.native_geolens_stability import (
+        NativeGeoLensStabilitySpec,
+    )
+    from optiresearch.schemas.stable_native_lens_hsi import make_stable_lens_id
+
+    run_id = make_stable_lens_id("GeoLensCooke", args.reconstructor)
+    spec = NativeGeoLensStabilitySpec(
+        run_id=run_id,
+        candidate="GeoLensCooke",
+        reconstructor=args.reconstructor,
+        dataset=args.dataset,
+        max_steps=args.steps,
+        optical_warmup_steps=min(3, max(1, args.steps // 3)),
+        optical_lr=args.optical_lr,
+        optical_grad_clip=args.grad_clip_norm,
+        spectral_angle_weight=args.spectral_angle_weight,
+        device=args.device,
+    )
+    result = run_stabilized_native_geolens_hsi_loop(spec)
+    print(_compact_json({
+        "run_id": run_id,
+        "status": result.status,
+        "parameter_count": result.parameter_count,
+        "trainable_param_count": result.trainable_param_count,
+        "params_with_grad": result.params_with_grad,
+        "grad_norm_max": result.grad_norm_max,
+        "grad_norm_mean": result.grad_norm_mean,
+        "graph_connected": result.graph_connected,
+        "psf_requires_grad": result.psf_requires_grad,
+        "loss_requires_grad": result.loss_requires_grad,
+        "parameter_changed": result.optical_parameters_changed,
+        "accepted_update_count": result.accepted_update_count,
+        "rollback_count": result.rollback_count,
+        "rollback_reasons": result.rollback_reasons,
+        "mse_before": result.mse_before,
+        "mse_after": result.mse_after,
+        "psnr_before": result.psnr_before,
+        "psnr_after": result.psnr_after,
+        "sam_before": result.sam_before,
+        "sam_after": result.sam_after,
+        "psf_energy_before": result.psf_energy_before,
+        "psf_energy_after": result.psf_energy_after,
+        "psf_centroid_shift": result.psf_centroid_shift,
+        "psf_width_shift": result.psf_width_shift,
+        "stability_score": result.stability_score,
+        "spectral_angle_weight": result.spectral_angle_weight,
+        "metric_tradeoff_summary": result.metric_tradeoff_summary,
         "evidence_level": result.evidence_level,
         "error_code": result.error_code,
     }))
