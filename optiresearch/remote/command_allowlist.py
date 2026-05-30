@@ -197,6 +197,16 @@ ALLOWED_CLI_COMMANDS: dict[str, set[str]] = {
         "--device",
         "--remote-job-id",
     },
+    "run-native-geolens-stability-benchmark": {
+        "--lens-file",
+        "--dataset",
+        "--seeds",
+        "--step-grid",
+        "--spectral-angle-weights",
+        "--grad-clip-norms",
+        "--device",
+        "--remote-job-id",
+    },
     # Phase 58: remote diagnostic jobs
     "run-deeplens-trainable-parameter-inspection": {
         "--lens-file", "--backend-id", "--device", "--max-steps", "--remote-job-id",

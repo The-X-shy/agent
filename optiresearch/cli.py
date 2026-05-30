@@ -72,6 +72,7 @@ from optiresearch.runtime.remote_jobs import (
     run_remote_deeplens_native_geolens_hsi_codesign,
     run_remote_native_geolens_stabilization_sweep,
     run_remote_stabilized_native_geolens_hsi,
+    run_remote_native_geolens_stability_benchmark,
     run_remote_deeplens_trainable_parameter_inspection,
     run_remote_deeplens_autograd_audit,
     run_remote_deeplens_curriculum_probe,
@@ -509,6 +510,18 @@ def main(argv: list[str] | None = None) -> None:
     remote_stab_hsi.add_argument("--grad-clip-norm", type=float, default=1000.0)
     remote_stab_hsi.add_argument("--optical-lr", type=float, default=1e-6)
     remote_stab_hsi.add_argument("--device", default="cpu")
+    remote_bench = sub.add_parser(
+        "run-remote-native-geolens-stability-benchmark",
+        help="Run native GeoLens stability reproducibility benchmark on a remote worker.",
+    )
+    remote_bench.add_argument("--worker-id", required=True)
+    remote_bench.add_argument("--lens-file", default="auto:cooke")
+    remote_bench.add_argument("--dataset", default="synthetic")
+    remote_bench.add_argument("--seeds", default="0,1,2")
+    remote_bench.add_argument("--step-grid", default="10,20")
+    remote_bench.add_argument("--spectral-angle-weights", default="0.1,0.2,0.5")
+    remote_bench.add_argument("--grad-clip-norms", default="1000")
+    remote_bench.add_argument("--device", default="cpu")
     remote_geo_sweep = sub.add_parser("run-remote-native-geolens-stabilization-sweep",
                                       help="Run native GeoLens stabilization sweep on a remote worker.")
     remote_geo_sweep.add_argument("--worker-id", required=True)
@@ -744,6 +757,17 @@ def main(argv: list[str] | None = None) -> None:
     stab_hsi.add_argument("--grad-clip-norm", type=float, default=1000.0)
     stab_hsi.add_argument("--optical-lr", type=float, default=1e-6)
     stab_hsi.add_argument("--device", default="cpu")
+    bench = sub.add_parser(
+        "run-native-geolens-stability-benchmark",
+        help="Run native GeoLens stability reproducibility benchmark.",
+    )
+    bench.add_argument("--lens-file", default="auto:cooke")
+    bench.add_argument("--dataset", default="synthetic")
+    bench.add_argument("--seeds", default="0,1,2")
+    bench.add_argument("--step-grid", default="10,20")
+    bench.add_argument("--spectral-angle-weights", default="0.1,0.2,0.5")
+    bench.add_argument("--grad-clip-norms", default="1000")
+    bench.add_argument("--device", default="cpu")
     geo_sweep = sub.add_parser("run-native-geolens-stabilization-sweep",
                                help="Run native GeoLens stabilization sweep.")
     geo_sweep.add_argument("--lens-file", default="auto:cooke")
@@ -1240,6 +1264,18 @@ def main(argv: list[str] | None = None) -> None:
             device=args.device,
         )
         _print_remote_payload(payload)
+    elif args.command == "run-remote-native-geolens-stability-benchmark":
+        payload = run_remote_native_geolens_stability_benchmark(
+            args.worker_id,
+            lens_file=args.lens_file,
+            dataset=args.dataset,
+            seeds=args.seeds,
+            step_grid=args.step_grid,
+            spectral_angle_weights=args.spectral_angle_weights,
+            grad_clip_norms=args.grad_clip_norms,
+            device=args.device,
+        )
+        _print_remote_payload(payload)
     elif args.command == "export-remote-execution-report":
         path = export_remote_execution_report(args.job_id)
         print(f"markdown: {path}")
@@ -1408,6 +1444,8 @@ def main(argv: list[str] | None = None) -> None:
         _run_native_geolens_geometric_hsi_codesign(args)
     elif args.command == "run-stabilized-native-geolens-hsi":
         _run_stabilized_native_geolens_hsi(args)
+    elif args.command == "run-native-geolens-stability-benchmark":
+        _run_native_geolens_stability_benchmark(args)
     elif args.command == "run-native-geolens-stabilization-sweep":
         _run_native_geolens_stabilization_sweep(args)
     elif args.command == "recommend-next-strategy":
@@ -3148,6 +3186,49 @@ def _run_stabilized_native_geolens_hsi(args: Any) -> None:
         "metric_tradeoff_summary": result.metric_tradeoff_summary,
         "evidence_level": result.evidence_level,
         "error_code": result.error_code,
+    }))
+
+
+def _run_native_geolens_stability_benchmark(args: Any) -> None:
+    from optiresearch.runtime.native_geolens_stability_benchmark import (
+        run_native_geolens_stability_benchmark,
+    )
+    from optiresearch.schemas.native_geolens_benchmark import NativeGeoLensBenchmarkSpec
+
+    def _parse_ints(s: str) -> list[int]:
+        return [int(x.strip()) for x in s.split(",") if x.strip()]
+
+    def _parse_floats(s: str) -> list[float]:
+        return [float(x.strip()) for x in s.split(",") if x.strip()]
+
+    spec = NativeGeoLensBenchmarkSpec(
+        lens_file=args.lens_file,
+        dataset=args.dataset,
+        seeds=_parse_ints(args.seeds),
+        step_grid=_parse_ints(args.step_grid),
+        spectral_angle_weights=_parse_floats(args.spectral_angle_weights),
+        grad_clip_norms=_parse_floats(args.grad_clip_norms),
+        device=args.device,
+    )
+    summary = run_native_geolens_stability_benchmark(spec)
+    print(_compact_json({
+        "benchmark_id": summary.benchmark_id,
+        "config_count": summary.config_count,
+        "completed_count": summary.completed_count,
+        "failed_count": summary.failed_count,
+        "seed_count": summary.seed_count,
+        "all_metrics_improved_rate": summary.all_metrics_improved_rate,
+        "mse_improved_rate": summary.mse_improved_rate,
+        "psnr_improved_rate": summary.psnr_improved_rate,
+        "sam_improved_rate": summary.sam_improved_rate,
+        "mean_mse_delta": summary.mean_mse_delta,
+        "mean_psnr_delta": summary.mean_psnr_delta,
+        "mean_sam_delta": summary.mean_sam_delta,
+        "rollback_rate": summary.rollback_rate,
+        "best_config_id": summary.best_config_id,
+        "robust_config_family": summary.robust_config_family,
+        "claim_recommendation": summary.claim_recommendation,
+        "safe_wording": summary.safe_wording,
     }))
 
 

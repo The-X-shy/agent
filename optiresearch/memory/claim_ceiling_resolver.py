@@ -38,6 +38,7 @@ def _evidence_rank(level: str) -> int:
         "native_waveoptics": 9,
         "stable_native_lens_hsi_codesign": 10,
         "rollback_protected_native_lens_hsi": 11,
+        "native_geolens_stability_benchmark": 11,
         "real_hsi_performance": 12,
         "real_hsi": 12,
         "real_hsi_validation": 12,
